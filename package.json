@@ -1,4 +1,5 @@
 {
+  "homepage": "https://LuissMello.github.io/EAFCTrackerFront",
   "name": "match-stats-app",
   "version": "1.0.0",
   "private": true,
@@ -14,13 +15,16 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.4.14",
+    "gh-pages": "^6.3.0",
     "postcss": "^8.4.24",
     "tailwindcss": "^3.3.3",
     "typescript": "^4.9.5"
   },
   "scripts": {
     "start": "react-scripts --openssl-legacy-provider start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "browserslist": {
     "production": [
