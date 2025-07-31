@@ -63,18 +63,20 @@ export default function PlayerStatisticsPage() {
   const [sortKey, setSortKey] = useState<SortKey>('totalGoals');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
-  const fetchStats = async (count: number) => {
+
+const fetchStats = async (count: number) => {
     try {
-      setLoading(true);
-      const res = await api.get(`/statistics/limited?count=${count}`);
-      setPlayers(res.data.players);
-      setClubStats(res.data.clubs?.[0] || null);
+        setLoading(true);
+        const res = await fetch(`https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/limited?count=${count}`);
+        const data = await res.json();
+        setPlayers(data.players);
+        setClubStats(data.clubs?.[0] || null);
     } catch (err) {
-      console.error('Erro ao buscar estatísticas:', err);
+        console.error('Erro ao buscar estatísticas:', err);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+};
 
   useEffect(() => {
     fetchStats(matchCount);
