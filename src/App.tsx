@@ -6,7 +6,7 @@ import GlobalStats from './pages/GlobalStats.tsx';
 
 export default function App() {
   return (
-    <Router>
+      <Router basename="/EAFCTrackerFront">
       <div className="min-h-screen bg-gray-100">
         <nav className="bg-blue-600 text-white p-4 flex space-x-4">
           <Link className="font-bold" to="/">Partidas</Link>

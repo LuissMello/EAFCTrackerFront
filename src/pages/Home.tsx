@@ -62,7 +62,7 @@ export default function Home() {
 
 useEffect(() => {
   console.log("BaseURL:", api.defaults.baseURL);
-    api.get('/api/Matches/matches/results').then(res => setMatches(res.data))
+    api.get('/matches/results').then(res => setMatches(res.data))
         .catch(err => console.error("Erro na requisição:", err));
 }, []);
 
