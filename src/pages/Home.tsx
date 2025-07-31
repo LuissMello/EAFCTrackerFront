@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../services/api.ts';
-import axios from 'axios';
 
 export default function Home() {
   const [matches, setMatches] = useState<any[]>([]);
