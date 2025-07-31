@@ -60,9 +60,11 @@ export default function Home() {
     </div>
   );
 
-  useEffect(() => {
-      api.get('/api/Matches/matches/results').then(res => setMatches(res.data));
-  }, []);
+useEffect(() => {
+  console.log("BaseURL:", api.defaults.baseURL);
+    api.get('/api/Matches/matches/results').then(res => setMatches(res.data))
+        .catch(err => console.error("Erro na requisição:", err));
+}, []);
 
   return (
     <div className="p-4 max-w-3xl mx-auto">
