@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api.ts';
+import axios from 'axios';
 
 export default function Home() {
   const [matches, setMatches] = useState<any[]>([]);
@@ -60,11 +61,12 @@ export default function Home() {
     </div>
   );
 
-useEffect(() => {
-  console.log("BaseURL:", api.defaults.baseURL);
-    api.get('/matches/results').then(res => setMatches(res.data))
-        .catch(err => console.error("Erro na requisição:", err));
-}, []);
+    useEffect(() => {
+        axios
+            .get('https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/results')
+            .then(res => setMatches(res.data))
+            .catch(err => console.error('Erro na requisição direta:', err));
+    }, []);
 
   return (
     <div className="p-4 max-w-3xl mx-auto">
