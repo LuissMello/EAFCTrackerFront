@@ -63,7 +63,7 @@ export default function Home() {
 
     useEffect(() => {
         axios
-            .get('https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/results')
+            .get('https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/matches/results')
             .then(res => setMatches(res.data))
             .catch(err => console.error('Erro na requisição direta:', err));
     }, []);
