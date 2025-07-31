@@ -61,7 +61,7 @@ export default function Home() {
   );
 
   useEffect(() => {
-    api.get('/matches/results').then(res => setMatches(res.data));
+      api.get('/api/Matches/matches/results').then(res => setMatches(res.data));
   }, []);
 
   return (
