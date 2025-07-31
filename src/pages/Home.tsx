@@ -62,10 +62,10 @@ export default function Home() {
   );
 
     useEffect(() => {
-        axios
-            .get('https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/matches/results')
-            .then(res => setMatches(res.data))
-            .catch(err => console.error('Erro na requisição direta:', err));
+        fetch("https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/matches/results")
+            .then(res => res.json())
+            .then(data => setMatches(data))
+            .catch(err => console.error("Erro:", err));
     }, []);
 
   return (
