@@ -1,0 +1,39 @@
+name: Deploy to GitHub Pages # Nome que aparece na aba 'Actions' do GitHub
+
+on:
+  push:
+    branches:
+      - main # <--- IMPORTANTE: Mude para a branch que você usa para fazer o 'git push' (ex: master, main, develop)
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest # O sistema operacional onde o build vai acontecer (ambiente Linux)
+
+    steps:
+      - name: Checkout repository # Pega o seu código do GitHub
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js # Configura o ambiente Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # <--- IMPORTANTE: Use a versão do Node.js que seu projeto usa (ex: '18', '16').
+
+      - name: Install dependencies # Instala as dependências do seu projeto (node_modules)
+        run: npm ci # 'npm ci' é mais rápido e confiável em CI/CD que 'npm install'
+
+      - name: Build project # <--- ESTE É O PASSO CRÍTICO PARA A URL DA API!
+        run: npm run build # Seu comando de build do React (geralmente 'react-scripts build')
+        env:
+          # <--- INJETA A URL DA SUA API COMO UMA VARIÁVEL DE AMBIENTE DURANTE O BUILD
+          # Isso garante que a URL esteja correta no código final que vai para o GitHub Pages.
+          REACT_APP_API_BASE_URL: https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net
+
+      - name: Deploy to GitHub Pages # Faz o deploy dos arquivos gerados para o GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4 # Action de terceiros para deploy no GH Pages
+        # <--- IMPORTANTE: Esta condição garante que o deploy só ocorra na sua branch principal.
+        if: ${{ github.ref == 'refs/heads/main' }} # Mude 'main' para a sua branch se for diferente
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }} # Token padrão do GitHub para autenticação
+          publish_dir: ./build # <--- IMPORTANTE: Esta é a pasta que o 'npm run build' gera com seu app compilado
+          # force_orphan: true # Opcional: Descomente para forçar um deploy limpo, apagando histórico anterior.
+                               # Use com cautela! Geralmente não é necessário para a maioria dos casos.
