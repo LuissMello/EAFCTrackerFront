@@ -79,20 +79,25 @@ export default function PlayerStats() {
   const { matchId, playerId } = useParams<PlayerStatsParams>();
   const [data, setData] = useState<MatchPlayerStatsDto | null>(null);
 
-  useEffect(() => {
-    if (matchId && playerId) {
-      api
-        .get(`/statistics/player/${matchId}/${playerId}`)
-        .then((res) => {
-          console.log('DATA COMPLETA:', res.data);
-          setData(res.data);
-        })
-        .catch((err) => {
-          console.error('Erro na API:', err);
-          setData(null);
-        });
-    }
-  }, [matchId, playerId]);
+    useEffect(() => {
+        if (matchId && playerId) {
+            fetch(`https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/statistics/player/${matchId}/${playerId}`)
+                .then((res) => {
+                    if (!res.ok) {
+                        throw new Error(`Erro na resposta: ${res.statusText}`);
+                    }
+                    return res.json();
+                })
+                .then((data) => {
+                    console.log('DATA COMPLETA:', data);
+                    setData(data);
+                })
+                .catch((err) => {
+                    console.error('Erro na API:', err);
+                    setData(null);
+                });
+        }
+    }, [matchId, playerId]);
 
   if (!data) return <p className="p-4">Carregando...</p>;
 

@@ -25,25 +25,26 @@ export default function MatchDetails() {
   const [selectedStat, setSelectedStat] = useState('totalGoals'); // Estatística selecionada para o gráfico de jogadores
   const [playerColors, setPlayerColors] = useState<Map<number, string>>(new Map()); // Armazenar cores dos jogadores
 
-  useEffect(() => {
+useEffect(() => {
     if (!matchId) return;
 
-    api.get(`/statistics/${matchId}`)
-      .then(res => {
-        setData(res.data);
+    fetch(`https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/${matchId}`)
+        .then(res => res.json())
+        .then(data => {
+            setData(data);
 
-        // Gerando uma cor única para cada jogador e armazenando no estado
-        const colors = new Map<number, string>();
-        res.data.players.forEach((player: any) => {
-          colors.set(player.playerId, generateRandomColor()); // Gerar e armazenar cor
-        });
-        setPlayerColors(colors); // Atualizar as cores no estado
-      })
-      .catch(err => {
-        console.error('Erro ao buscar estatísticas:', err);
-      })
-      .finally(() => setLoading(false));
-  }, [matchId]);
+            // Gerando uma cor única para cada jogador e armazenando no estado
+            const colors = new Map<number, string>();
+            data.players.forEach((player: any) => {
+                colors.set(player.playerId, generateRandomColor());
+            });
+            setPlayerColors(colors);
+        })
+        .catch(err => {
+            console.error('Erro ao buscar estatísticas:', err);
+        })
+        .finally(() => setLoading(false));
+}, [matchId]);
 
   if (loading) return <p className="p-4">Carregando...</p>;
   if (!data) return <p className="p-4 text-red-500">Dados indisponíveis.</p>;
