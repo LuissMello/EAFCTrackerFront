@@ -145,7 +145,7 @@ export default function PlayerStatisticsPage() {
 
             // use sua baseURL do axios se preferir: api.get("/api/Matches/statistics/limited", { params: { count, clubId } })
             const { data } = await api.get(
-                "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/limited",
+                "https://localhost:5000/api/Matches/statistics/limited",
                 { params: { count, clubId } } // ✅ envia clubId
             );
 

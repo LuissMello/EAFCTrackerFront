@@ -1,30 +1,36 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-export type Club = {
+type ClubState = {
     clubId: number;
-    clubName?: string;
+    clubName?: string | null;
+    crestAssetId?: string | null; // <- NOVO
 };
 
-type Ctx = {
-    club: Club | null;
-    setClub: (c: Club | null) => void;
+type ClubContextType = {
+    club: ClubState | null;
+    setClub: (c: ClubState | null) => void;
 };
 
-const ClubContext = createContext<Ctx>({ club: null, setClub: () => { } });
+const ClubContext = createContext<ClubContextType | undefined>(undefined);
 
 export function ClubProvider({ children }: { children: React.ReactNode }) {
-    const [club, setClub] = useState<Club | null>(() => {
-        try {
-            const raw = localStorage.getItem("clubCtx");
-            return raw ? (JSON.parse(raw) as Club) : null;
-        } catch {
-            return null;
-        }
-    });
+    const [club, setClubState] = useState<ClubState | null>(null);
 
     useEffect(() => {
-        localStorage.setItem("clubCtx", JSON.stringify(club));
-    }, [club]);
+        const raw = localStorage.getItem("club");
+        if (raw) {
+            try {
+                const parsed = JSON.parse(raw);
+                setClubState(parsed);
+            } catch { /* ignore */ }
+        }
+    }, []);
+
+    const setClub = (c: ClubState | null) => {
+        setClubState(c);
+        if (c) localStorage.setItem("club", JSON.stringify(c));
+        else localStorage.removeItem("club");
+    };
 
     return (
         <ClubContext.Provider value={{ club, setClub }}>
@@ -36,5 +42,9 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
 export function useClub() {
     const ctx = useContext(ClubContext);
     if (!ctx) throw new Error("useClub deve ser usado dentro de um ClubProvider");
-    return ctx;
+    // helpers convenientes
+    const clubId = ctx.club?.clubId ?? null;
+    const clubName = ctx.club?.clubName ?? null;
+    const crestAssetId = ctx.club?.crestAssetId ?? null;
+    return { ...ctx, clubId, clubName, crestAssetId };
 }

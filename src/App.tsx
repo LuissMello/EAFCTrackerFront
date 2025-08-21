@@ -1,36 +1,13 @@
-import { HashRouter as Router, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import Home from "./pages/Home.tsx";
 import MatchDetails from "./pages/MatchDetails.tsx";
 import PlayerStats from "./pages/PlayerStats.tsx";
 import GlobalStats from "./pages/GlobalStats.tsx";
 import Calendar from "./pages/Calendar.tsx";
 import Trends from "./pages/Trends.tsx";
-import { useEffect, useState } from "react";
-import { useClub } from "./hooks/useClub.tsx";
+import ClubPicker from "./components/ClubPicker.tsx";
 
 function Navbar() {
-    const { club, setClub } = useClub();
-    const [clubIdInput, setClubIdInput] = useState<string>(club?.clubId?.toString?.() ?? "");
-
-    // Mantém o input em sincronia caso o club mude em outro lugar
-    useEffect(() => {
-        setClubIdInput(club?.clubId?.toString?.() ?? "");
-    }, [club?.clubId]);
-
-    const applyClub = () => {
-        const id = Number(clubIdInput);
-        if (!Number.isFinite(id) || id <= 0) {
-            alert("Informe um clubId numérico válido");
-            return;
-        }
-        setClub({ clubId: id }); // opcional: adicionar clubName quando você tiver
-    };
-
-    const clearClub = () => {
-        setClub(null);
-        setClubIdInput("");
-    };
-
     return (
         <nav className="bg-blue-600 text-white p-4 flex flex-wrap items-center gap-3">
             <Link className="font-bold" to="/">Partidas</Link>
@@ -39,20 +16,7 @@ function Navbar() {
             <Link className="font-bold" to="/trends">Trends</Link>
 
             <div className="ml-auto flex items-center gap-2">
-                <input
-                    className="px-2 py-1 rounded text-black w-36"
-                    placeholder="clubId"
-                    inputMode="numeric"
-                    value={clubIdInput}
-                    onChange={(e) => setClubIdInput(e.target.value)}
-                />
-                <button onClick={applyClub} className="bg-white text-blue-600 px-2 py-1 rounded">
-                    Aplicar clube
-                </button>
-                <button onClick={clearClub} className="bg-white/20 hover:bg-white/30 px-2 py-1 rounded">
-                    Limpar
-                </button>
-                {club?.clubId && <span className="opacity-90">⚽ {club.clubId}</span>}
+                <ClubPicker />
             </div>
         </nav>
     );
@@ -60,7 +24,7 @@ function Navbar() {
 
 export default function App() {
     return (
-        <Router>
+        <Router basename={import.meta?.env?.BASE_URL || "/"}>
             <div className="min-h-screen bg-gray-100">
                 <Navbar />
                 <Routes>
