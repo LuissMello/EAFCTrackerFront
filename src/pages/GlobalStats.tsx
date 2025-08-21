@@ -81,23 +81,6 @@ const columns: Array<{ key: SortKey; label: string; tooltip?: string }> = [
 const percent = (made: number, attempts: number) =>
     attempts > 0 ? (made / attempts) * 100 : 0;
 
-function downloadCSV(filename: string, rows: any[]) {
-    if (!rows.length) return;
-    const header = Object.keys(rows[0]);
-    const replacer = (_k: string, v: any) => (v ?? "") as string;
-    const csv = [
-        header.join(","),
-        ...rows.map((row) => header.map((f) => JSON.stringify(row[f], replacer)).join(",")),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
 function SortIcon({ active, order }: { active: boolean; order: SortOrder }) {
     if (!active) return <span className="opacity-30">↕</span>;
     return <span>{order === "asc" ? "▲" : "▼"}</span>;
@@ -273,14 +256,6 @@ export default function PlayerStatisticsPage() {
                     </div>
                 </div>
 
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => downloadCSV("players.csv", sorted)}
-                        className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                    >
-                        Exportar CSV
-                    </button>
-                </div>
             </div>
 
             {/* Cartão do Clube */}

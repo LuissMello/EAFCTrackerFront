@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+import { HashRouter as Router, Routes, Route, Link } from "react-router-dom";
 import Home from "./pages/Home.tsx";
 import MatchDetails from "./pages/MatchDetails.tsx";
 import PlayerStats from "./pages/PlayerStats.tsx";
@@ -24,7 +24,7 @@ function Navbar() {
 
 export default function App() {
     return (
-        <Router basename={import.meta?.env?.BASE_URL || "/"}>
+        <Router>
             <div className="min-h-screen bg-gray-100">
                 <Navbar />
                 <Routes>

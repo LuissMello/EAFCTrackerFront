@@ -241,14 +241,6 @@ export default function Home() {
                             className="border rounded-lg px-3 py-2 w-56"
                         />
                     </div>
-                    <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                        <input
-                            type="checkbox"
-                            checked={onlyWithLogos}
-                            onChange={(e) => setOnlyWithLogos(e.target.checked)}
-                        />
-                        Somente com escudos
-                    </label>
                 </div>
             </div>
 
