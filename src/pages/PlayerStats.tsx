@@ -81,7 +81,7 @@ export default function PlayerStats() {
 
     useEffect(() => {
         if (matchId && playerId) {
-            fetch(`https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/statistics/player/${matchId}/${playerId}`)
+            fetch(`https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/player/${matchId}/${playerId}`)
                 .then((res) => {
                     if (!res.ok) {
                         throw new Error(`Erro na resposta: ${res.statusText}`);
