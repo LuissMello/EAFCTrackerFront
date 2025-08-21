@@ -41,7 +41,7 @@ export default function ClubPicker() {
             try {
                 setLoading(true);
                 setErr(null);
-                const { data } = await api.get<ClubListItem[]>("https://localhost:5000/api/clubs");
+                const { data } = await api.get<ClubListItem[]>("https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs");
                 if (!cancel) setClubs(data ?? []);
             } catch (e: any) {
                 if (!cancel) setErr(e?.message ?? "Erro ao carregar clubes");
