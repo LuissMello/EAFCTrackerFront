@@ -4,6 +4,7 @@ import MatchDetails from './pages/MatchDetails.tsx';
 import PlayerStats from './pages/PlayerStats.tsx';
 import GlobalStats from './pages/GlobalStats.tsx';
 import Calendar from './pages/Calendar.tsx';
+import Trends from './pages/Trends.tsx';
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
           <Link className="font-bold" to="/">Partidas</Link>
           <Link className="font-bold" to="/stats">Estatísticas</Link>
           <Link className="font-bold" to="/calendar">Calendário</Link>
+          <Link className="font-bold" to="/trends">Trends</Link>
         </nav>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -20,6 +22,7 @@ export default function App() {
           <Route path="/statistics/player/:matchId/:playerId" element={<PlayerStats />} />
           <Route path="/stats" element={<GlobalStats />} />
           <Route path="/calendar" element={<Calendar />} />
+          <Route path="/trends" element={<Trends/>} />
         </Routes>
       </div>
     </Router>
