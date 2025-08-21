@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api.ts";
+import { useClub } from "../hooks/useClub.tsx";
 
 // ======================
 // Tipos (alinha com seu endpoint /api/Matches/matches/results)
@@ -73,9 +74,7 @@ function toHex(dec: string | number | null | undefined): string | null {
 }
 
 function KitSwatches({ colors }: { colors: Array<string | number | null | undefined> }) {
-    const valid = colors
-        .map(toHex)
-        .filter((c): c is string => Boolean(c) && c!.length === 7);
+    const valid = colors.map(toHex).filter((c): c is string => Boolean(c) && c!.length === 7);
     if (valid.length === 0) return null;
     return (
         <div className="flex gap-1 mt-1" aria-label="Cores do kit">
@@ -159,20 +158,38 @@ function MatchCard({ m }: { m: MatchResultDto }) {
 // Página
 // ======================
 export default function Home() {
+    const { club } = useClub(); // <- pega clubId/clubName do menu
+    const clubId = club?.clubId;
+
     const [results, setResults] = useState<MatchResultDto[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const [search, setSearch] = useState("");
     const [onlyWithLogos, setOnlyWithLogos] = useState(false);
 
     useEffect(() => {
+        // sem clubId, não busca
+        if (!clubId) {
+            setResults([]);
+            return;
+        }
+
         let cancel = false;
         (async () => {
             try {
                 setLoading(true);
                 setError(null);
-                const { data } = await api.get<MatchResultDto[]>("https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/matches/results");
+
+                // se o seu axios `api` já tem baseURL, use o caminho relativo:
+                // const { data } = await api.get<MatchResultDto[]>("/api/Matches/matches/results", { params: { clubId } });
+
+                // caso contrário, mantenha a URL absoluta:
+                const { data } = await api.get<MatchResultDto[]>(
+                    "https://localhost:5000/api/Matches/matches/results",
+                    { params: { clubId } }
+                );
+
                 if (!cancel) setResults(data ?? []);
             } catch (err: any) {
                 if (!cancel) setError(err?.message ?? "Erro ao carregar resultados");
@@ -180,10 +197,11 @@ export default function Home() {
                 if (!cancel) setLoading(false);
             }
         })();
+
         return () => {
             cancel = true;
         };
-    }, []);
+    }, [clubId]);
 
     const filtered = useMemo(() => {
         const term = search.trim().toLowerCase();
@@ -200,7 +218,17 @@ export default function Home() {
     return (
         <div className="p-4 max-w-4xl mx-auto">
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
-                <h1 className="text-2xl sm:text-3xl font-bold">Resultados das Partidas</h1>
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold">Resultados das Partidas</h1>
+                    <p className="text-sm text-gray-600">
+                        {clubId ? (
+                            <>Clube atual: <span className="font-medium">{club?.clubName ?? clubId}</span></>
+                        ) : (
+                            <>Selecione um clube no topo (“Alterar clube”) para carregar os resultados.</>
+                        )}
+                    </p>
+                </div>
+
                 <div className="flex gap-2 items-end">
                     <div className="flex flex-col">
                         <label htmlFor="search" className="text-sm text-gray-600">Buscar</label>
@@ -236,8 +264,14 @@ export default function Home() {
                 <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded">{error}</div>
             )}
 
-            {!loading && !error && filtered.length === 0 && (
+            {!loading && !error && clubId && filtered.length === 0 && (
                 <div className="p-3 bg-gray-50 border rounded text-gray-700">Nenhum resultado encontrado.</div>
+            )}
+
+            {!clubId && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
+                    Informe um clube no menu (botão “Alterar clube”) para começar.
+                </div>
             )}
 
             <div className="grid gap-3">

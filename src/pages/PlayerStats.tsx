@@ -127,7 +127,7 @@ export default function PlayerStats() {
                 setLoading(true);
                 setError(null);
                 const { data } = await api.get<MatchPlayerStatsDto>(
-                    `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/player/${matchId}/${playerId}`
+                    `https://localhost:5000/api/Matches/statistics/player/${matchId}/${playerId}`
                 );
                 if (!cancel) setData(data);
             } catch (err: any) {

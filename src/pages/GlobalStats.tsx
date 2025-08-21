@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import api from "../services/api.ts";
+import { useClub } from "../hooks/useClub.tsx"; // ✅ importa o hook correto (sem .tsx)
 
 // ========================
 // Tipos
@@ -42,9 +42,9 @@ interface ClubStats {
     totalPassAttempts: number;
     totalTacklesMade: number;
     totalTackleAttempts: number;
-    totalWins: number | string;
-    totalLosses: number | string;
-    totalDraws: number | string;
+    totalWins: number;
+    totalLosses: number;
+    totalDraws: number;
     totalCleanSheets: number;
     totalRedCards: number;
     totalSaves: number;
@@ -78,16 +78,16 @@ const columns: Array<{ key: SortKey; label: string; tooltip?: string }> = [
     { key: "avgRating", label: "Nota" },
 ];
 
-function percent(made: number, attempts: number) {
-    return attempts > 0 ? (made / attempts) * 100 : 0;
-}
+const percent = (made: number, attempts: number) =>
+    attempts > 0 ? (made / attempts) * 100 : 0;
 
 function downloadCSV(filename: string, rows: any[]) {
-    const replacer = (key: string, value: any) => (value === null ? "" : value);
-    const header = Object.keys(rows[0] ?? {});
+    if (!rows.length) return;
+    const header = Object.keys(rows[0]);
+    const replacer = (_k: string, v: any) => (v ?? "") as string;
     const csv = [
         header.join(","),
-        ...rows.map((row) => header.map((field) => JSON.stringify(row[field], replacer)).join(",")),
+        ...rows.map((row) => header.map((f) => JSON.stringify(row[f], replacer)).join(",")),
     ].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -111,6 +111,10 @@ function Skeleton({ className = "" }: { className?: string }) {
 // Componente principal
 // ========================
 export default function PlayerStatisticsPage() {
+    const { club } = useClub();                   // ✅ pega o objeto club
+    const clubId = club?.clubId;                  // ✅ extrai o id
+    const clubName = club?.clubName;              // opcional
+
     const [players, setPlayers] = useState<PlayerStats[]>([]);
     const [clubStats, setClubStats] = useState<ClubStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -127,12 +131,24 @@ export default function PlayerStatisticsPage() {
     const pageSize = 20;
 
     async function fetchStats(count: number) {
+        if (!clubId) {
+            // sem clubId: limpa e sai
+            setPlayers([]);
+            setClubStats(null);
+            setLoading(false);
+            return;
+        }
+
         try {
             setLoading(true);
             setError(null);
-            const { data } = await api.get("https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/limited", {
-                params: { count },
-            });
+
+            // use sua baseURL do axios se preferir: api.get("/api/Matches/statistics/limited", { params: { count, clubId } })
+            const { data } = await api.get(
+                "https://localhost:5000/api/Matches/statistics/limited",
+                { params: { count, clubId } } // ✅ envia clubId
+            );
+
             setPlayers(data.players ?? []);
             setClubStats(data.clubs?.[0] ?? null);
         } catch (err: any) {
@@ -144,7 +160,7 @@ export default function PlayerStatisticsPage() {
 
     useEffect(() => {
         fetchStats(matchCount);
-    }, [matchCount]);
+    }, [clubId, matchCount]); // ✅ refaz a busca quando o clubId mudar
 
     function handleSort(key: SortKey) {
         if (sortKey === key) setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
@@ -185,12 +201,29 @@ export default function PlayerStatisticsPage() {
     }, [sorted, page]);
 
     useEffect(() => {
-        setPage(1); // sempre que filtros mudam, volta para primeira página
+        setPage(1);
     }, [minMatches, search, sortKey, sortOrder]);
+
+    // Mensagem se não houver clubId definido
+    if (!clubId) {
+        return (
+            <div className="p-4 sm:p-6">
+                Defina um <b>clubId</b> no topo para ver as estatísticas.
+            </div>
+        );
+    }
 
     return (
         <div className="p-4 sm:p-6 max-w-[98vw] mx-auto">
-            <h1 className="text-2xl sm:text-3xl font-bold mb-4 text-center">Estatísticas</h1>
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-2">
+                <h1 className="text-2xl sm:text-3xl font-bold">Estatísticas</h1>
+                <div className="text-sm text-gray-600">
+                    Clube atual:{" "}
+                    <span className="font-semibold">
+                        {clubName ? `${clubName} (${clubId})` : clubId}
+                    </span>
+                </div>
+            </div>
 
             {/* Toolbar */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-4">
@@ -284,10 +317,20 @@ export default function PlayerStatisticsPage() {
                                     <td className="px-3 py-2 font-semibold">{clubStats.clubName}</td>
                                     <td className="px-3 py-2">{clubStats.totalGoals}</td>
                                     <td className="px-3 py-2">{clubStats.totalAssists}</td>
-                                    <td className="px-3 py-2">{clubStats.totalShots} / {clubStats.goalAccuracyPercent.toFixed(1)}%</td>
-                                    <td className="px-3 py-2">{clubStats.totalPassesMade} / {clubStats.totalPassAttempts} ({percent(clubStats.totalPassesMade, clubStats.totalPassAttempts).toFixed(1)}%)</td>
-                                    <td className="px-3 py-2">{clubStats.totalTacklesMade} / {clubStats.totalTackleAttempts} ({percent(clubStats.totalTacklesMade, clubStats.totalTackleAttempts).toFixed(1)}%)</td>
-                                    <td className="px-3 py-2">{clubStats.totalWins} / {Number(clubStats.winPercent).toFixed(1)}%</td>
+                                    <td className="px-3 py-2">
+                                        {clubStats.totalShots} / {clubStats.goalAccuracyPercent.toFixed(1)}%
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        {clubStats.totalPassesMade} / {clubStats.totalPassAttempts} (
+                                        {percent(clubStats.totalPassesMade, clubStats.totalPassAttempts).toFixed(1)}%)
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        {clubStats.totalTacklesMade} / {clubStats.totalTackleAttempts} (
+                                        {percent(clubStats.totalTacklesMade, clubStats.totalTackleAttempts).toFixed(1)}%)
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        {clubStats.totalWins} / {Number(clubStats.winPercent).toFixed(1)}%
+                                    </td>
                                     <td className="px-3 py-2">{clubStats.totalDraws}</td>
                                     <td className="px-3 py-2">{clubStats.totalLosses}</td>
                                     <td className="px-3 py-2">{clubStats.totalRedCards}</td>
@@ -300,10 +343,14 @@ export default function PlayerStatisticsPage() {
                 )}
 
                 {!loading && !clubStats && !error && (
-                    <div className="p-3 bg-gray-50 rounded border text-gray-700">Sem estatísticas de clube disponíveis.</div>
+                    <div className="p-3 bg-gray-50 rounded border text-gray-700">
+                        Sem estatísticas de clube disponíveis.
+                    </div>
                 )}
                 {error && (
-                    <div className="p-3 bg-red-50 rounded border border-red-200 text-red-700">{error}</div>
+                    <div className="p-3 bg-red-50 rounded border border-red-200 text-red-700">
+                        {error}
+                    </div>
                 )}
             </section>
 
@@ -344,30 +391,42 @@ export default function PlayerStatisticsPage() {
 
                             {!loading && pageItems.length === 0 && (
                                 <tr>
-                                    <td colSpan={columns.length} className="p-4 text-gray-600">Nenhum jogador encontrado.</td>
+                                    <td colSpan={columns.length} className="p-4 text-gray-600">
+                                        Nenhum jogador encontrado.
+                                    </td>
                                 </tr>
                             )}
 
-                            {!loading && pageItems.map((p) => (
-                                <tr key={p.playerId} className="hover:bg-gray-50">
-                                    <td className="px-3 py-2 text-blue-700 underline font-medium text-left">
-                                        <Link to={`/statistics/player/${p.playerId}`}>{p.playerName}</Link>
-                                    </td>
-                                    <td className="px-3 py-2">{p.matchesPlayed}</td>
-                                    <td className="px-3 py-2">{p.totalGoals}</td>
-                                    <td className="px-3 py-2">{p.totalAssists}</td>
-                                    <td className="px-3 py-2">{p.totalShots} / {p.goalAccuracyPercent.toFixed(1)}%</td>
-                                    <td className="px-3 py-2">{p.totalPassesMade} / {p.totalPassAttempts} ({percent(p.totalPassesMade, p.totalPassAttempts).toFixed(1)}%)</td>
-                                    <td className="px-3 py-2">{p.totalTacklesMade} / {p.totalTackleAttempts} ({percent(p.totalTacklesMade, p.totalTackleAttempts).toFixed(1)}%)</td>
-                                    <td className="px-3 py-2">{p.totalWins}</td>
-                                    <td className="px-3 py-2">{p.totalLosses}</td>
-                                    <td className="px-3 py-2">{p.totalDraws}</td>
-                                    <td className="px-3 py-2">{p.winPercent.toFixed(1)}%</td>
-                                    <td className="px-3 py-2">{p.totalRedCards}</td>
-                                    <td className="px-3 py-2">{p.totalMom}</td>
-                                    <td className="px-3 py-2">{p.avgRating.toFixed(2)}</td>
-                                </tr>
-                            ))}
+                            {!loading &&
+                                pageItems.map((p) => (
+                                    <tr key={p.playerId} className="hover:bg-gray-50">
+                                        {/* IMPORTANTE: sua rota atual é /statistics/player/:matchId/:playerId.
+                       Como aqui não temos matchId, mantive sem Link para evitar 404.
+                       Se você criar uma rota /statistics/player/:playerId, pode envolver com <Link> aqui. */}
+                                        <td className="px-3 py-2 font-medium text-left">{p.playerName}</td>
+                                        <td className="px-3 py-2">{p.matchesPlayed}</td>
+                                        <td className="px-3 py-2">{p.totalGoals}</td>
+                                        <td className="px-3 py-2">{p.totalAssists}</td>
+                                        <td className="px-3 py-2">
+                                            {p.totalShots} / {p.goalAccuracyPercent.toFixed(1)}%
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {p.totalPassesMade} / {p.totalPassAttempts} (
+                                            {percent(p.totalPassesMade, p.totalPassAttempts).toFixed(1)}%)
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {p.totalTacklesMade} / {p.totalTackleAttempts} (
+                                            {percent(p.totalTacklesMade, p.totalTackleAttempts).toFixed(1)}%)
+                                        </td>
+                                        <td className="px-3 py-2">{p.totalWins}</td>
+                                        <td className="px-3 py-2">{p.totalLosses}</td>
+                                        <td className="px-3 py-2">{p.totalDraws}</td>
+                                        <td className="px-3 py-2">{p.winPercent.toFixed(1)}%</td>
+                                        <td className="px-3 py-2">{p.totalRedCards}</td>
+                                        <td className="px-3 py-2">{p.totalMom}</td>
+                                        <td className="px-3 py-2">{p.avgRating.toFixed(2)}</td>
+                                    </tr>
+                                ))}
                         </tbody>
                     </table>
                 </div>

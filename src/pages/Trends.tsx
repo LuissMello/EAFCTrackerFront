@@ -1,13 +1,21 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
-import api from '../services/api.ts';
+﻿import React, { useEffect, useMemo, useState } from "react";
+import api from "../services/api.ts";
 import {
-    Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend,
-} from 'chart.js';
-import { Line } from 'react-chartjs-2';
+    Chart as ChartJS,
+    CategoryScale,
+    LinearScale,
+    PointElement,
+    LineElement,
+    Title,
+    Tooltip,
+    Legend,
+} from "chart.js";
+import { Line } from "react-chartjs-2";
+import { useClub } from "../hooks/useClub.tsx";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
-type Result = 'W' | 'D' | 'L';
+type Result = "W" | "D" | "L";
 
 interface MatchTrendPointDto {
     matchId: number;
@@ -54,60 +62,74 @@ interface TopItemDto {
     mom: number;
 }
 
-export default function TrendsPage({ clubId = 3463149 }: { clubId?: number }) {
+export default function TrendsPage() {
+    const { club } = useClub(); // <- pega o clube ativo do menu/contexto
+    const activeClubId = club?.clubId; // number | undefined
     const [last, setLast] = useState(20);
+
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<ClubTrendsDto | null>(null);
     const [tops, setTops] = useState<TopItemDto[]>([]);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        if (!activeClubId) return; // não tenta buscar sem clube
         let cancel = false;
         (async () => {
             try {
-                setLoading(true); setError(null);
+                setLoading(true);
+                setError(null);
                 const [t1, t2] = await Promise.all([
-                    api.get<ClubTrendsDto>(`https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Trends/club/${clubId}?last=${last}`),
-                    api.get<TopItemDto[]>(`https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Trends/top-scorers?clubId=${clubId}&limit=10`)
+                    api.get<ClubTrendsDto>(
+                        `https://localhost:5000/api/Trends/club/${activeClubId}?last=${last}`
+                    ),
+                    api.get<TopItemDto[]>(
+                        `https://localhost:5000/api/Trends/top-scorers?clubId=${activeClubId}&limit=10`
+                    ),
                 ]);
                 if (!cancel) {
                     setData(t1.data);
                     setTops(t2.data);
                 }
             } catch (e: any) {
-                if (!cancel) setError(e?.message ?? 'Erro ao carregar tendências');
+                if (!cancel) setError(e?.message ?? "Erro ao carregar tendências");
             } finally {
                 if (!cancel) setLoading(false);
             }
         })();
-        return () => { cancel = true; };
-    }, [clubId, last]);
+        return () => {
+            cancel = true;
+        };
+    }, [activeClubId, last]);
 
     const labels = useMemo(
-        () => (data?.series ?? []).map(p => new Date(p.timestamp).toLocaleDateString('pt-BR')),
+        () => (data?.series ?? []).map((p) => new Date(p.timestamp).toLocaleDateString("pt-BR")),
         [data]
     );
 
-    const passData = useMemo(() => ({
-        labels,
-        datasets: [
-            { label: 'Pass Accuracy (média móvel 5)', data: data?.movingAvgPassAcc_5 ?? [] }
-        ]
-    }), [labels, data]);
+    const passData = useMemo(
+        () => ({
+            labels,
+            datasets: [{ label: "Pass Accuracy (média móvel 5)", data: data?.movingAvgPassAcc_5 ?? [] }],
+        }),
+        [labels, data]
+    );
 
-    const tackleData = useMemo(() => ({
-        labels,
-        datasets: [
-            { label: 'Tackle Success (média móvel 5)', data: data?.movingAvgTackleAcc_5 ?? [] }
-        ]
-    }), [labels, data]);
+    const tackleData = useMemo(
+        () => ({
+            labels,
+            datasets: [{ label: "Tackle Success (média móvel 5)", data: data?.movingAvgTackleAcc_5 ?? [] }],
+        }),
+        [labels, data]
+    );
 
-    const ratingData = useMemo(() => ({
-        labels,
-        datasets: [
-            { label: 'Nota Média (móvel 5)', data: data?.movingAvgRating_5 ?? [] }
-        ]
-    }), [labels, data]);
+    const ratingData = useMemo(
+        () => ({
+            labels,
+            datasets: [{ label: "Nota Média (móvel 5)", data: data?.movingAvgRating_5 ?? [] }],
+        }),
+        [labels, data]
+    );
 
     const lineOptions: any = {
         responsive: true,
@@ -116,14 +138,24 @@ export default function TrendsPage({ clubId = 3463149 }: { clubId?: number }) {
         scales: { y: { beginAtZero: true } },
     };
 
-    const lastResults = (data?.series ?? []).map(s => s.result as Result);
+    const lastResults = (data?.series ?? []).map((s) => s.result as Result);
     const pillColor = (r: Result) =>
-        r === 'W' ? 'bg-green-600' : r === 'D' ? 'bg-gray-500' : 'bg-red-600';
+        r === "W" ? "bg-green-600" : r === "D" ? "bg-gray-500" : "bg-red-600";
 
     return (
         <div className="p-4 max-w-6xl mx-auto space-y-6">
             <div className="flex items-end justify-between gap-3">
-                <h1 className="text-2xl sm:text-3xl font-bold">Tendências & Streaks — {data?.clubName ?? ''}</h1>
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold">
+                        Tendências &amp; Streaks — {data?.clubName ?? club?.clubName ?? ""}
+                    </h1>
+                    {activeClubId && (
+                        <div className="text-xs text-gray-600 mt-1">
+                            Clube ativo: <span className="font-mono">{activeClubId}</span>
+                        </div>
+                    )}
+                </div>
+
                 <div className="flex items-center gap-2">
                     <label className="text-sm text-gray-700">Últimos</label>
                     <input
@@ -131,25 +163,35 @@ export default function TrendsPage({ clubId = 3463149 }: { clubId?: number }) {
                         className="border rounded px-2 py-1 w-24"
                         min={5}
                         value={last}
-                        onChange={e => setLast(Math.max(5, parseInt(e.target.value) || 5))}
+                        onChange={(e) => setLast(Math.max(5, parseInt(e.target.value) || 5))}
                     />
                     <span className="text-sm text-gray-700">jogos</span>
                 </div>
             </div>
 
-            {loading && <div className="p-3 bg-white border rounded">Carregando…</div>}
-            {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded">{error}</div>}
-            {!loading && !error && data && (
+            {!activeClubId && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded">
+                    Selecione um clube no menu para ver as tendências.
+                </div>
+            )}
+
+            {activeClubId && loading && <div className="p-3 bg-white border rounded">Carregando…</div>}
+
+            {activeClubId && error && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded">{error}</div>
+            )}
+
+            {activeClubId && !loading && !error && data && (
                 <>
                     {/* Cards de forma e streaks */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="bg-white border rounded-xl p-4">
                             <div className="text-xs text-gray-500 mb-1">Forma (Últimos 5)</div>
-                            <div className="font-mono">{data.formLast5 || '—'}</div>
+                            <div className="font-mono">{data.formLast5 || "—"}</div>
                         </div>
                         <div className="bg-white border rounded-xl p-4">
                             <div className="text-xs text-gray-500 mb-1">Forma (Últimos 10)</div>
-                            <div className="font-mono">{data.formLast10 || '—'}</div>
+                            <div className="font-mono">{data.formLast10 || "—"}</div>
                         </div>
                         <div className="bg-white border rounded-xl p-4">
                             <div className="grid grid-cols-3 text-center">
@@ -178,7 +220,9 @@ export default function TrendsPage({ clubId = 3463149 }: { clubId?: number }) {
                                     <span className={`text-white text-xs px-2 py-1 rounded ${pillColor(s.result as Result)}`}>
                                         {s.result}
                                     </span>
-                                    <span className="text-xs text-gray-600">{new Date(s.timestamp).toLocaleDateString('pt-BR')}</span>
+                                    <span className="text-xs text-gray-600">
+                                        {new Date(s.timestamp).toLocaleDateString("pt-BR")}
+                                    </span>
                                 </div>
                             ))}
                         </div>
@@ -213,7 +257,7 @@ export default function TrendsPage({ clubId = 3463149 }: { clubId?: number }) {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {tops.map(t => (
+                                    {tops.map((t) => (
                                         <tr key={t.playerEntityId} className="border-t">
                                             <td className="p-2 text-left">{t.playerName}</td>
                                             <td className="p-2">{t.matches}</td>
@@ -227,7 +271,6 @@ export default function TrendsPage({ clubId = 3463149 }: { clubId?: number }) {
                             </table>
                         </div>
                     </div>
-
                 </>
             )}
         </div>

@@ -11,11 +11,12 @@ import {
     Legend,
 } from "chart.js";
 import { Bar } from "react-chartjs-2";
+import { useClub } from "../hooks/useClub.tsx";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 // ======================
-// Tipos (espelham o seu endpoint /api/Matches/statistics/{matchId})
+// Tipos (espelham /api/Matches/statistics/{matchId})
 // ======================
 interface PlayerRow {
     playerId: number;
@@ -67,9 +68,8 @@ const crestUrl = (id?: string | null) =>
         ? `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${id}.png`
         : FALLBACK_LOGO;
 
-// cor determinística (sem flicker) baseada no id
+// cor determinística baseada no id (evita flicker)
 function colorFromId(num: number) {
-    // hash simples
     let x = Math.imul(num ^ 0x9e3779b9, 0x85ebca6b);
     x ^= x >>> 13;
     x = Math.imul(x, 0xc2b2ae35);
@@ -102,15 +102,17 @@ function fmt(value: number | undefined | null) {
 }
 
 // ======================
-// Componente
-// ======================
 export default function MatchDetails() {
     const { matchId } = useParams();
+    const { club } = useClub(); // <- clube selecionado no menu (contexto)
+    const selectedClubId = club?.clubId ?? null;
+
     const [stats, setStats] = useState<FullMatchStatisticsDto | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const [selectedStat, setSelectedStat] = useState<StatKey>("totalGoals");
+    const [onlySelectedClubPlayers, setOnlySelectedClubPlayers] = useState<boolean>(false);
 
     useEffect(() => {
         if (!matchId) return;
@@ -119,7 +121,9 @@ export default function MatchDetails() {
             try {
                 setLoading(true);
                 setError(null);
-                const { data } = await api.get<FullMatchStatisticsDto>(`https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/${matchId}`);
+                const { data } = await api.get<FullMatchStatisticsDto>(
+                    `https://localhost:5000/api/Matches/statistics/${matchId}`
+                );
                 if (!cancel) setStats(data);
             } catch (err: any) {
                 if (!cancel) setError(err?.message ?? "Erro ao buscar estatísticas");
@@ -135,17 +139,31 @@ export default function MatchDetails() {
     const players = stats?.players ?? [];
     const clubs = stats?.clubs ?? [];
 
+    // Ordena clubes mantendo o selecionado (se existir) à esquerda
+    const orderedClubs = useMemo(() => {
+        if (!selectedClubId || clubs.length < 2) return clubs;
+        const idx = clubs.findIndex(c => c.clubId === selectedClubId);
+        if (idx <= 0) return clubs;
+        const clone = [...clubs];
+        const [sel] = clone.splice(idx, 1);
+        clone.unshift(sel);
+        return clone;
+    }, [clubs, selectedClubId]);
+
     // ======================
     // Chart de jogadores (horizontal)
     // ======================
     const playerChart = useMemo(() => {
-        const rows = players.map((p) => ({
+        const base = onlySelectedClubPlayers && selectedClubId
+            ? players.filter(p => p.clubId === selectedClubId)
+            : players;
+
+        const rows = base.map((p) => ({
             label: p.playerName,
             value: (p as any)[selectedStat] as number,
             color: colorFromId(p.playerId),
         }));
 
-        // ordena desc e pega top 20 p/ legibilidade
         const top = rows
             .filter((r) => typeof r.value === "number" && !Number.isNaN(r.value))
             .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
@@ -170,7 +188,10 @@ export default function MatchDetails() {
                 indexAxis: "y" as const,
                 plugins: {
                     legend: { display: false },
-                    title: { display: true, text: "Comparativo de Jogadores" },
+                    title: {
+                        display: true,
+                        text: onlySelectedClubPlayers ? "Comparativo de Jogadores (apenas clube selecionado)" : "Comparativo de Jogadores",
+                    },
                     tooltip: {
                         callbacks: {
                             label: (item: any) => `${item.raw}`,
@@ -181,15 +202,15 @@ export default function MatchDetails() {
                 elements: { bar: { borderWidth: 1, barThickness: 12 } },
             },
         };
-    }, [players, selectedStat]);
+    }, [players, selectedStat, onlySelectedClubPlayers, selectedClubId]);
 
     // ======================
     // Chart de clubes (horizontal) — somente para a estatística selecionada
     // ======================
     const clubChart = useMemo(() => {
-        if (clubs.length < 2) return null;
-        const a = clubs[0];
-        const b = clubs[1];
+        if (orderedClubs.length < 2) return null;
+        const a = orderedClubs[0];
+        const b = orderedClubs[1];
         const key = selectedStat;
 
         const label = comparisonStats.find((c) => c.key === key)?.label ?? "Estatística";
@@ -223,11 +244,15 @@ export default function MatchDetails() {
                 elements: { bar: { borderWidth: 2, barThickness: 18 } },
             },
         };
-    }, [clubs, selectedStat]);
+    }, [orderedClubs, selectedStat]);
 
     if (loading) return <div className="p-4">Carregando…</div>;
     if (error) return <div className="p-4 text-red-600">{error}</div>;
-    if (!stats || clubs.length === 0) return <div className="p-4">Dados indisponíveis.</div>;
+    if (!stats || orderedClubs.length === 0) return <div className="p-4">Dados indisponíveis.</div>;
+
+    // flags de destaque
+    const leftIsSelected = selectedClubId && orderedClubs[0]?.clubId === selectedClubId;
+    const rightIsSelected = selectedClubId && orderedClubs[1]?.clubId === selectedClubId;
 
     return (
         <div className="p-4 space-y-6">
@@ -239,22 +264,36 @@ export default function MatchDetails() {
             {/* Cabeçalho dos clubes */}
             <div className="bg-white shadow-sm rounded-xl p-4 border">
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className={`flex items-center gap-2 px-2 py-1 rounded ${leftIsSelected ? "border-2 border-blue-600" : ""}`}>
                         <img
-                            src={crestUrl(clubs[0]?.clubCrestAssetId)}
+                            src={crestUrl(orderedClubs[0]?.clubCrestAssetId)}
                             onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
-                            alt={`Escudo ${clubs[0].clubName}`}
+                            alt={`Escudo ${orderedClubs[0].clubName}`}
                             className="w-8 h-8 rounded-full bg-white border"
                         />
-                        <div className="font-semibold">{clubs[0].clubName}</div>
+                        <div className="font-semibold flex items-center gap-2">
+                            {orderedClubs[0].clubName}
+                            {leftIsSelected && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+                                    Clube selecionado
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <div className="text-sm text-gray-500">vs</div>
-                    <div className="flex items-center gap-2">
-                        <div className="font-semibold">{clubs[1].clubName}</div>
+                    <div className={`flex items-center gap-2 px-2 py-1 rounded ${rightIsSelected ? "border-2 border-blue-600" : ""}`}>
+                        <div className="font-semibold flex items-center gap-2">
+                            {orderedClubs[1].clubName}
+                            {rightIsSelected && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+                                    Clube selecionado
+                                </span>
+                            )}
+                        </div>
                         <img
-                            src={crestUrl(clubs[1]?.clubCrestAssetId)}
+                            src={crestUrl(orderedClubs[1]?.clubCrestAssetId)}
                             onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
-                            alt={`Escudo ${clubs[1].clubName}`}
+                            alt={`Escudo ${orderedClubs[1].clubName}`}
                             className="w-8 h-8 rounded-full bg-white border"
                         />
                     </div>
@@ -265,17 +304,17 @@ export default function MatchDetails() {
                     <table className="w-full table-auto text-sm border text-center">
                         <thead>
                             <tr className="bg-gray-50">
-                                <th className="p-2">{clubs[0].clubName}</th>
+                                <th className="p-2">{orderedClubs[0].clubName}</th>
                                 <th className="p-2">Estatística</th>
-                                <th className="p-2">{clubs[1].clubName}</th>
+                                <th className="p-2">{orderedClubs[1].clubName}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {comparisonStats.map(({ label, key }) => (
                                 <tr key={key} className="border-t">
-                                    <td className="p-2">{fmt((clubs[0] as any)[key])}</td>
+                                    <td className="p-2">{fmt((orderedClubs[0] as any)[key])}</td>
                                     <td className="p-2 font-medium">{label}</td>
-                                    <td className="p-2">{fmt((clubs[1] as any)[key])}</td>
+                                    <td className="p-2">{fmt((orderedClubs[1] as any)[key])}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -283,45 +322,49 @@ export default function MatchDetails() {
                 </div>
             </div>
 
+            {/* Controles de gráficos */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700">Estatística:</label>
+                    <select
+                        value={selectedStat}
+                        onChange={(e) => setSelectedStat(e.target.value as StatKey)}
+                        className="border rounded px-2 py-1 text-sm"
+                    >
+                        {comparisonStats.map((s) => (
+                            <option key={s.key} value={s.key}>{s.label}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                        type="checkbox"
+                        checked={onlySelectedClubPlayers}
+                        onChange={(e) => setOnlySelectedClubPlayers(e.target.checked)}
+                        disabled={!selectedClubId}
+                    />
+                    Mostrar apenas jogadores do clube selecionado
+                </label>
+            </div>
+
             {/* Gráficos */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Clubes */}
                 <div className="bg-white shadow-sm rounded-xl p-4 border h-[260px]">
-                    <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-lg font-semibold">Comparativo entre Clubes</h2>
-                        <select
-                            value={selectedStat}
-                            onChange={(e) => setSelectedStat(e.target.value as StatKey)}
-                            className="border rounded px-2 py-1 text-sm"
-                        >
-                            {comparisonStats.map((s) => (
-                                <option key={s.key} value={s.key}>{s.label}</option>
-                            ))}
-                        </select>
-                    </div>
+                    <h2 className="text-lg font-semibold mb-2">Comparativo entre Clubes</h2>
                     {clubChart && <Bar data={clubChart.data} options={clubChart.options as any} />}
                 </div>
 
                 {/* Jogadores */}
                 <div className="bg-white shadow-sm rounded-xl p-4 border h-[360px]">
-                    <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-lg font-semibold">Comparativo de Jogadores</h2>
-                        <select
-                            value={selectedStat}
-                            onChange={(e) => setSelectedStat(e.target.value as StatKey)}
-                            className="border rounded px-2 py-1 text-sm"
-                        >
-                            {comparisonStats.map((s) => (
-                                <option key={s.key} value={s.key}>{s.label}</option>
-                            ))}
-                        </select>
-                    </div>
+                    <h2 className="text-lg font-semibold mb-2">Comparativo de Jogadores</h2>
                     <Bar data={playerChart.data} options={playerChart.options as any} />
                 </div>
             </div>
 
             {/* Tabelas de jogadores por clube */}
-            {clubs.map((club) => (
+            {orderedClubs.map((club) => (
                 <div key={club.clubId} className="bg-white shadow-sm rounded-xl p-4 border">
                     <h3 className="text-lg font-semibold mb-2">{club.clubName} — Jogadores</h3>
                     <div className="overflow-x-auto">
