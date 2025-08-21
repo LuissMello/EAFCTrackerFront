@@ -144,8 +144,7 @@ export default function PlayerStatisticsPage() {
 
     useEffect(() => {
         fetchStats(matchCount);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [matchCount]);
 
     function handleSort(key: SortKey) {
         if (sortKey === key) setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
