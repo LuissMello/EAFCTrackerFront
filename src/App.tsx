@@ -1,16 +1,21 @@
-import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+import { HashRouter as Router, Routes, Route, Link } from "react-router-dom";
 import Home from "./pages/Home.tsx";
 import MatchDetails from "./pages/MatchDetails.tsx";
 import PlayerStats from "./pages/PlayerStats.tsx";
 import GlobalStats from "./pages/GlobalStats.tsx";
 import Calendar from "./pages/Calendar.tsx";
 import Trends from "./pages/Trends.tsx";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useClub } from "./hooks/useClub.tsx";
 
 function Navbar() {
     const { club, setClub } = useClub();
     const [clubIdInput, setClubIdInput] = useState<string>(club?.clubId?.toString?.() ?? "");
+
+    // Mantém o input em sincronia caso o club mude em outro lugar
+    useEffect(() => {
+        setClubIdInput(club?.clubId?.toString?.() ?? "");
+    }, [club?.clubId]);
 
     const applyClub = () => {
         const id = Number(clubIdInput);
@@ -37,6 +42,7 @@ function Navbar() {
                 <input
                     className="px-2 py-1 rounded text-black w-36"
                     placeholder="clubId"
+                    inputMode="numeric"
                     value={clubIdInput}
                     onChange={(e) => setClubIdInput(e.target.value)}
                 />
