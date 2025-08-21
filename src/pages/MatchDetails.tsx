@@ -122,7 +122,7 @@ export default function MatchDetails() {
                 setLoading(true);
                 setError(null);
                 const { data } = await api.get<FullMatchStatisticsDto>(
-                    `https://localhost:5000/api/Matches/statistics/${matchId}`
+                    `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/${matchId}`
                 );
                 if (!cancel) setStats(data);
             } catch (err: any) {

@@ -81,10 +81,10 @@ export default function TrendsPage() {
                 setError(null);
                 const [t1, t2] = await Promise.all([
                     api.get<ClubTrendsDto>(
-                        `https://localhost:5000/api/Trends/club/${activeClubId}?last=${last}`
+                        `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Trends/club/${activeClubId}?last=${last}`
                     ),
                     api.get<TopItemDto[]>(
-                        `https://localhost:5000/api/Trends/top-scorers?clubId=${activeClubId}&limit=10`
+                        `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Trends/top-scorers?clubId=${activeClubId}&limit=10`
                     ),
                 ]);
                 if (!cancel) {

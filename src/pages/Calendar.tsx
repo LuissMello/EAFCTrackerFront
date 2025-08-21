@@ -185,7 +185,7 @@ export default function CalendarPage() {
             setMonthData(null); // NOVO: limpa antes de buscar
             try {
                 const { data } = await api.get<CalendarMonthDto>(
-                    "https://localhost:5000/api/Calendar",
+                    "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Calendar",
                     { params: { year, month: month1to12, clubId } }
                 );
                 if (!disposed) setMonthData(data);
@@ -208,7 +208,7 @@ export default function CalendarPage() {
             setDayData(null); // NOVO: limpa antes de buscar
             try {
                 const { data } = await api.get<CalendarDayDetailsDto>(
-                    "https://localhost:5000/api/Calendar/day",
+                    "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Calendar/day",
                     { params: { date: selectedDate, clubId } }
                 );
                 if (!disposed) setDayData(data);

@@ -186,7 +186,7 @@ export default function Home() {
 
                 // caso contrário, mantenha a URL absoluta:
                 const { data } = await api.get<MatchResultDto[]>(
-                    "https://localhost:5000/api/Matches/matches/results",
+                    "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/matches/results",
                     { params: { clubId } }
                 );
 
