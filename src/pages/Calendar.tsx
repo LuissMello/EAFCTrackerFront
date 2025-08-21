@@ -283,32 +283,56 @@ export default function CalendarPage() {
                     const ymd = toYmd(d);
                     const summary = summaryByDate[ymd];
                     const inMonth = isSameMonth(d, referenceMonth);
+
                     return (
                         <button
                             key={ymd}
                             onClick={() => summary && setSelectedDate(ymd)}
-                            className={`relative h-28 rounded-xl border p-2 text-left transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${inMonth ? "bg-white" : "bg-gray-50"
-                                } ${summary ? "hover:shadow-md cursor-pointer" : "opacity-60 cursor-default"}`}
+                            className={[
+                                "relative border p-1 sm:p-2 rounded-xl transition focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                inMonth ? "bg-white" : "bg-gray-50",
+                                summary ? "hover:shadow-md cursor-pointer" : "opacity-60 cursor-default",
+                                "overflow-hidden w-full flex flex-col",
+                            ].join(" ")}
+                            style={{ aspectRatio: "1 / 1" }}
                             aria-disabled={!summary}
                             aria-label={`${ptDay.format(d)} ${ptMonth.format(d)} — ${summary ? `${summary.matchesCount} jogo(s)` : "sem jogos"
                                 }`}
                         >
-                            <div className="flex items-start justify-between">
-                                <span className={`text-sm font-semibold ${inMonth ? "text-gray-900" : "text-gray-400"}`}>
+                            {/* Cabeçalho do dia */}
+                            <div className="flex items-start justify-between min-w-0">
+                                <span
+                                    className={`font-semibold ${inMonth ? "text-gray-900" : "text-gray-400"
+                                        } text-xs sm:text-sm`}
+                                >
                                     {ptDay.format(d)}
                                 </span>
-                                {loadingMonth && !monthData && <Skeleton className="w-8 h-4" />}
+                                {loadingMonth && !monthData && <Skeleton className="w-6 sm:w-8 h-3 sm:h-4" />}
                             </div>
 
+                            {/* CONTEÚDO CENTRALIZADO NO MEIO DA CÉLULA */}
                             {summary && (
-                                <div className="mt-2 space-y-1">
-                                    <div className="text-xs text-gray-600">{summary.matchesCount} jogo(s)</div>
-                                    <div className="flex items-center gap-1 text-[11px]">
-                                        <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">V {summary.wins}</span>
-                                        <span className="px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">E {summary.draws}</span>
-                                        <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700">D {summary.losses}</span>
+                                <div className="flex-1 flex items-center justify-center">
+                                    {/* Mobile (compacto) */}
+                                    <div className="sm:hidden text-[10px] text-gray-700 leading-3 text-center">
+                                        <div className="font-medium">{summary.matchesCount} jogo(s)</div>
+                                        <div className="mt-1 flex items-center justify-center gap-1">
+                                            <span className="px-1 rounded bg-green-100 text-green-700">V {summary.wins}</span>
+                                            <span className="px-1 rounded bg-yellow-100 text-yellow-700">E {summary.draws}</span>
+                                            <span className="px-1 rounded bg-red-100 text-red-700">D {summary.losses}</span>
+                                        </div>
                                     </div>
-                                    <div className="text-[11px] text-gray-600">GP {summary.goalsFor} • GC {summary.goalsAgainst}</div>
+
+                                    {/* ≥ sm (completo) */}
+                                    <div className="hidden sm:block text-[11px] text-gray-700 text-center">
+                                        <div className="text-xs">{summary.matchesCount} jogo(s)</div>
+                                        <div className="mt-1 flex items-center justify-center gap-1">
+                                            <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">V {summary.wins}</span>
+                                            <span className="px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">E {summary.draws}</span>
+                                            <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700">D {summary.losses}</span>
+                                        </div>
+                                        <div className="mt-1">GP {summary.goalsFor} • GC {summary.goalsAgainst}</div>
+                                    </div>
                                 </div>
                             )}
                         </button>
