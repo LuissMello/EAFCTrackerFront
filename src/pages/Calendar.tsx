@@ -136,6 +136,7 @@ export default function CalendarPage() {
     const year = referenceMonth.getFullYear();
     const month1to12 = referenceMonth.getMonth() + 1;
 
+
     // Cabeçalhos SEG–DOM
     const weekdays = useMemo(() => {
         const base = new Date(2023, 0, 2); // segunda
