@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api.ts";
-import { useClub } from "../hooks/useClub.tsx"; // ✅ importa o hook correto (sem .tsx)
+import { useClub } from "../hooks/useClub.tsx";
 
 // ========================
 // Tipos
@@ -55,120 +55,137 @@ interface ClubStats {
     goalAccuracyPercent: number;
 }
 
-type SortKey = keyof PlayerStats;
-type SortOrder = "asc" | "desc";
-
 // ========================
-// Helpers
+// Utilitários
 // ========================
-const columns: Array<{ key: SortKey; label: string; tooltip?: string }> = [
-    { key: "playerName", label: "Jogador" },
-    { key: "matchesPlayed", label: "Partidas" },
-    { key: "totalGoals", label: "Gols" },
-    { key: "totalAssists", label: "Assistências" },
-    { key: "totalShots", label: "Chutes (%)" },
-    { key: "totalPassesMade", label: "Passes (C/T)" },
-    { key: "totalTacklesMade", label: "Desarmes (C/T)" },
-    { key: "totalWins", label: "Vitórias" },
-    { key: "totalLosses", label: "Derrotas" },
-    { key: "totalDraws", label: "Empates" },
-    { key: "winPercent", label: "Win %" },
-    { key: "totalRedCards", label: "Vermelhos" },
-    { key: "totalMom", label: "MOM" },
-    { key: "avgRating", label: "Nota" },
-];
+const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);
+const clamp = (v: number, min = 0, max = 100) => Math.max(min, Math.min(max, v));
 
-const percent = (made: number, attempts: number) =>
-    attempts > 0 ? (made / attempts) * 100 : 0;
+function useNumberFormats() {
+    const int = useMemo(() => new Intl.NumberFormat("pt-BR"), []);
+    const p1 = useMemo(() => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }), []);
+    const p2 = useMemo(() => new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), []);
+    return { int, p1, p2 };
+}
 
-function SortIcon({ active, order }: { active: boolean; order: SortOrder }) {
-    if (!active) return <span className="opacity-30">↕</span>;
-    return <span>{order === "asc" ? "▲" : "▼"}</span>;
+function SortIcon({ active, order }: { active: boolean; order: "asc" | "desc" }) {
+    if (!active) return <span aria-hidden className="opacity-30">↕</span>;
+    return <span aria-hidden>{order === "asc" ? "▲" : "▼"}</span>;
 }
 
 function Skeleton({ className = "" }: { className?: string }) {
     return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
 }
 
+function StatCard({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
+    return (
+        <div className="rounded-2xl border bg-white shadow-sm p-4 flex flex-col gap-1">
+            <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
+            <div className="text-2xl font-semibold leading-tight">{value}</div>
+            {sub ? <div className="text-xs text-gray-500">{sub}</div> : null}
+        </div>
+    );
+}
+
 // ========================
-// Componente principal
+// Página
 // ========================
 export default function PlayerStatisticsPage() {
-    const { club } = useClub();                   // ✅ pega o objeto club
-    const clubId = club?.clubId;                  // ✅ extrai o id
-    const clubName = club?.clubName;              // opcional
+    const { club } = useClub();
+    const clubId = club?.clubId;
+    const clubName = club?.clubName;
 
+    // estado
     const [players, setPlayers] = useState<PlayerStats[]>([]);
     const [clubStats, setClubStats] = useState<ClubStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [fetching, setFetching] = useState(false); // mantém dados enquanto atualiza
     const [error, setError] = useState<string | null>(null);
 
-    const [matchCount, setMatchCount] = useState<number>(10);
-    const [minMatches, setMinMatches] = useState<number>(1);
-    const [search, setSearch] = useState("");
-
-    const [sortKey, setSortKey] = useState<SortKey>("totalGoals");
-    const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
-
+    // preferências (persistem)
+    const [matchCount, setMatchCount] = useState<number>(() => Number(localStorage.getItem("psp.matchCount")) || 10);
+    const [minMatches, setMinMatches] = useState<number>(() => Number(localStorage.getItem("psp.minMatches")) || 1);
+    const [search, setSearch] = useState<string>("");
     const [page, setPage] = useState(1);
-    const pageSize = 20;
+    const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("psp.pageSize")) || 20);
+    const [showAdvanced, setShowAdvanced] = useState<boolean>(() => localStorage.getItem("psp.adv") === "1");
 
-    async function fetchStats(count: number) {
+    type SortKey = keyof PlayerStats;
+    type SortOrder = "asc" | "desc";
+    const [sortKey, setSortKey] = useState<SortKey>(() => (localStorage.getItem("psp.sortKey") as SortKey) || "totalGoals");
+    const [sortOrder, setSortOrder] = useState<SortOrder>(() => (localStorage.getItem("psp.sortOrder") as SortOrder) || "desc");
+
+    const abortRef = useRef<AbortController | null>(null);
+    const { int, p1, p2 } = useNumberFormats();
+
+    // Persistência leve
+    useEffect(() => { localStorage.setItem("psp.matchCount", String(matchCount)); }, [matchCount]);
+    useEffect(() => { localStorage.setItem("psp.minMatches", String(minMatches)); }, [minMatches]);
+    useEffect(() => { localStorage.setItem("psp.pageSize", String(pageSize)); }, [pageSize]);
+    useEffect(() => { localStorage.setItem("psp.sortKey", sortKey); }, [sortKey]);
+    useEffect(() => { localStorage.setItem("psp.sortOrder", sortOrder); }, [sortOrder]);
+    useEffect(() => { localStorage.setItem("psp.adv", showAdvanced ? "1" : "0"); }, [showAdvanced]);
+
+    // Busca
+    const fetchStats = useCallback(async (count: number) => {
         if (!clubId) {
-            // sem clubId: limpa e sai
             setPlayers([]);
             setClubStats(null);
             setLoading(false);
             return;
         }
+        setError(null);
+        setFetching(true);
+        setLoading(true);
+
+        // cancelamento de requisição anterior
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
 
         try {
-            setLoading(true);
-            setError(null);
-
-            // use sua baseURL do axios se preferir: api.get("/api/Matches/statistics/limited", { params: { count, clubId } })
             const { data } = await api.get(
                 "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/limited",
-                { params: { count, clubId } } // ✅ envia clubId
+                { params: { count, clubId }, signal: controller.signal }
             );
-
             setPlayers(data.players ?? []);
             setClubStats(data.clubs?.[0] ?? null);
         } catch (err: any) {
+            if (err?.name === "CanceledError" || err?.message === "canceled") return;
             setError(err?.message ?? "Erro ao buscar estatísticas.");
         } finally {
             setLoading(false);
+            setFetching(false);
         }
-    }
+    }, [clubId]);
 
     useEffect(() => {
         fetchStats(matchCount);
-    }, [clubId, matchCount]); // ✅ refaz a busca quando o clubId mudar
+    }, [fetchStats, matchCount]);
 
     function handleSort(key: SortKey) {
-        if (sortKey === key) setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+        if (sortKey === key) setSortOrder(o => (o === "asc" ? "desc" : "asc"));
         else {
             setSortKey(key);
             setSortOrder("desc");
         }
     }
 
-    // Filtros e ordenação
+    // Filtros/orden.
+    const deferredSearch = search; // simples; substitua por useDeferredValue se preferir
     const filtered = useMemo(() => {
-        const term = search.trim().toLowerCase();
+        const term = deferredSearch.trim().toLowerCase();
         return players
-            .filter((p) => p.matchesPlayed >= minMatches)
-            .filter((p) => (term ? p.playerName.toLowerCase().includes(term) : true));
-    }, [players, minMatches, search]);
+            .filter(p => p.matchesPlayed >= minMatches)
+            .filter(p => (term ? p.playerName.toLowerCase().includes(term) : true));
+    }, [players, minMatches, deferredSearch]);
 
     const sorted = useMemo(() => {
         const cp = [...filtered];
         cp.sort((a, b) => {
             const va = a[sortKey] as any;
             const vb = b[sortKey] as any;
-            if (typeof va === "number" && typeof vb === "number") {
-                return sortOrder === "asc" ? va - vb : vb - va;
-            }
+            if (typeof va === "number" && typeof vb === "number") return sortOrder === "asc" ? va - vb : vb - va;
             const sa = String(va);
             const sb = String(vb);
             return sortOrder === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
@@ -176,35 +193,40 @@ export default function PlayerStatisticsPage() {
         return cp;
     }, [filtered, sortKey, sortOrder]);
 
-    // Paginação
+    // Escalas para barras de célula
+    const maxByKey = useMemo(() => {
+        const keys: (keyof PlayerStats)[] = [
+            "totalGoals", "totalAssists", "totalShots", "totalPassesMade", "totalTacklesMade",
+            "avgRating", "winPercent", "passAccuracyPercent", "tackleSuccessPercent", "goalAccuracyPercent"
+        ];
+        const res = new Map<keyof PlayerStats, number>();
+        keys.forEach(k => res.set(k, Math.max(1, ...filtered.map(p => Number(p[k]) || 0))));
+        return res;
+    }, [filtered]);
+
+    // paginação
     const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
     const pageItems = useMemo(() => {
         const start = (page - 1) * pageSize;
         return sorted.slice(start, start + pageSize);
-    }, [sorted, page]);
+    }, [sorted, page, pageSize]);
 
-    useEffect(() => {
-        setPage(1);
-    }, [minMatches, search, sortKey, sortOrder]);
-
-    // Mensagem se não houver clubId definido
-    if (!clubId) {
-        return (
-            <div className="p-4 sm:p-6">
-                Defina um <b>clubId</b> no topo para ver as estatísticas.
-            </div>
-        );
-    }
+    useEffect(() => { setPage(1); }, [minMatches, search, sortKey, sortOrder, pageSize]);
 
     return (
         <div className="p-4 sm:p-6 max-w-[98vw] mx-auto">
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-2">
-                <h1 className="text-2xl sm:text-3xl font-bold">Estatísticas</h1>
+            {/* Cabeçalho */}
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
+                <div className="flex items-center gap-3">
+                    <h1 className="text-2xl sm:text-3xl font-bold">Estatísticas</h1>
+                    {fetching && (
+                        <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" /> Atualizando…
+                        </span>
+                    )}
+                </div>
                 <div className="text-sm text-gray-600">
-                    Clube atual:{" "}
-                    <span className="font-semibold">
-                        {clubName ? `${clubName} (${clubId})` : clubId}
-                    </span>
+                    Clube atual: <span className="font-semibold">{clubName ? `${clubName} (${clubId})` : clubId}</span>
                 </div>
             </div>
 
@@ -232,18 +254,6 @@ export default function PlayerStatisticsPage() {
                     </div>
 
                     <div className="flex flex-col">
-                        <label htmlFor="minMatches" className="text-sm text-gray-600">Min. partidas</label>
-                        <input
-                            id="minMatches"
-                            type="number"
-                            min={1}
-                            value={minMatches}
-                            onChange={(e) => setMinMatches(Math.max(1, Number(e.target.value) || 1))}
-                            className="border rounded-lg px-3 py-2 w-28"
-                        />
-                    </div>
-
-                    <div className="flex flex-col">
                         <label htmlFor="search" className="text-sm text-gray-600">Buscar jogador</label>
                         <input
                             id="search"
@@ -254,11 +264,22 @@ export default function PlayerStatisticsPage() {
                             className="border rounded-lg px-3 py-2 w-56"
                         />
                     </div>
-                </div>
 
+                    <div className="flex flex-col">
+                        <label htmlFor="pageSize" className="text-sm text-gray-600">Itens por página</label>
+                        <select
+                            id="pageSize"
+                            className="border rounded-lg px-3 py-2 w-36"
+                            value={pageSize}
+                            onChange={(e) => setPageSize(Math.max(5, Number(e.target.value) || 20))}
+                        >
+                            {[10, 20, 30, 50, 100].map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                    </div>
+                </div>
             </div>
 
-            {/* Cartão do Clube */}
+            {/* Cartão/Visão geral do Clube */}
             <section className="mb-6">
                 {loading && !clubStats && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -269,92 +290,78 @@ export default function PlayerStatisticsPage() {
                 )}
 
                 {clubStats && (
-                    <div className="overflow-x-auto">
-                        <table className="table-auto w-full border border-gray-200 text-sm text-center bg-white rounded-lg shadow">
-                            <thead className="bg-gray-50 sticky top-0">
-                                <tr>
-                                    <th className="px-3 py-2">Clube</th>
-                                    <th className="px-3 py-2">Gols</th>
-                                    <th className="px-3 py-2">Assistências</th>
-                                    <th className="px-3 py-2">Chutes / Precisão</th>
-                                    <th className="px-3 py-2">Passes (C/T)</th>
-                                    <th className="px-3 py-2">Desarmes (C/T)</th>
-                                    <th className="px-3 py-2">Vitórias / %</th>
-                                    <th className="px-3 py-2">Empates</th>
-                                    <th className="px-3 py-2">Derrotas</th>
-                                    <th className="px-3 py-2">Vermelhos</th>
-                                    <th className="px-3 py-2">MOM</th>
-                                    <th className="px-3 py-2">Nota Média</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr className="hover:bg-gray-50">
-                                    <td className="px-3 py-2 font-semibold">{clubStats.clubName}</td>
-                                    <td className="px-3 py-2">{clubStats.totalGoals}</td>
-                                    <td className="px-3 py-2">{clubStats.totalAssists}</td>
-                                    <td className="px-3 py-2">
-                                        {clubStats.totalShots} / {clubStats.goalAccuracyPercent.toFixed(1)}%
-                                    </td>
-                                    <td className="px-3 py-2">
-                                        {clubStats.totalPassesMade} / {clubStats.totalPassAttempts} (
-                                        {percent(clubStats.totalPassesMade, clubStats.totalPassAttempts).toFixed(1)}%)
-                                    </td>
-                                    <td className="px-3 py-2">
-                                        {clubStats.totalTacklesMade} / {clubStats.totalTackleAttempts} (
-                                        {percent(clubStats.totalTacklesMade, clubStats.totalTackleAttempts).toFixed(1)}%)
-                                    </td>
-                                    <td className="px-3 py-2">
-                                        {clubStats.totalWins} / {Number(clubStats.winPercent).toFixed(1)}%
-                                    </td>
-                                    <td className="px-3 py-2">{clubStats.totalDraws}</td>
-                                    <td className="px-3 py-2">{clubStats.totalLosses}</td>
-                                    <td className="px-3 py-2">{clubStats.totalRedCards}</td>
-                                    <td className="px-3 py-2">{clubStats.totalMom}</td>
-                                    <td className="px-3 py-2">{Number(clubStats.avgRating).toFixed(2)}</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <StatCard label="Partidas" value={int.format(clubStats.matchesPlayed)} />
+                        <StatCard label="Gols / Assist." value={`${int.format(clubStats.totalGoals)} / ${int.format(clubStats.totalAssists)}`} />
+                        <StatCard label="Chutes / Precisão" value={`${int.format(clubStats.totalShots)} / ${p1.format(clubStats.goalAccuracyPercent)}%`} />
+                        <StatCard label="Passes (C/T)" value={`${int.format(clubStats.totalPassesMade)} / ${int.format(clubStats.totalPassAttempts)}`} sub={`${p1.format(pct(clubStats.totalPassesMade, clubStats.totalPassAttempts))}% de acerto`} />
+                        <StatCard label="Desarmes (C/T)" value={`${int.format(clubStats.totalTacklesMade)} / ${int.format(clubStats.totalTackleAttempts)}`} sub={`${p1.format(pct(clubStats.totalTacklesMade, clubStats.totalTackleAttempts))}% de sucesso`} />
+                        <StatCard label="Resultados" value={`${int.format(clubStats.totalWins)}V / ${int.format(clubStats.totalDraws)}E / ${int.format(clubStats.totalLosses)}D`} sub={`${p1.format(clubStats.winPercent)}% vitórias`} />
+                        <StatCard label="Vermelhos / MOM" value={`${int.format(clubStats.totalRedCards)} / ${int.format(clubStats.totalMom)}`} />
+                        <StatCard label="Nota média" value={p2.format(Number(clubStats.avgRating || 0))} />
                     </div>
                 )}
 
                 {!loading && !clubStats && !error && (
-                    <div className="p-3 bg-gray-50 rounded border text-gray-700">
-                        Sem estatísticas de clube disponíveis.
-                    </div>
+                    <div className="p-3 bg-gray-50 rounded border text-gray-700">Sem estatísticas de clube disponíveis.</div>
                 )}
                 {error && (
-                    <div className="p-3 bg-red-50 rounded border border-red-200 text-red-700">
-                        {error}
-                    </div>
+                    <div className="p-3 bg-red-50 rounded border border-red-200 text-red-700">{error}</div>
                 )}
             </section>
 
             {/* Tabela de jogadores */}
             <section>
                 <h2 className="text-xl font-bold mb-2 text-center">Estatísticas dos Jogadores</h2>
-                <div className="overflow-x-auto">
-                    <table className="table-auto w-full border border-gray-200 text-sm text-center bg-white rounded-lg shadow">
-                        <thead className="bg-gray-50 sticky top-0">
+
+                <div className="overflow-x-auto rounded-lg border bg-white shadow">
+                    <table className="table-auto w-full text-sm text-center">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
                             <tr>
-                                {columns.map((c) => (
+                                {[
+                                    { key: "playerName", label: "Jogador", tooltip: "Nome do jogador" },
+                                    { key: "matchesPlayed", label: "Partidas" },
+                                    { key: "totalGoals", label: "Gols" },
+                                    { key: "totalAssists", label: "Assistências" },
+                                    { key: "totalShots", label: "Chutes (%)", tooltip: "Chutes totais e % de precisão" },
+                                    { key: "totalPassesMade", label: "Passes (C/T)", tooltip: "Completos / Tentados e %" },
+                                    { key: "totalTacklesMade", label: "Desarmes (C/T)", tooltip: "Completos / Tentados e %" },
+                                    { key: "totalWins", label: "Vitórias" },
+                                    { key: "totalLosses", label: "Derrotas" },
+                                    { key: "totalDraws", label: "Empates" },
+                                    { key: "winPercent", label: "Win %" },
+                                    { key: "totalRedCards", label: "Vermelhos" },
+                                    { key: "totalMom", label: "MOM" },
+                                    { key: "avgRating", label: "Nota" },
+                                    ...(showAdvanced
+                                        ? ([
+                                            { key: "passAccuracyPercent", label: "Passes %" },
+                                            { key: "tackleSuccessPercent", label: "Desarmes %" },
+                                            { key: "goalAccuracyPercent", label: "Chutes %" },
+                                        ] as const)
+                                        : ([] as const)),
+                                ].map((c) => (
                                     <th
                                         key={c.key as string}
-                                        onClick={() => handleSort(c.key)}
+                                        onClick={() => handleSort(c.key as keyof PlayerStats)}
                                         className="px-3 py-2 cursor-pointer select-none hover:bg-gray-100"
-                                        title={c.tooltip}
+                                        title={(c as any).tooltip}
+                                        aria-sort={sortKey === (c.key as keyof PlayerStats) ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
+                                        scope="col"
                                     >
                                         <div className="flex items-center justify-center gap-1">
-                                            <span>{c.label}</span>
-                                            <SortIcon active={sortKey === c.key} order={sortOrder} />
+                                            <span>{(c as any).label}</span>
+                                            <SortIcon active={sortKey === (c.key as keyof PlayerStats)} order={sortOrder} />
                                         </div>
                                     </th>
                                 ))}
                             </tr>
                         </thead>
+
                         <tbody>
                             {loading && (
                                 <tr>
-                                    <td colSpan={columns.length} className="p-4">
+                                    <td colSpan={20} className="p-4">
                                         <div className="space-y-2">
                                             <Skeleton className="h-6" />
                                             <Skeleton className="h-6" />
@@ -366,40 +373,53 @@ export default function PlayerStatisticsPage() {
 
                             {!loading && pageItems.length === 0 && (
                                 <tr>
-                                    <td colSpan={columns.length} className="p-4 text-gray-600">
-                                        Nenhum jogador encontrado.
-                                    </td>
+                                    <td colSpan={20} className="p-4 text-gray-600">Nenhum jogador encontrado.</td>
                                 </tr>
                             )}
 
                             {!loading &&
                                 pageItems.map((p) => (
                                     <tr key={p.playerId} className="hover:bg-gray-50">
-                                        {/* IMPORTANTE: sua rota atual é /statistics/player/:matchId/:playerId.
-                       Como aqui não temos matchId, mantive sem Link para evitar 404.
-                       Se você criar uma rota /statistics/player/:playerId, pode envolver com <Link> aqui. */}
-                                        <td className="px-3 py-2 font-medium text-left">{p.playerName}</td>
-                                        <td className="px-3 py-2">{p.matchesPlayed}</td>
-                                        <td className="px-3 py-2">{p.totalGoals}</td>
-                                        <td className="px-3 py-2">{p.totalAssists}</td>
+                                        <td className="px-3 py-2 font-medium text-left sticky left-0 bg-white/95 backdrop-blur support:bg-white">{p.playerName}</td>
+                                        <td className="px-3 py-2">{int.format(p.matchesPlayed)}</td>
                                         <td className="px-3 py-2">
-                                            {p.totalShots} / {p.goalAccuracyPercent.toFixed(1)}%
+                                            <CellBar value={p.totalGoals} max={maxByKey.get("totalGoals") || 1} format={(v) => int.format(v)} />
                                         </td>
                                         <td className="px-3 py-2">
-                                            {p.totalPassesMade} / {p.totalPassAttempts} (
-                                            {percent(p.totalPassesMade, p.totalPassAttempts).toFixed(1)}%)
+                                            <CellBar value={p.totalAssists} max={maxByKey.get("totalAssists") || 1} format={(v) => int.format(v)} />
                                         </td>
                                         <td className="px-3 py-2">
-                                            {p.totalTacklesMade} / {p.totalTackleAttempts} (
-                                            {percent(p.totalTacklesMade, p.totalTackleAttempts).toFixed(1)}%)
+                                            {int.format(p.totalShots)} / {p1.format(p.goalAccuracyPercent)}%
                                         </td>
-                                        <td className="px-3 py-2">{p.totalWins}</td>
-                                        <td className="px-3 py-2">{p.totalLosses}</td>
-                                        <td className="px-3 py-2">{p.totalDraws}</td>
-                                        <td className="px-3 py-2">{p.winPercent.toFixed(1)}%</td>
-                                        <td className="px-3 py-2">{p.totalRedCards}</td>
-                                        <td className="px-3 py-2">{p.totalMom}</td>
-                                        <td className="px-3 py-2">{p.avgRating.toFixed(2)}</td>
+                                        <td className="px-3 py-2">
+                                            {int.format(p.totalPassesMade)} / {int.format(p.totalPassAttempts)}
+                                            <div className="mt-1">
+                                                <CellBar value={pct(p.totalPassesMade, p.totalPassAttempts)} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {int.format(p.totalTacklesMade)} / {int.format(p.totalTackleAttempts)}
+                                            <div className="mt-1">
+                                                <CellBar value={pct(p.totalTacklesMade, p.totalTackleAttempts)} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2">{int.format(p.totalWins)}</td>
+                                        <td className="px-3 py-2">{int.format(p.totalLosses)}</td>
+                                        <td className="px-3 py-2">{int.format(p.totalDraws)}</td>
+                                        <td className="px-3 py-2">
+                                            <CellBar value={p.winPercent} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                                        </td>
+                                        <td className="px-3 py-2">{int.format(p.totalRedCards)}</td>
+                                        <td className="px-3 py-2">{int.format(p.totalMom)}</td>
+                                        <td className="px-3 py-2">{p2.format(Number(p.avgRating || 0))}</td>
+
+                                        {showAdvanced && (
+                                            <>
+                                                <td className="px-3 py-2"><CellBar value={p.passAccuracyPercent} max={100} suffix="%" positive format={(v) => p1.format(v)} /></td>
+                                                <td className="px-3 py-2"><CellBar value={p.tackleSuccessPercent} max={100} suffix="%" positive format={(v) => p1.format(v)} /></td>
+                                                <td className="px-3 py-2"><CellBar value={p.goalAccuracyPercent} max={100} suffix="%" positive format={(v) => p1.format(v)} /></td>
+                                            </>
+                                        )}
                                     </tr>
                                 ))}
                         </tbody>
@@ -407,7 +427,7 @@ export default function PlayerStatisticsPage() {
                 </div>
 
                 {/* Paginação */}
-                <div className="mt-3 flex items-center justify-between">
+                <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
                     <div className="text-sm text-gray-600">
                         Mostrando {pageItems.length} de {sorted.length} jogadores (pág. {page}/{totalPages})
                     </div>
@@ -429,6 +449,30 @@ export default function PlayerStatisticsPage() {
                     </div>
                 </div>
             </section>
+        </div>
+    );
+}
+
+// ========================
+// Célula com barra visual
+// ========================
+function CellBar({ value, max, suffix = "", positive = false, format = (n: number) => String(n) }: {
+    value: number;
+    max: number;
+    suffix?: string;
+    positive?: boolean; // se true, pinta a barra em verde
+    format?: (n: number) => string;
+}) {
+    const width = clamp((value / (max || 1)) * 100);
+    return (
+        <div className="relative w-full h-6 rounded-md border border-gray-200 overflow-hidden bg-gray-50">
+            <div
+                className={`h-full ${positive ? "bg-emerald-200" : "bg-gray-300"}`}
+                style={{ width: `${width}%` }}
+            />
+            <div className="absolute inset-0 grid place-items-center text-xs font-medium">
+                {format(value)}{suffix}
+            </div>
         </div>
     );
 }

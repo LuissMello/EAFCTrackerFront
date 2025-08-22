@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import {
     Chart as ChartJS,
@@ -147,68 +147,105 @@ function colorFromId(num: number) {
 }
 
 // meta de estatísticas disponíveis na UI
-const comparisonStats: Array<{ label: string; key: keyof (ClubRow & PlayerRow); scope: "club" | "player" | "both" }> = [
-    { label: "Gols", key: "totalGoals", scope: "both" },
-    { label: "Assistências", key: "totalAssists", scope: "both" },
-    { label: "Chutes", key: "totalShots", scope: "both" },
-    { label: "Precisão de Chutes (%)", key: "goalAccuracyPercent", scope: "both" },
-    { label: "Passes Certos", key: "totalPassesMade", scope: "both" },
-    { label: "Passes Tentados", key: "totalPassAttempts", scope: "both" },
-    { label: "Precisão de Passe (%)", key: "passAccuracyPercent", scope: "both" },
-    { label: "Desarmes Certos", key: "totalTacklesMade", scope: "both" },
-    { label: "Desarmes Tentados", key: "totalTackleAttempts", scope: "both" },
-    { label: "Precisão de Desarmes (%)", key: "tackleSuccessPercent", scope: "both" },
-    { label: "Nota Média", key: "avgRating", scope: "both" },
-
-    // adicionais úteis com o contrato atual
-    { label: "Defesas (GK)", key: "totalSaves", scope: "both" },
-    { label: "Clean Sheets", key: "totalCleanSheets", scope: "both" },
-    { label: "Cartões Vermelhos", key: "totalRedCards", scope: "both" },
-    { label: "Homem do Jogo", key: "totalMom", scope: "both" },
-    { label: "Vitórias (%)", key: "winPercent", scope: "both" },
-];
+const comparisonStats: Array<{
+    label: string;
+    key: keyof (ClubRow & PlayerRow);
+    scope: "club" | "player" | "both";
+}> = [
+        { label: "Gols", key: "totalGoals", scope: "both" },
+        { label: "Assistências", key: "totalAssists", scope: "both" },
+        { label: "Chutes", key: "totalShots", scope: "both" },
+        { label: "Precisão de Chutes (%)", key: "goalAccuracyPercent", scope: "both" },
+        { label: "Passes Certos", key: "totalPassesMade", scope: "both" },
+        { label: "Passes Tentados", key: "totalPassAttempts", scope: "both" },
+        { label: "Precisão de Passe (%)", key: "passAccuracyPercent", scope: "both" },
+        { label: "Desarmes Certos", key: "totalTacklesMade", scope: "both" },
+        { label: "Desarmes Tentados", key: "totalTackleAttempts", scope: "both" },
+        { label: "Precisão de Desarmes (%)", key: "tackleSuccessPercent", scope: "both" },
+        { label: "Nota Média", key: "avgRating", scope: "both" },
+        { label: "Cartões Vermelhos", key: "totalRedCards", scope: "both" },
+        { label: "Homem do Jogo", key: "totalMom", scope: "both" },
+    ];
 
 type StatKey = (typeof comparisonStats)[number]["key"];
 
-function fmt(value: number | undefined | null) {
+type PlayerSortKey = keyof PlayerRow | "playerName";
+
+function fmt(value: number | undefined | null): string {
     if (value === undefined || value === null) return "–";
-    return Number.isInteger(value) ? String(value) : (Math.round((value as number) * 100) / 100).toFixed(2);
+    return Number.isInteger(value)
+        ? String(value)
+        : (Math.round((value as number) * 100) / 100).toFixed(2);
 }
+
+// Aux: badge simples
+const Badge: React.FC<{ className?: string; children: React.ReactNode; title?: string }>
+    = ({ className = "", children, title }) => (
+        <span title={title} className={`text-xs px-2 py-0.5 rounded-full border ${className}`}>{children}</span>
+    );
+
+// Aux: Skeleton
+const Skeleton: React.FC<{ className?: string }>
+    = ({ className = "h-5 w-full" }) => (
+        <div className={`animate-pulse rounded bg-gray-200 ${className}`} />
+    );
+
+// Aux: botão
+const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className = "", ...props }) => (
+    <button
+        {...props}
+        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm shadow-sm hover:bg-gray-50 disabled:opacity-60 ${className}`}
+    />
+);
 
 // ======================
 export default function MatchDetails() {
     const { matchId } = useParams();
     const { club } = useClub(); // <- clube selecionado no menu (contexto)
     const selectedClubId = club?.clubId ?? null;
+    const [searchParams, setSearchParams] = useSearchParams();
 
     const [stats, setStats] = useState<FullMatchStatisticsDto | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [selectedStat, setSelectedStat] = useState<StatKey>("totalGoals");
-    const [onlySelectedClubPlayers, setOnlySelectedClubPlayers] = useState<boolean>(false);
+    const initialStat = (searchParams.get("stat") as StatKey) || "totalGoals";
+    const initialOnlySel = searchParams.get("onlyClub") === "1";
 
-    useEffect(() => {
+    const [selectedStat, setSelectedStat] = useState<StatKey>(initialStat);
+    const [onlySelectedClubPlayers, setOnlySelectedClubPlayers] = useState<boolean>(initialOnlySel);
+    const [playerQuery, setPlayerQuery] = useState("");
+    const [sortKey, setSortKey] = useState<PlayerSortKey>("totalGoals");
+    const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+    const persistParams = useCallback((key: string, val: string | null) => {
+        const sp = new URLSearchParams(searchParams);
+        if (val === null) sp.delete(key); else sp.set(key, val);
+        setSearchParams(sp, { replace: true });
+    }, [searchParams, setSearchParams]);
+
+    useEffect(() => { persistParams("stat", selectedStat); }, [selectedStat]);
+    useEffect(() => { persistParams("onlyClub", onlySelectedClubPlayers ? "1" : null); }, [onlySelectedClubPlayers]);
+
+    const fetchData = useCallback(async () => {
         if (!matchId) return;
         let cancel = false;
-        (async () => {
-            try {
-                setLoading(true);
-                setError(null);
-                const { data } = await api.get<FullMatchStatisticsDto>(
-                    `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/${matchId}`
-                );
-                if (!cancel) setStats(data);
-            } catch (err: any) {
-                if (!cancel) setError(err?.message ?? "Erro ao buscar estatísticas");
-            } finally {
-                if (!cancel) setLoading(false);
-            }
-        })();
-        return () => {
-            cancel = true;
-        };
+        try {
+            setLoading(true);
+            setError(null);
+            const { data } = await api.get<FullMatchStatisticsDto>(
+                `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/${matchId}`
+            );
+            if (!cancel) setStats(data);
+        } catch (err: any) {
+            if (!cancel) setError(err?.message ?? "Erro ao buscar estatísticas");
+        } finally {
+            if (!cancel) setLoading(false);
+        }
+        return () => { cancel = true; };
     }, [matchId]);
+
+    useEffect(() => { fetchData(); }, [fetchData]);
 
     const overall = stats?.overall;
     const players = stats?.players ?? [];
@@ -217,7 +254,7 @@ export default function MatchDetails() {
     // Ordena clubes mantendo o selecionado (se existir) à esquerda
     const orderedClubs = useMemo(() => {
         if (!selectedClubId || clubs.length < 2) return clubs;
-        const idx = clubs.findIndex(c => c.clubId === selectedClubId);
+        const idx = clubs.findIndex((c) => c.clubId === selectedClubId);
         if (idx <= 0) return clubs;
         const clone = [...clubs];
         const [sel] = clone.splice(idx, 1);
@@ -234,24 +271,28 @@ export default function MatchDetails() {
     const rightWon = haveScore && (goalsB ?? 0) > (goalsA ?? 0);
 
     // flags de destaque
-    const leftIsSelected = selectedClubId && orderedClubs[0]?.clubId === selectedClubId;
-    const rightIsSelected = selectedClubId && orderedClubs[1]?.clubId === selectedClubId;
+    const leftIsSelected = !!selectedClubId && orderedClubs[0]?.clubId === selectedClubId;
+    const rightIsSelected = !!selectedClubId && orderedClubs[1]?.clubId === selectedClubId;
 
     // Qual é o escopo da estatística selecionada?
-    const selectedMeta = comparisonStats.find(s => s.key === selectedStat) ?? comparisonStats[0];
+    const selectedMeta = useMemo(() => comparisonStats.find((s) => s.key === selectedStat) ?? comparisonStats[0], [selectedStat]);
 
     // ======================
     // Chart de jogadores (horizontal)
     // ======================
     const playerChart = useMemo(() => {
         const base = onlySelectedClubPlayers && selectedClubId
-            ? players.filter(p => p.clubId === selectedClubId)
+            ? players.filter((p) => p.clubId === selectedClubId)
             : players;
 
-        const playerSupportsSelected =
-            base.some(p => Object.prototype.hasOwnProperty.call(p, selectedStat) && typeof (p as any)[selectedStat] === "number");
+        const filtered = playerQuery.trim()
+            ? base.filter((p) => p.playerName.toLowerCase().includes(playerQuery.toLowerCase()))
+            : base;
 
-        const rows = base.map((p) => ({
+        const playerSupportsSelected =
+            filtered.some((p) => Object.prototype.hasOwnProperty.call(p, selectedStat) && typeof (p as any)[selectedStat] === "number");
+
+        const rows = filtered.map((p) => ({
             label: p.playerName,
             value: playerSupportsSelected ? ((p as any)[selectedStat] as number) : undefined,
             color: colorFromId(p.playerId),
@@ -264,6 +305,7 @@ export default function MatchDetails() {
 
         return {
             supported: playerSupportsSelected,
+            top,
             data: {
                 labels: top.map((r) => r.label),
                 datasets: [
@@ -287,16 +329,14 @@ export default function MatchDetails() {
                         text: onlySelectedClubPlayers ? "Comparativo de Jogadores (apenas clube selecionado)" : "Comparativo de Jogadores",
                     },
                     tooltip: {
-                        callbacks: {
-                            label: (item: any) => `${item.raw}`,
-                        },
+                        callbacks: { label: (item: any) => `${item.raw}` },
                     },
                 },
                 scales: { x: { beginAtZero: true } },
                 elements: { bar: { borderWidth: 1, barThickness: 12 } },
             },
         };
-    }, [players, selectedStat, onlySelectedClubPlayers, selectedClubId]);
+    }, [players, selectedStat, onlySelectedClubPlayers, selectedClubId, playerQuery]);
 
     // ======================
     // Chart de clubes (horizontal) — somente para a estatística selecionada
@@ -340,24 +380,101 @@ export default function MatchDetails() {
         };
     }, [orderedClubs, selectedStat]);
 
-    if (loading) return <div className="p-4">Carregando…</div>;
-    if (error) return <div className="p-4 text-red-600">{error}</div>;
-    if (!stats || orderedClubs.length === 0) return <div className="p-4">Dados indisponíveis.</div>;
+    // ======================
+    // Ordenação e filtro de jogadores por clube
+    // ======================
+    const sortPlayers = useCallback((list: PlayerRow[]) => {
+        const copy = [...list];
+        copy.sort((a, b) => {
+            const va = (a as any)[sortKey] ?? (sortKey === "playerName" ? a.playerName : 0);
+            const vb = (b as any)[sortKey] ?? (sortKey === "playerName" ? b.playerName : 0);
+            if (typeof va === "string" && typeof vb === "string") {
+                return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+            }
+            const numA = Number(va) || 0; const numB = Number(vb) || 0;
+            return sortDir === "asc" ? numA - numB : numB - numA;
+        });
+        return copy;
+    }, [sortKey, sortDir]);
+
+    const playersByClub = useMemo(() => {
+        const map = new Map<number, PlayerRow[]>();
+        for (const p of players) {
+            if (playerQuery && !p.playerName.toLowerCase().includes(playerQuery.toLowerCase())) continue;
+            const arr = map.get(p.clubId) ?? [];
+            arr.push(p);
+            map.set(p.clubId, arr);
+        }
+        for (const [k, list] of map) map.set(k, sortPlayers(list));
+        return map;
+    }, [players, playerQuery, sortPlayers]);
+
+    // ======================
+    // UI helpers
+    // ======================
+    const cellHeat = (va?: number, vb?: number) => {
+        const a = Number(va ?? 0); const b = Number(vb ?? 0);
+        if (a === b) return { a: "", b: "" };
+        return a > b
+            ? { a: "bg-emerald-50 font-semibold", b: "bg-red-50" }
+            : { a: "bg-red-50", b: "bg-emerald-50 font-semibold" };
+    };
 
     // MVP
-    const mom = (stats?.players ?? []).find(p => (p.totalMom ?? 0) > 0);
+    const mom = (stats?.players ?? []).find((p) => (p.totalMom ?? 0) > 0);
+    const sentOff = (stats?.players ?? []).filter((p) => (p.totalRedCards ?? 0) > 0);
 
-    // Disciplina
-    const sentOff = (stats?.players ?? []).filter(p => (p.totalRedCards ?? 0) > 0);
+    // ============ Render ==========
+    if (loading) {
+        return (
+            <div className="p-4 space-y-6" aria-busy>
+                <div className="flex items-center justify-between">
+                    <Skeleton className="h-7 w-52" />
+                    <Skeleton className="h-5 w-24" />
+                </div>
+                <div className="bg-white shadow-sm rounded-xl p-4 border space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                        <Skeleton className="h-10 w-64" />
+                        <Skeleton className="h-6 w-16" />
+                        <Skeleton className="h-10 w-64" />
+                    </div>
+                    <Skeleton className="h-48" />
+                </div>
+                <Skeleton className="h-48" />
+                <Skeleton className="h-72" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="p-4">
+                <div className="max-w-xl rounded-lg border p-4 bg-red-50 text-red-800">
+                    <div className="font-semibold">Ocorreu um erro</div>
+                    <div className="text-sm mt-1">{error}</div>
+                    <div className="mt-3">
+                        <Button onClick={fetchData}>Tentar novamente</Button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (!stats || orderedClubs.length === 0) {
+        return <div className="p-4">Dados indisponíveis.</div>;
+    }
 
     return (
         <div className="p-4 space-y-6">
+            {/* Topo */}
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold">Detalhes da Partida</h1>
-                <Link to="/" className="text-blue-700 hover:underline">← Voltar</Link>
+                <div className="flex items-center gap-2">
+                    <Link to="/" className="text-blue-700 hover:underline">← Voltar</Link>
+                </div>
             </div>
 
-            {/* Cabeçalho dos clubes + placar */}
+            {/* Cabeçalho dos clubes + placar e highlights */}
             <div className="bg-white shadow-sm rounded-xl p-4 border">
                 <div className="flex items-center justify-between gap-3">
                     {/* Esquerda */}
@@ -371,39 +488,29 @@ export default function MatchDetails() {
                         <div className="font-semibold flex items-center gap-2">
                             {orderedClubs[0].clubName}
                             {leftIsSelected && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-                                    Clube selecionado
-                                </span>
+                                <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>
                             )}
                             {leftWon && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                    Vitória
-                                </span>
+                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Vitória</Badge>
                             )}
                             {!leftWon && haveScore && !rightWon && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border">
-                                    Empate
-                                </span>
+                                <Badge className="bg-gray-100 text-gray-700">Empate</Badge>
                             )}
                         </div>
                     </div>
 
                     {/* Placar */}
-                    <div className="text-sm font-semibold text-gray-700">{scoreLabel}</div>
+                    <div className="text-xl font-bold text-gray-900">{scoreLabel}</div>
 
                     {/* Direita */}
                     <div className={`flex items-center gap-2 px-2 py-1 rounded ${rightIsSelected ? "border-2 border-blue-600" : ""}`}>
                         <div className="font-semibold flex items-center gap-2">
                             {orderedClubs[1].clubName}
                             {rightIsSelected && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-                                    Clube selecionado
-                                </span>
+                                <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>
                             )}
                             {rightWon && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                    Vitória
-                                </span>
+                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Vitória</Badge>
                             )}
                         </div>
                         <img
@@ -415,7 +522,7 @@ export default function MatchDetails() {
                     </div>
                 </div>
 
-                {/* Tabela comparativa simples */}
+                {/* Tabela comparativa com heat */}
                 <div className="overflow-x-auto mt-4">
                     <table className="w-full table-auto text-sm border text-center">
                         <thead>
@@ -426,13 +533,18 @@ export default function MatchDetails() {
                             </tr>
                         </thead>
                         <tbody>
-                            {comparisonStats.map(({ label, key }) => (
-                                <tr key={String(key)} className="border-t">
-                                    <td className="p-2">{fmt((orderedClubs[0] as any)[key])}</td>
-                                    <td className="p-2 font-medium">{label}</td>
-                                    <td className="p-2">{fmt((orderedClubs[1] as any)[key])}</td>
-                                </tr>
-                            ))}
+                            {comparisonStats.map(({ label, key }) => {
+                                const va = (orderedClubs[0] as any)[key] as number;
+                                const vb = (orderedClubs[1] as any)[key] as number;
+                                const heat = cellHeat(va, vb);
+                                return (
+                                    <tr key={String(key)} className="border-t">
+                                        <td className={`p-2 tabular-nums ${heat.a}`}>{fmt(va)}</td>
+                                        <td className="p-2 font-medium">{label}</td>
+                                        <td className={`p-2 tabular-nums ${heat.b}`}>{fmt(vb)}</td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -440,7 +552,7 @@ export default function MatchDetails() {
                 {/* MVP */}
                 {mom && (
                     <div className="mt-4 p-3 rounded-lg border bg-amber-50 text-amber-900 inline-flex items-center gap-2">
-                        <span>⭐</span>
+                        <span aria-hidden>⭐</span>
                         <span className="font-medium">Homem da Partida:</span>
                         <span>{mom.playerName}</span>
                     </div>
@@ -471,12 +583,11 @@ export default function MatchDetails() {
                     <div className="mt-3 text-sm">
                         <div className="font-medium mb-1">Expulsos:</div>
                         <ul className="list-disc pl-5 space-y-1">
-                            {sentOff.map(p => (
+                            {sentOff.map((p) => (
                                 <li key={p.playerId}>
                                     <span className="font-medium">{p.playerName}</span>
                                     <span className="text-gray-500">
-                                        {" "}
-                                        — {(orderedClubs.find(c => c.clubId === p.clubId)?.clubName) ?? "Clube"}
+                                        {" "}— {orderedClubs.find((c) => c.clubId === p.clubId)?.clubName ?? "Clube"}
                                     </span>
                                 </li>
                             ))}
@@ -497,33 +608,49 @@ export default function MatchDetails() {
                         className="border rounded px-2 py-1 text-sm"
                     >
                         {comparisonStats.map((s) => (
-                            <option key={String(s.key)} value={s.key as string}>{s.label}</option>
+                            <option key={String(s.key)} value={s.key as string}>
+                                {s.label}
+                            </option>
                         ))}
                     </select>
                 </div>
 
-                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <div className="flex items-center gap-3">
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                            type="checkbox"
+                            checked={onlySelectedClubPlayers}
+                            onChange={(e) => setOnlySelectedClubPlayers(e.target.checked)}
+                            disabled={!selectedClubId}
+                        />
+                        Mostrar apenas jogadores do clube selecionado
+                    </label>
                     <input
-                        type="checkbox"
-                        checked={onlySelectedClubPlayers}
-                        onChange={(e) => setOnlySelectedClubPlayers(e.target.checked)}
-                        disabled={!selectedClubId}
+                        type="text"
+                        value={playerQuery}
+                        onChange={(e) => setPlayerQuery(e.target.value)}
+                        placeholder="Filtrar por jogador…"
+                        className="border rounded px-2 py-1 text-sm"
                     />
-                    Mostrar apenas jogadores do clube selecionado
-                </label>
+                </div>
             </div>
 
-            {/* Gráficos */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gráficos + Top 5 */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 {/* Clubes */}
-                <div className="bg-white shadow-sm rounded-xl p-4 border h-[260px]">
+                <div className="bg-white shadow-sm rounded-xl p-4 border h-[260px] xl:col-span-1">
                     <h2 className="text-lg font-semibold mb-2">Comparativo entre Clubes</h2>
                     {clubChart && <Bar data={clubChart.data} options={clubChart.options as any} />}
                 </div>
 
                 {/* Jogadores */}
-                <div className="bg-white shadow-sm rounded-xl p-4 border min-h-[200px]">
-                    <h2 className="text-lg font-semibold mb-2">Comparativo de Jogadores</h2>
+                <div className="bg-white shadow-sm rounded-xl p-4 border min-h-[200px] xl:col-span-2">
+                    <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-lg font-semibold">Comparativo de Jogadores</h2>
+                        {playerChart.supported && playerChart.top.length > 0 && (
+                            <div className="text-xs text-gray-600">Top {playerChart.top.length} para "{selectedMeta.label}"</div>
+                        )}
+                    </div>
                     {!playerChart.supported ? (
                         <div className="p-3 text-sm text-gray-600">
                             Esta estatística não é suportada por jogadores. Selecione uma métrica de jogadores (ex.: Gols, Assistências, Passes…) para ver o gráfico.
@@ -539,7 +666,40 @@ export default function MatchDetails() {
             {/* Tabelas de jogadores por clube */}
             {orderedClubs.map((clubRow) => (
                 <div key={clubRow.clubId} className="bg-white shadow-sm rounded-xl p-4 border">
-                    <h3 className="text-lg font-semibold mb-2">{clubRow.clubName} — Jogadores</h3>
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold">{clubRow.clubName} — Jogadores</h3>
+                        <div className="flex items-center gap-2 text-sm">
+                            <label className="text-gray-700">Ordenar por:</label>
+                            <select
+                                value={sortKey}
+                                onChange={(e) => setSortKey(e.target.value as PlayerSortKey)}
+                                className="border rounded px-2 py-1"
+                            >
+                                <option value="playerName">Nome</option>
+                                <option value="totalGoals">Gols</option>
+                                <option value="totalAssists">Assistências</option>
+                                <option value="totalShots">Chutes</option>
+                                <option value="goalAccuracyPercent">Chutes %</option>
+                                <option value="totalPassesMade">Passes</option>
+                                <option value="totalPassAttempts">Tentativas de Passe</option>
+                                <option value="passAccuracyPercent">Passes %</option>
+                                <option value="totalTacklesMade">Desarmes</option>
+                                <option value="totalTackleAttempts">Tentativas de Desarme</option>
+                                <option value="tackleSuccessPercent">Desarmes %</option>
+                                <option value="totalRedCards">Vermelhos</option>
+                                <option value="avgRating">Nota</option>
+                            </select>
+                            <select
+                                value={sortDir}
+                                onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
+                                className="border rounded px-2 py-1"
+                            >
+                                <option value="desc">Desc</option>
+                                <option value="asc">Asc</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div className="overflow-x-auto">
                         <table className="w-full table-auto text-sm border text-center">
                             <thead>
@@ -560,31 +720,28 @@ export default function MatchDetails() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {players
-                                    .filter((p) => p.clubId === clubRow.clubId)
-                                    .map((p) => (
-                                        <tr key={p.playerId} className="border-t">
-                                            <td className="p-2 text-left">
-                                                <Link className="text-blue-700 underline" to={`/statistics/player/${matchId}/${p.playerId}`}>
-                                                    {p.playerName}
-                                                </Link>
-                                                {p.totalMom > 0 && <span className="ml-2" title="Homem da Partida">⭐</span>}
-                         
-                                            </td>
-                                            <td className="p-2">{p.totalGoals}</td>
-                                            <td className="p-2">{p.totalAssists}</td>
-                                            <td className="p-2">{p.totalShots}</td>
-                                            <td className="p-2">{fmt(p.goalAccuracyPercent)}</td>
-                                            <td className="p-2">{p.totalPassesMade}</td>
-                                            <td className="p-2">{p.totalPassAttempts}</td>
-                                            <td className="p-2">{fmt(p.passAccuracyPercent)}</td>
-                                            <td className="p-2">{p.totalTacklesMade}</td>
-                                            <td className="p-2">{p.totalTackleAttempts}</td>
-                                            <td className="p-2">{fmt(p.tackleSuccessPercent)}</td>
-                                            <td className="p-2">{p.totalRedCards ?? 0}</td>
-                                            <td className="p-2">{(p.avgRating ?? 0).toFixed(2)}</td>
-                                        </tr>
-                                    ))}
+                                {(playersByClub.get(clubRow.clubId) ?? []).map((p) => (
+                                    <tr key={p.playerId} className={`border-t ${p.totalMom > 0 ? "bg-amber-50" : ""}`}>
+                                        <td className="p-2 text-left">
+                                            <Link className="text-blue-700 underline" to={`/statistics/player/${matchId}/${p.playerId}`}>
+                                                {p.playerName}
+                                            </Link>
+                                            {p.totalMom > 0 && <span className="ml-2" title="Homem da Partida">⭐</span>}
+                                        </td>
+                                        <td className="p-2 tabular-nums">{p.totalGoals}</td>
+                                        <td className="p-2 tabular-nums">{p.totalAssists}</td>
+                                        <td className="p-2 tabular-nums">{p.totalShots}</td>
+                                        <td className="p-2 tabular-nums">{fmt(p.goalAccuracyPercent)}</td>
+                                        <td className="p-2 tabular-nums">{p.totalPassesMade}</td>
+                                        <td className="p-2 tabular-nums">{p.totalPassAttempts}</td>
+                                        <td className="p-2 tabular-nums">{fmt(p.passAccuracyPercent)}</td>
+                                        <td className="p-2 tabular-nums">{p.totalTacklesMade}</td>
+                                        <td className="p-2 tabular-nums">{p.totalTackleAttempts}</td>
+                                        <td className="p-2 tabular-nums">{fmt(p.tackleSuccessPercent)}</td>
+                                        <td className="p-2 tabular-nums">{p.totalRedCards ?? 0}</td>
+                                        <td className="p-2 tabular-nums">{(p.avgRating ?? 0).toFixed(2)}</td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </div>

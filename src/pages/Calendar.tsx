@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState, useId, KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
@@ -63,25 +63,17 @@ export interface CalendarDayDetailsDto {
 const ptMonth = new Intl.DateTimeFormat("pt-BR", { month: "long" });
 const ptWeekday = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
 const ptDay = new Intl.DateTimeFormat("pt-BR", { day: "2-digit" });
+const ptTime = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-const toYmd = (d: Date) =>
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const toYmd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const fromYmd = (s: string) => {
     const [y, m, d] = s.split("-").map(Number);
     return new Date(y, m - 1, d);
 };
-function startOfMonth(d: Date) {
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-}
-function addMonths(d: Date, months: number) {
-    return new Date(d.getFullYear(), d.getMonth() + months, 1);
-}
-function addDays(d: Date, days: number) {
-    const nd = new Date(d);
-    nd.setDate(nd.getDate() + days);
-    return nd;
-}
+function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+function addMonths(d: Date, months: number) { return new Date(d.getFullYear(), d.getMonth() + months, 1); }
+function addDays(d: Date, days: number) { const nd = new Date(d); nd.setDate(nd.getDate() + days); return nd; }
 function getGridStart(date: Date) {
     const first = startOfMonth(date);
     const dow = (first.getDay() + 6) % 7; // 0 = segunda
@@ -89,16 +81,8 @@ function getGridStart(date: Date) {
     gridStart.setDate(first.getDate() - dow);
     return gridStart;
 }
-function getWeekStart(d: Date) {
-    const dow = (d.getDay() + 6) % 7; // 0 = segunda
-    const ws = new Date(d);
-    ws.setDate(d.getDate() - dow);
-    return new Date(ws.getFullYear(), ws.getMonth(), ws.getDate());
-}
-const crestUrl = (id?: string | null) =>
-    id
-        ? `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${id}.png`
-        : null;
+function getWeekStart(d: Date) { const dow = (d.getDay() + 6) % 7; const ws = new Date(d); ws.setDate(d.getDate() - dow); return new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()); }
+const crestUrl = (id?: string | null) => id ? `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${id}.png` : null;
 
 // ===== UI =====
 function ResultPill({ r }: { r: "W" | "D" | "L" | "-" }) {
@@ -113,18 +97,23 @@ function ResultPill({ r }: { r: "W" | "D" | "L" | "-" }) {
 }
 function Crest({ id, alt }: { id?: string | null; alt: string }) {
     const url = crestUrl(id);
-    if (!url) return null;
+    if (!url) return <div className="w-6 h-6 rounded-full bg-gray-100" aria-hidden />;
     return (
-        <img
-            src={url}
-            alt={alt}
-            className="w-6 h-6 rounded-full bg-gray-100 object-contain"
-            loading="lazy"
-        />
+        <img src={url} alt={alt} className="w-6 h-6 rounded-full bg-gray-100 object-contain" loading="lazy" decoding="async" />
     );
 }
-function Skeleton({ className = "" }: { className?: string }) {
-    return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
+function Skeleton({ className = "" }: { className?: string }) { return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />; }
+
+// Pequenos adornos visuais no dia (indicadores de jogos)
+function Dots({ count }: { count: number }) {
+    const capped = Math.min(4, count);
+    return (
+        <div className="absolute bottom-1 left-1 right-1 flex justify-center gap-1">
+            {Array.from({ length: capped }).map((_, i) => (
+                <span key={i} className="w-1.5 h-1.5 rounded-full bg-blue-400/70" />
+            ))}
+        </div>
+    );
 }
 
 // ===== Página =====
@@ -151,15 +140,24 @@ export default function CalendarPage() {
     const [loadingDay, setLoadingDay] = useState(false);
     const [errorDay, setErrorDay] = useState<string | null>(null);
 
+    const [lastActiveButton, setLastActiveButton] = useState<HTMLButtonElement | null>(null);
+    const dialogTitleId = useId();
+
+    // Caches simples (evita refetch ao navegar)
+    const monthCacheRef = useRef<Record<string, CalendarMonthDto>>({});
+    const dayCacheRef = useRef<Record<string, CalendarDayDetailsDto>>({});
+
     const year = referenceMonth.getFullYear();
     const month1to12 = referenceMonth.getMonth() + 1;
+    const monthKey = `${year}-${pad(month1to12)}`;
+
+    const todayYmd = toYmd(new Date());
 
     // Cabeçalhos SEG–DOM
     const weekdays = useMemo(() => {
         const base = new Date(2023, 0, 2); // segunda
         return Array.from({ length: 7 }, (_, i) => {
-            const d = new Date(base);
-            d.setDate(base.getDate() + i);
+            const d = new Date(base); d.setDate(base.getDate() + i);
             return ptWeekday.format(d).toUpperCase();
         });
     }, []);
@@ -169,14 +167,9 @@ export default function CalendarPage() {
         if (viewMode === "monthly") {
             const start = getGridStart(referenceMonth);
             const totalCells = 42;
-            return Array.from({ length: totalCells }, (_, i) => {
-                const d = new Date(start);
-                d.setDate(start.getDate() + i);
-                return d;
-            });
-        } else {
-            return Array.from({ length: 7 }, (_, i) => addDays(referenceWeekStart, i));
+            return Array.from({ length: totalCells }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
         }
+        return Array.from({ length: 7 }, (_, i) => addDays(referenceWeekStart, i));
     }, [referenceMonth, referenceWeekStart, viewMode]);
 
     const summaryByDate: Record<string, CalendarDaySummaryDto> = useMemo(() => {
@@ -185,85 +178,131 @@ export default function CalendarPage() {
         return map;
     }, [monthData]);
 
-    const isSameMonth = (d: Date, ref: Date) =>
-        d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
+    const isSameMonth = (d: Date, ref: Date) => d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
 
-    // Sempre que trocar de clube OU mês, limpamos tudo
+    // Sempre que trocar de clube OU mês, limpamos estados de erro/dia
     useEffect(() => {
-        setMonthData(null);
         setErrorMonth(null);
         setSelectedDate(null);
         setDayData(null);
         setErrorDay(null);
     }, [clubId, year, month1to12]);
 
-    // Buscar mês (com clubId)
+    // Buscar mês (com cache) + prefetch meses adjacentes
     useEffect(() => {
         if (!clubId) return;
         let disposed = false;
-        (async () => {
-            setLoadingMonth(true);
-            setErrorMonth(null);
-            setMonthData(null);
+
+        async function fetchMonth(y: number, m: number, write = true) {
+            const k = `${y}-${pad(m)}`;
+            if (monthCacheRef.current[k]) {
+                if (!disposed && write) setMonthData(monthCacheRef.current[k]);
+                return;
+            }
+            if (write) { setLoadingMonth(true); setErrorMonth(null); setMonthData(null); }
             try {
                 const { data } = await api.get<CalendarMonthDto>(
                     "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Calendar",
-                    { params: { year, month: month1to12, clubId } }
+                    { params: { year: y, month: m, clubId } }
                 );
-                if (!disposed) setMonthData(data);
+                monthCacheRef.current[k] = data;
+                if (!disposed && write) setMonthData(data);
             } catch (err: any) {
-                if (!disposed) setErrorMonth(err?.message ?? "Erro ao carregar calendário");
+                if (!disposed && write) setErrorMonth(err?.message ?? "Erro ao carregar calendário");
             } finally {
-                if (!disposed) setLoadingMonth(false);
+                if (!disposed && write) setLoadingMonth(false);
             }
-        })();
+        }
+
+        // mês atual
+        fetchMonth(year, month1to12, true);
+        // prefetch anterior e próximo (não altera UI)
+        const prev = addMonths(referenceMonth, -1); fetchMonth(prev.getFullYear(), prev.getMonth() + 1, false);
+        const next = addMonths(referenceMonth, 1); fetchMonth(next.getFullYear(), next.getMonth() + 1, false);
+
         return () => { disposed = true; };
     }, [clubId, year, month1to12]);
 
-    // Buscar dia (com clubId)
+    // Buscar dia (com cache)
     useEffect(() => {
         if (!selectedDate || !clubId) return;
         let disposed = false;
-        (async () => {
-            setLoadingDay(true);
-            setErrorDay(null);
-            setDayData(null);
+
+        async function run() {
+            const cached = dayCacheRef.current[selectedDate!];
+            if (cached) { if (!disposed) setDayData(cached); return; }
+            setLoadingDay(true); setErrorDay(null); setDayData(null);
             try {
                 const { data } = await api.get<CalendarDayDetailsDto>(
                     "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Calendar/day",
                     { params: { date: selectedDate, clubId } }
                 );
+                dayCacheRef.current[selectedDate!] = data;
                 if (!disposed) setDayData(data);
             } catch (err: any) {
                 if (!disposed) setErrorDay(err?.message ?? "Erro ao carregar o dia");
             } finally {
                 if (!disposed) setLoadingDay(false);
             }
-        })();
+        }
+        run();
         return () => { disposed = true; };
     }, [selectedDate, clubId]);
 
+    // Acessibilidade: teclas de atalho e setas para navegar
+    function handleKeyNav(e: KeyboardEvent<HTMLDivElement>) {
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+        if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, -1));
+            else {
+                const newStart = addDays(referenceWeekStart, -7);
+                setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart));
+            }
+        } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, 1));
+            else {
+                const newStart = addDays(referenceWeekStart, 7);
+                setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart));
+            }
+        } else if (e.key.toLowerCase() === "t") {
+            const today = new Date(); setReferenceMonth(startOfMonth(today)); setReferenceWeekStart(getWeekStart(today));
+        } else if (e.key.toLowerCase() === "m") {
+            setViewMode("monthly");
+        } else if (e.key.toLowerCase() === "s") {
+            setViewMode("weekly");
+        }
+    }
+
     if (!clubId) {
         return (
-            <div className="p-4 max-w-6xl mx-auto">
-                Defina um <b>clubId</b> no topo para visualizar o calendário.
-            </div>
+            <div className="p-4 max-w-6xl mx-auto">Defina um <b>clubId</b> no topo para visualizar o calendário.</div>
         );
     }
 
     // Título dinâmico para a semana
     const weekTitle = useMemo(() => {
-        const start = referenceWeekStart;
-        const end = addDays(start, 6);
+        const start = referenceWeekStart; const end = addDays(start, 6);
         const sameMonthYear = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
-        if (sameMonthYear) {
-            return `${ptDay.format(start)}–${ptDay.format(end)} de ${ptMonth.format(start)} de ${start.getFullYear()}`;
-        }
+        if (sameMonthYear) return `${ptDay.format(start)}–${ptDay.format(end)} de ${ptMonth.format(start)} de ${start.getFullYear()}`;
         return `${ptDay.format(start)} ${ptMonth.format(start)} ${start.getFullYear()} – ${ptDay.format(end)} ${ptMonth.format(end)} ${end.getFullYear()}`;
     }, [referenceWeekStart]);
 
+    // Heatmap simples por quantidade de jogos
+    function cellTone(count?: number) {
+        if (!count || count <= 0) return "";
+        if (count >= 4) return "bg-blue-50";
+        if (count === 3) return "bg-indigo-50";
+        if (count === 2) return "bg-violet-50";
+        return "bg-purple-50";
+    }
+
+    // Util para restaurar foco ao fechar drawer
+    const drawerCloseRef = useRef<HTMLButtonElement | null>(null);
+
     return (
-        <div className="p-4 max-w-6xl mx-auto">
+        <div className="p-4 max-w-6xl mx-auto" onKeyDown={handleKeyNav} aria-live="polite">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2">
@@ -283,11 +322,7 @@ export default function CalendarPage() {
                         ◀
                     </button>
                     <button
-                        onClick={() => {
-                            const today = new Date();
-                            setReferenceMonth(startOfMonth(today));
-                            setReferenceWeekStart(getWeekStart(today));
-                        }}
+                        onClick={() => { const today = new Date(); setReferenceMonth(startOfMonth(today)); setReferenceWeekStart(getWeekStart(today)); }}
                         className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                     >
                         Hoje
@@ -309,9 +344,7 @@ export default function CalendarPage() {
                     </button>
 
                     <h1 className="text-2xl font-bold ml-2">
-                        {viewMode === "monthly"
-                            ? `${ptMonth.format(referenceMonth)} de ${referenceMonth.getFullYear()}`
-                            : `Semana: ${weekTitle}`}
+                        {viewMode === "monthly" ? `${ptMonth.format(referenceMonth)} de ${referenceMonth.getFullYear()}` : `Semana: ${weekTitle}`}
                     </h1>
                 </div>
 
@@ -319,73 +352,66 @@ export default function CalendarPage() {
                 <div className="flex items-center gap-3">
                     <div className="text-sm text-gray-600">
                         Clube atual:{" "}
-                        <span className="font-semibold">
-                            {clubName ? `${clubName} (${clubId})` : clubId}
-                        </span>
+                        <span className="font-semibold">{clubName ? `${clubName} (${clubId})` : clubId}</span>
                     </div>
-                    <div
-                        role="tablist"
-                        aria-label="Modo de visualização"
-                        className="inline-flex rounded-lg border overflow-hidden"
-                    >
-                        <button
-                            role="tab"
-                            aria-selected={viewMode === "monthly"}
-                            onClick={() => setViewMode("monthly")}
-                            className={`px-3 py-1.5 text-sm ${viewMode === "monthly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}
-                        >
+                    <div role="tablist" aria-label="Modo de visualização" className="inline-flex rounded-lg border overflow-hidden">
+                        <button role="tab" aria-selected={viewMode === "monthly"} onClick={() => setViewMode("monthly")} className={`px-3 py-1.5 text-sm ${viewMode === "monthly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
                             Mensal
                         </button>
-                        <button
-                            role="tab"
-                            aria-selected={viewMode === "weekly"}
-                            onClick={() => setViewMode("weekly")}
-                            className={`px-3 py-1.5 text-sm border-l ${viewMode === "weekly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}
-                        >
+                        <button role="tab" aria-selected={viewMode === "weekly"} onClick={() => setViewMode("weekly")} className={`px-3 py-1.5 text-sm border-l ${viewMode === "weekly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
                             Semanal
                         </button>
                     </div>
                 </div>
             </div>
 
+            {/* Legenda/ajuda */}
+            <div className="flex items-center gap-3 text-xs text-gray-600 mb-2">
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400/70" />Partidas no dia</span>
+                <span className="px-1 rounded bg-green-100 text-green-700">V</span>
+                <span className="px-1 rounded bg-yellow-100 text-yellow-700">E</span>
+                <span className="px-1 rounded bg-red-100 text-red-700">D</span>
+                <span className="ml-auto">Atalhos: ← → navegar • T hoje • M mensal • S semanal</span>
+            </div>
+
             {/* Cabeçalhos dos dias da semana */}
             <div className="grid grid-cols-7 gap-2 text-center mb-2">
                 {weekdays.map((w) => (
-                    <div key={w} className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                        {w}
-                    </div>
+                    <div key={w} className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{w}</div>
                 ))}
             </div>
 
             {/* Grid (Mensal ou Semanal) */}
-            <div className="grid grid-cols-7 gap-2">
+            <div role="grid" aria-label={viewMode === "monthly" ? "Calendário mensal" : "Calendário semanal"} className="grid grid-cols-7 gap-2">
                 {gridDays.map((d) => {
                     const ymd = toYmd(d);
                     const summary = summaryByDate[ymd];
                     const inMonth = isSameMonth(d, referenceMonth);
+                    const isToday = ymd === todayYmd;
+                    const disabled = !summary;
 
                     return (
                         <button
                             key={ymd}
-                            onClick={() => summary && setSelectedDate(ymd)}
+                            onClick={(e) => { if (disabled) return; setSelectedDate(ymd); setLastActiveButton(e.currentTarget); }}
                             className={[
                                 "relative border p-1 sm:p-2 rounded-xl transition focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                viewMode === "monthly"
-                                    ? (inMonth ? "bg-white" : "bg-gray-50")
-                                    : "bg-white",
-                                summary ? "hover:shadow-md cursor-pointer" : "opacity-60 cursor-default",
+                                viewMode === "monthly" ? (inMonth ? "bg-white" : "bg-gray-50") : "bg-white",
+                                disabled ? "opacity-60 cursor-default" : "hover:shadow-md cursor-pointer",
+                                cellTone(summary?.matchesCount),
+                                isToday ? "ring-1 ring-blue-300" : "",
                                 "overflow-hidden w-full flex flex-col",
+                                viewMode === "monthly" ? "aspect-square" : "aspect-[2/1]"
                             ].join(" ")}
-                            style={{ aspectRatio: viewMode === "monthly" ? "1 / 1" : "2 / 1" }}
-                            aria-disabled={!summary}
+                            aria-disabled={disabled}
+                            aria-pressed={selectedDate === ymd}
                             aria-label={`${ptDay.format(d)} ${ptMonth.format(d)} — ${summary ? `${summary.matchesCount} jogo(s)` : "sem jogos"}`}
+                            title={summary ? `${summary.matchesCount} jogo(s)` : "Sem jogos"}
                         >
                             {/* Cabeçalho do dia */}
                             <div className="flex items-start justify-between min-w-0">
-                                <span
-                                    className={`font-semibold ${inMonth ? "text-gray-900" : "text-gray-400"} text-xs sm:text-sm`}
-                                >
-                                    {ptDay.format(d)}
+                                <span className={`font-semibold ${inMonth ? "text-gray-900" : "text-gray-400"} text-xs sm:text-sm`}>
+                                    {ptDay.format(d)}{isToday ? " • hoje" : ""}
                                 </span>
                                 {loadingMonth && !monthData && <Skeleton className="w-6 sm:w-8 h-3 sm:h-4" />}
                             </div>
@@ -415,6 +441,8 @@ export default function CalendarPage() {
                                     </div>
                                 </div>
                             )}
+
+                            {summary?.matchesCount ? <Dots count={summary.matchesCount} /> : null}
                         </button>
                     );
                 })}
@@ -422,7 +450,12 @@ export default function CalendarPage() {
 
             {/* Estados */}
             {errorMonth && (
-                <div className="mt-4 p-3 bg-red-50 text-red-700 rounded border border-red-200">{errorMonth}</div>
+                <div className="mt-4 p-3 bg-red-50 text-red-700 rounded border border-red-200 flex items-center justify-between">
+                    <span>{errorMonth}</span>
+                    <button className="px-2 py-1 text-sm rounded border" onClick={() => { /* força refetch limpando cache do mês atual */ delete monthCacheRef.current[monthKey]; setReferenceMonth(new Date(referenceMonth)); }}>
+                        Tentar novamente
+                    </button>
+                </div>
             )}
             {!loadingMonth && monthData && monthData.days.length === 0 && (
                 <div className="mt-4 p-3 bg-gray-50 text-gray-700 rounded border">Sem jogos neste mês.</div>
@@ -430,18 +463,12 @@ export default function CalendarPage() {
 
             {/* Drawer do dia */}
             {selectedDate && (
-                <div className="fixed inset-0 z-40">
-                    <div
-                        className="absolute inset-0 bg-black/30"
-                        onClick={() => {
-                            setSelectedDate(null);
-                            setDayData(null);
-                        }}
-                    />
+                <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-labelledby={dialogTitleId}>
+                    <div className="absolute inset-0 bg-black/30" onClick={() => { setSelectedDate(null); setDayData(null); lastActiveButton?.focus(); }} />
                     <div className="absolute right-0 top-0 h-full w-full sm:w-[560px] bg-white shadow-xl p-4 overflow-y-auto">
                         <div className="flex items-center justify-between mb-3">
                             <div>
-                                <h2 className="text-xl font-semibold">
+                                <h2 id={dialogTitleId} className="text-xl font-semibold">
                                     {ptDay.format(fromYmd(selectedDate))} {ptMonth.format(fromYmd(selectedDate))}
                                 </h2>
                                 {dayData && (
@@ -453,26 +480,27 @@ export default function CalendarPage() {
                                     </p>
                                 )}
                             </div>
-                            <button
-                                className="px-3 py-2 rounded-lg border hover:bg-gray-50"
-                                onClick={() => {
-                                    setSelectedDate(null);
-                                    setDayData(null);
-                                }}
-                            >
+                            <button ref={drawerCloseRef} className="px-3 py-2 rounded-lg border hover:bg-gray-50" onClick={() => { setSelectedDate(null); setDayData(null); lastActiveButton?.focus(); }}>
                                 Fechar
                             </button>
                         </div>
 
                         {loadingDay && (
-                            <div className="space-y-3">
+                            <div className="space-y-3" aria-live="polite">
                                 <Skeleton className="h-16" />
                                 <Skeleton className="h-16" />
                                 <Skeleton className="h-16" />
                             </div>
                         )}
 
-                        {errorDay && <div className="p-3 bg-red-50 text-red-700 rounded border border-red-200">{errorDay}</div>}
+                        {errorDay && (
+                            <div className="p-3 bg-red-50 text-red-700 rounded border border-red-200 flex items-center justify-between">
+                                <span>{errorDay}</span>
+                                <button className="px-2 py-1 text-sm rounded border" onClick={() => { if (!selectedDate) return; delete dayCacheRef.current[selectedDate]; setDayData(null); setSelectedDate(selectedDate); }}>
+                                    Tentar novamente
+                                </button>
+                            </div>
+                        )}
 
                         {!loadingDay && dayData && dayData.matches.length === 0 && (
                             <div className="p-3 bg-gray-50 text-gray-700 rounded border">Nenhuma partida neste dia.</div>
@@ -480,55 +508,41 @@ export default function CalendarPage() {
 
                         {!loadingDay && dayData && dayData.matches.length > 0 && (
                             <div className="space-y-3">
-                                {dayData.matches.map((m) => (
-                                    <div key={m.matchId} className="border rounded-xl p-3 hover:shadow">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <Crest id={m.clubACrestAssetId} alt={m.clubAName} />
-                                                <span className="font-medium">{m.clubAName}</span>
-                                                <span className="font-semibold">{m.clubAGoals}</span>
-                                                <span className="text-gray-400">x</span>
-                                                <span className="font-semibold">{m.clubBGoals}</span>
-                                                <span className="font-medium">{m.clubBName}</span>
-                                                <Crest id={m.clubBCrestAssetId} alt={m.clubBName} />
+                                {dayData.matches.map((m) => {
+                                    const kickoff = m.timestamp ? ptTime.format(new Date(m.timestamp)) : "";
+                                    return (
+                                        <div key={m.matchId} className="border rounded-xl p-3 hover:shadow">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <Crest id={m.clubACrestAssetId} alt={m.clubAName} />
+                                                    <span className="font-medium truncate max-w-[34%]" title={m.clubAName}>{m.clubAName}</span>
+                                                    <span className="font-semibold">{m.clubAGoals}</span>
+                                                    <span className="text-gray-400">x</span>
+                                                    <span className="font-semibold">{m.clubBGoals}</span>
+                                                    <span className="font-medium truncate max-w-[34%]" title={m.clubBName}>{m.clubBName}</span>
+                                                    <Crest id={m.clubBCrestAssetId} alt={m.clubBName} />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {kickoff && <span className="text-xs text-gray-500">{kickoff}</span>}
+                                                    <ResultPill r={m.resultForClub} />
+                                                </div>
                                             </div>
-                                            <ResultPill r={m.resultForClub} />
-                                        </div>
 
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-gray-700">
-                                            <div className="bg-gray-50 rounded p-2 flex items-center justify-between">
-                                                <span>Chutes</span>
-                                                <span className="font-semibold">{m.stats.totalShots}</span>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-gray-700">
+                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Chutes</span><span className="font-semibold">{m.stats.totalShots}</span></div>
+                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Gols</span><span className="font-semibold">{m.stats.totalGoals}</span></div>
+                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Passes Certos</span><span className="font-semibold">{m.stats.totalPassesMade}</span></div>
+                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Passes (%)</span><span className="font-semibold">{m.stats.passAccuracyPercent.toFixed(0)}%</span></div>
+                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Desarmes (%)</span><span className="font-semibold">{m.stats.tackleSuccessPercent.toFixed(0)}%</span></div>
+                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Nota Média</span><span className="font-semibold">{m.stats.avgRating.toFixed(2)}</span></div>
                                             </div>
-                                            <div className="bg-gray-50 rounded p-2 flex items-center justify-between">
-                                                <span>Gols</span>
-                                                <span className="font-semibold">{m.stats.totalGoals}</span>
-                                            </div>
-                                            <div className="bg-gray-50 rounded p-2 flex items-center justify-between">
-                                                <span>Passes Certos</span>
-                                                <span className="font-semibold">{m.stats.totalPassesMade}</span>
-                                            </div>
-                                            <div className="bg-gray-50 rounded p-2 flex items-center justify-between">
-                                                <span>Passes (%)</span>
-                                                <span className="font-semibold">{m.stats.passAccuracyPercent.toFixed(0)}%</span>
-                                            </div>
-                                            <div className="bg-gray-50 rounded p-2 flex items-center justify-between">
-                                                <span>Desarmes (%)</span>
-                                                <span className="font-semibold">{m.stats.tackleSuccessPercent.toFixed(0)}%</span>
-                                            </div>
-                                            <div className="bg-gray-50 rounded p-2 flex items-center justify-between">
-                                                <span>Nota Média</span>
-                                                <span className="font-semibold">{m.stats.avgRating.toFixed(2)}</span>
-                                            </div>
-                                        </div>
 
-                                        <div className="mt-2 text-right">
-                                            <Link to={`/match/${m.matchId}`} className="text-sm text-blue-700 hover:underline">
-                                                Ver detalhes da partida
-                                            </Link>
+                                            <div className="mt-2 text-right">
+                                                <Link to={`/match/${m.matchId}`} className="text-sm text-blue-700 hover:underline">Ver detalhes da partida</Link>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

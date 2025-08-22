@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState, useId } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState, useId } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
 
 // ======================
-// Tipos
+// Tipos (mantidos para compatibilidade)
 // ======================
 interface ClubDetailsDto {
     name?: string | null;
@@ -44,7 +44,6 @@ interface MatchResultDto {
     clubBGoals: number;
     clubBDetails?: ClubDetailsDto | null;
 
-    // ⬇️ novos campos para cartões vermelhos
     clubARedCards?: number | null;
     clubBRedCards?: number | null;
 
@@ -53,10 +52,14 @@ interface MatchResultDto {
 
 type MatchTypeFilter = "All" | "League" | "Playoff";
 
+type SortKey = "recent" | "oldest" | "goals";
+
 // ======================
 // Helpers
 // ======================
+const fmtDate = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" });
 const fmtDateTime = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" });
+const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
 
 const FALLBACK_LOGO = "https://via.placeholder.com/96?text=Logo";
 const AVATAR_PX = 40; // mesmo tamanho para logo e camisa
@@ -79,10 +82,21 @@ function toHex(dec: string | number | null | undefined): string | null {
     return null;
 }
 
+function fromNow(ts: string) {
+    const d = new Date(ts).getTime();
+    const now = Date.now();
+    const diffMs = d - now;
+    const abs = Math.abs(diffMs);
+    const minutes = Math.round(abs / 60000);
+    if (minutes < 60) return rtf.format(Math.sign(diffMs) * Math.round(minutes), "minute");
+    const hours = Math.round(minutes / 60);
+    if (hours < 48) return rtf.format(Math.sign(diffMs) * hours, "hour");
+    const days = Math.round(hours / 24);
+    return rtf.format(Math.sign(diffMs) * days, "day");
+}
+
 // ======================
 // Mini camisa (SVG) com padrões
-// patterns: plain | hoops | stripes | sash | halves | quarters
-// cores: c1=corpo, c2=mangas (fallback c1), c3=gola, c4=detalhe/listras
 // ======================
 type JerseyPattern = "plain" | "hoops" | "stripes" | "sash" | "halves" | "quarters";
 
@@ -131,7 +145,6 @@ function KitJersey({
             const y = bodyY + i * (h + gap);
             rows.push(<rect key={`b-${i}`} x={bodyX} y={y} width={bodyW} height={h} fill={accent} />);
         }
-        // mangas (clip)
         const slRowsL: JSX.Element[] = [], slRowsR: JSX.Element[] = [];
         const sleeveTop = slLy1, sleeveBottom = slLy2;
         const sleeveH = sleeveBottom - sleeveTop;
@@ -160,7 +173,6 @@ function KitJersey({
             const x = bodyX + i * (w + gap);
             cols.push(<rect key={`bcol-${i}`} x={x} y={bodyY} width={w} height={bodyH} fill={accent} />);
         }
-        // mangas (clip) — verticais “curtas”
         const slColsL: JSX.Element[] = [], slColsR: JSX.Element[] = [];
         const wS = 2;
         for (let i = 0; i < 4; i++) {
@@ -181,7 +193,6 @@ function KitJersey({
     const renderSash = () => (
         <>
             <polygon points="16,18 24,18 48,52 40,52" fill={accent} opacity={0.95} />
-            {/* mangas com um toque */}
             <rect x={12} y={26} width={8} height={3} fill={accent} />
             <rect x={44} y={22} width={8} height={3} fill={accent} />
         </>
@@ -225,24 +236,19 @@ function KitJersey({
                 </clipPath>
             </defs>
 
-            {/* mangas base */}
             <polygon points="20,18 12,22 12,32 20,28" fill={sleeves} />
             <polygon points="44,18 52,22 52,32 44,28" fill={sleeves} />
 
-            {/* corpo base */}
             <rect x={20} y={18} width={24} height={34} rx={4} fill={body} />
 
-            {/* padrões */}
             {pattern === "hoops" && renderHoops()}
             {pattern === "stripes" && renderStripes()}
             {pattern === "sash" && renderSash()}
             {pattern === "halves" && renderHalves()}
             {pattern === "quarters" && renderQuarters()}
 
-            {/* gola (V) */}
             <polygon points="28,14 32,20 36,14" fill={collar} />
 
-            {/* contorno */}
             <rect x={20} y={18} width={24} height={34} rx={4} fill="none" stroke="rgba(0,0,0,0.15)" />
             <polyline points="20,18 12,22 12,32 20,28" fill="none" stroke="rgba(0,0,0,0.15)" />
             <polyline points="44,18 52,22 52,32 44,28" fill="none" stroke="rgba(0,0,0,0.15)" />
@@ -251,12 +257,7 @@ function KitJersey({
 }
 
 // ============= Heurística de padrão (até termos o template real) =============
-const KNOWN_TEMPLATES: Record<string, JerseyPattern> = {
-    // mapeie IDs reais do jogo aqui, ex:
-    // "TMP_001": "plain",
-    // "TMP_023": "stripes",
-    // "SASH_A": "sash",
-};
+const KNOWN_TEMPLATES: Record<string, JerseyPattern> = {};
 
 function guessPattern(details?: ClubDetailsDto | null): JerseyPattern {
     const txt =
@@ -266,12 +267,10 @@ function guessPattern(details?: ClubDetailsDto | null): JerseyPattern {
         "|" +
         (details?.dCustomKit ?? "");
 
-    // 1) se mapeado explicitamente
     for (const key of Object.keys(KNOWN_TEMPLATES)) {
         if (txt.includes(key)) return KNOWN_TEMPLATES[key];
     }
 
-    // 2) heurísticas leves com base em cores/strings
     const hasC4 = !!details?.kitColor4;
     const hint = txt.toLowerCase();
     if (hint.includes("sash")) return "sash";
@@ -279,8 +278,6 @@ function guessPattern(details?: ClubDetailsDto | null): JerseyPattern {
     if (hint.includes("hoop")) return "hoops";
     if (hint.includes("half")) return "halves";
     if (hint.includes("quarter")) return "quarters";
-
-    // fallback: se houver 4ª cor, usar hoops; senão liso
     return hasC4 ? "hoops" : "plain";
 }
 
@@ -291,14 +288,23 @@ function Skeleton({ className = "" }: { className?: string }) {
     return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
 }
 
+function Badge({ color = "gray", children }: { color?: "gray" | "green" | "red" | "amber"; children: React.ReactNode }) {
+    const palette: Record<string, string> = {
+        gray: "bg-gray-50 border-gray-200 text-gray-600",
+        green: "bg-green-50 border-green-200 text-green-700",
+        red: "bg-red-50 border-red-200 text-red-700",
+        amber: "bg-amber-50 border-amber-200 text-amber-700",
+    };
+    return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${palette[color]}`}>{children}</span>;
+}
+
 // Badge de cartões vermelhos
 function RedCardBadge({ count }: { count?: number | null }) {
     const c = typeof count === "number" ? count : 0;
     const has = c > 0;
     return (
         <span
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] 
-            ${has ? "bg-red-50 border-red-200 text-red-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px]  ${has ? "bg-red-50 border-red-200 text-red-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
             title={`Cartões vermelhos: ${c}`}
             aria-label={`Cartões vermelhos: ${c}`}
         >
@@ -308,23 +314,67 @@ function RedCardBadge({ count }: { count?: number | null }) {
     );
 }
 
+function OutcomeBadge({ a, b }: { a: number; b: number }) {
+    if (a > b) return <Badge color="green">Vitória</Badge>;
+    if (a < b) return <Badge color="red">Derrota</Badge>;
+    return <Badge color="amber">Empate</Badge>;
+}
+
+function ToolbarSeparator() {
+    return <div className="hidden sm:block w-px self-stretch bg-gray-200" />;
+}
+
+function Segmented({ value, onChange }: { value: MatchTypeFilter; onChange: (v: MatchTypeFilter) => void }) {
+    const opts: { v: MatchTypeFilter; label: string }[] = [
+        { v: "All", label: "Todos" },
+        { v: "League", label: "Liga" },
+        { v: "Playoff", label: "Playoff" },
+    ];
+    return (
+        <div role="tablist" aria-label="Tipo de partida" className="inline-flex rounded-xl border bg-white p-1">
+            {opts.map((o) => (
+                <button
+                    key={o.v}
+                    role="tab"
+                    aria-selected={value === o.v}
+                    onClick={() => onChange(o.v)}
+                    className={`px-3 py-1.5 rounded-lg text-sm transition ${value === o.v ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                >
+                    {o.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+// ======================
+// Cart de partida
+// ======================
 function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFilter }) {
     const patternA = guessPattern(m.clubADetails);
     const patternB = guessPattern(m.clubBDetails);
 
+    const aWins = m.clubAGoals > m.clubBGoals;
+    const bWins = m.clubBGoals > m.clubAGoals;
+    const draw = m.clubAGoals === m.clubBGoals;
+
     return (
         <Link
             to={`/match/${m.matchId}?matchType=${matchType}`}
-            className="block bg-white shadow-sm rounded-xl p-4 hover:shadow transition border"
+            className={`block bg-white rounded-xl p-4 border transition shadow-sm hover:shadow ${aWins ? "border-green-200" : bWins ? "border-red-200" : "border-gray-200"}`}
             title="Ver detalhes da partida"
         >
-            <div className="text-center text-xs text-gray-500 mb-3">
-                {fmtDateTime.format(new Date(m.timestamp))}
+            <div className="flex items-center justify-between gap-2">
+                <div className="text-xs text-gray-500">
+                    <span className="hidden sm:inline">{fmtDateTime.format(new Date(m.timestamp))}</span>
+                    <span className="sm:hidden">{fromNow(m.timestamp)}</span>
+                </div>
+                <OutcomeBadge a={m.clubAGoals} b={m.clubBGoals} />
             </div>
 
-            <div className="flex items-center justify-between gap-2">
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center gap-3">
                 {/* Clube A */}
-                <div className="flex-1 flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                     <img
                         src={crestUrl(m.clubADetails?.crestAssetId)}
                         onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
@@ -334,16 +384,10 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                         loading="lazy"
                     />
                     <div className="min-w-0">
-                        <div className="truncate leading-tight">{m.clubAName}</div>
-                        {/* Camisa + badge */}
+                        <div className="truncate leading-tight font-medium" title={m.clubAName}>{m.clubAName}</div>
                         <div className="flex items-center gap-2 mt-1">
                             <KitJersey
-                                colors={[
-                                    m.clubADetails?.kitColor1,
-                                    m.clubADetails?.kitColor2,
-                                    m.clubADetails?.kitColor3,
-                                    m.clubADetails?.kitColor4,
-                                ]}
+                                colors={[m.clubADetails?.kitColor1, m.clubADetails?.kitColor2, m.clubADetails?.kitColor3, m.clubADetails?.kitColor4]}
                                 pattern={patternA}
                                 sizePx={AVATAR_PX}
                                 title={`Camisa ${m.clubAName}`}
@@ -354,22 +398,19 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                 </div>
 
                 {/* Placar */}
-                <div className="px-3 py-1 rounded bg-gray-50 font-semibold text-lg border text-center min-w-[72px]">
-                    {m.clubAGoals} <span className="text-gray-400">x</span> {m.clubBGoals}
+                <div className="justify-self-center px-3 py-1 rounded bg-gray-50 font-semibold text-lg border text-center min-w-[84px]">
+                    <span className={aWins ? "text-green-700" : bWins ? "text-gray-500" : ""}>{m.clubAGoals}</span>
+                    <span className="text-gray-400"> x </span>
+                    <span className={bWins ? "text-green-700" : aWins ? "text-gray-500" : ""}>{m.clubBGoals}</span>
                 </div>
 
                 {/* Clube B */}
-                <div className="flex-1 flex items-center gap-2 justify-end">
+                <div className="flex items-center gap-2 min-w-0 sm:justify-end">
                     <div className="min-w-0 text-right">
-                        <div className="truncate leading-tight">{m.clubBName}</div>
+                        <div className="truncate leading-tight font-medium" title={m.clubBName}>{m.clubBName}</div>
                         <div className="flex items-center justify-end gap-2 mt-1">
                             <KitJersey
-                                colors={[
-                                    m.clubBDetails?.kitColor1,
-                                    m.clubBDetails?.kitColor2,
-                                    m.clubBDetails?.kitColor3,
-                                    m.clubBDetails?.kitColor4,
-                                ]}
+                                colors={[m.clubBDetails?.kitColor1, m.clubBDetails?.kitColor2, m.clubBDetails?.kitColor3, m.clubBDetails?.kitColor4]}
                                 pattern={patternB}
                                 sizePx={AVATAR_PX}
                                 title={`Camisa ${m.clubBName}`}
@@ -387,6 +428,10 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                     />
                 </div>
             </div>
+
+            {m.resultText && (
+                <div className="mt-3 text-xs text-gray-500 line-clamp-2" title={m.resultText}>{m.resultText}</div>
+            )}
         </Link>
     );
 }
@@ -398,20 +443,48 @@ export default function Home() {
     const { club } = useClub();
     const clubId = club?.clubId;
 
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Estado UI
     const [results, setResults] = useState<MatchResultDto[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const [search, setSearch] = useState("");
-    const [onlyWithLogos, setOnlyWithLogos] = useState(false);
-    const [matchType, setMatchType] = useState<MatchTypeFilter>("All");
+    const [search, setSearch] = useState(searchParams.get("q") ?? "");
+    const [onlyWithLogos, setOnlyWithLogos] = useState(searchParams.get("logos") === "1");
+    const [matchType, setMatchType] = useState<MatchTypeFilter>((searchParams.get("type") as MatchTypeFilter) || "All");
+    const [sortKey, setSortKey] = useState<SortKey>(((searchParams.get("sort") as SortKey) || "recent"));
+    const [visible, setVisible] = useState(30); // paginação no cliente
 
+    // Atalhos
+    const searchRef = useRef<HTMLInputElement | null>(null);
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "/") {
+                e.preventDefault();
+                searchRef.current?.focus();
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, []);
+
+    // Persistência leve
+    useEffect(() => {
+        const payload = { q: search, logos: onlyWithLogos ? "1" : undefined, type: matchType !== "All" ? matchType : undefined, sort: sortKey !== "recent" ? sortKey : undefined } as Record<string, string | undefined>;
+        const next = new URLSearchParams();
+        Object.entries(payload).forEach(([k, v]) => { if (v) next.set(k, v); });
+        setSearchParams(next, { replace: true });
+    }, [search, onlyWithLogos, matchType, sortKey, setSearchParams]);
+
+    // Carregamento
     useEffect(() => {
         if (!clubId) {
             setResults([]);
             return;
         }
-        let cancel = false;
+        let mounted = true;
+        const controller = new AbortController();
         (async () => {
             try {
                 setLoading(true);
@@ -422,33 +495,77 @@ export default function Home() {
 
                 const { data } = await api.get<MatchResultDto[]>(
                     "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/matches/results",
-                    { params }
+                    { params, signal: (controller as any).signal }
                 );
-
-                if (!cancel) setResults(data ?? []);
+                if (mounted) {
+                    setResults(Array.isArray(data) ? data : []);
+                    setVisible(30);
+                }
             } catch (err: any) {
-                if (!cancel) setError(err?.message ?? "Erro ao carregar resultados");
+                if (mounted) setError(err?.message ?? "Erro ao carregar resultados");
             } finally {
-                if (!cancel) setLoading(false);
+                if (mounted) setLoading(false);
             }
         })();
-        return () => { cancel = true; };
+        return () => {
+            mounted = false;
+            controller.abort();
+        };
     }, [clubId, matchType]);
 
+    // Filtro + ordenação + agrupamento
     const filtered = useMemo(() => {
         const term = search.trim().toLowerCase();
-        return results
+        const base = results
             .filter((m) => (term ? `${m.clubAName} ${m.clubBName}`.toLowerCase().includes(term) : true))
-            .filter((m) =>
-                onlyWithLogos
-                    ? Boolean(m.clubADetails?.crestAssetId) && Boolean(m.clubBDetails?.crestAssetId)
-                    : true
-            )
-            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    }, [results, search, onlyWithLogos]);
+            .filter((m) => (onlyWithLogos ? Boolean(m.clubADetails?.crestAssetId) && Boolean(m.clubBDetails?.crestAssetId) : true));
+
+        const sorted = [...base].sort((a, b) => {
+            if (sortKey === "recent") return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+            if (sortKey === "oldest") return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+            // "goals": somatório de gols desc
+            const ga = a.clubAGoals + a.clubBGoals;
+            const gb = b.clubAGoals + b.clubBGoals;
+            if (gb !== ga) return gb - ga;
+            return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        });
+
+        return sorted;
+    }, [results, search, onlyWithLogos, sortKey]);
+
+    // Resumo
+    const summary = useMemo(() => {
+        const s = filtered.reduce(
+            (acc, m) => {
+                acc.jogos++;
+                acc.golsPro += m.clubAGoals; // assumindo clube A como nosso? Se não, ajuste aqui com base no clubId se disponível
+                acc.golsContra += m.clubBGoals;
+                if (m.clubAGoals > m.clubBGoals) acc.v++; else if (m.clubAGoals < m.clubBGoals) acc.d++; else acc.e++;
+                acc.cartoes += (m.clubARedCards ?? 0) + (m.clubBRedCards ?? 0);
+                return acc;
+            },
+            { jogos: 0, v: 0, e: 0, d: 0, golsPro: 0, golsContra: 0, cartoes: 0 }
+        );
+        return { ...s, saldo: s.golsPro - s.golsContra };
+    }, [filtered]);
+
+    // Agrupar por dia (string yyyy-mm-dd)
+    const groups = useMemo(() => {
+        const map = new Map<string, MatchResultDto[]>();
+        for (const m of filtered) {
+            const d = new Date(m.timestamp);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            if (!map.has(key)) map.set(key, []);
+            map.get(key)!.push(m);
+        }
+        return Array.from(map.entries()).sort((a, b) => (sortKey === "oldest" ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0])));
+    }, [filtered, sortKey]);
+
+    const hasResults = filtered.length > 0;
 
     return (
-        <div className="p-4 max-w-4xl mx-auto">
+        <div className="p-4 max-w-5xl mx-auto">
+            {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold">Resultados das Partidas</h1>
@@ -456,56 +573,80 @@ export default function Home() {
                         {clubId ? (
                             <>Clube atual: <span className="font-medium">{club?.clubName ?? clubId}</span></>
                         ) : (
-                            <>Selecione um clube no topo (“Alterar clube”) para carregar os resultados.</>
+                            <>Selecione um clube no topo (botão “Alterar clube”) para carregar os resultados.</>
                         )}
                     </p>
                 </div>
 
-                <div className="flex gap-3 items-end">
-                    {/* Dropdown de tipo */}
-                    <div className="flex flex-col">
-                        <label htmlFor="matchType" className="text-sm text-gray-600">Tipo</label>
-                        <select
-                            id="matchType"
-                            value={matchType}
-                            onChange={(e) => setMatchType(e.target.value as MatchTypeFilter)}
-                            className="border rounded-lg px-3 py-2 w-40 bg-white"
-                        >
-                            <option value="All">Todos</option>
-                            <option value="League">League</option>
-                            <option value="Playoff">Playoff</option>
-                        </select>
+                {/* Resumo rápido */}
+                {hasResults && (
+                    <div className="flex items-center flex-wrap gap-2 text-xs">
+                        <Badge color="green">V: <span className="tabular-nums ml-1">{summary.v}</span></Badge>
+                        <Badge color="amber">E: <span className="tabular-nums ml-1">{summary.e}</span></Badge>
+                        <Badge color="red">D: <span className="tabular-nums ml-1">{summary.d}</span></Badge>
+                        <Badge>GP: <span className="tabular-nums ml-1">{summary.golsPro}</span></Badge>
+                        <Badge>GC: <span className="tabular-nums ml-1">{summary.golsContra}</span></Badge>
+                        <Badge color={summary.saldo >= 0 ? "green" : "red"}>Saldo: <span className="tabular-nums ml-1">{summary.saldo}</span></Badge>
+                        <Badge color={summary.cartoes > 0 ? "red" : "gray"}>Verm.: <span className="tabular-nums ml-1">{summary.cartoes}</span></Badge>
+                    </div>
+                )}
+            </div>
+
+            {/* Toolbar */}
+            <div className="sticky top-0 z-20 -mx-4 px-4 py-3 bg-white/80 backdrop-blur border-b">
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <Segmented value={matchType} onChange={setMatchType} />
+                        <ToolbarSeparator />
+                        <div className="relative">
+                            <input
+                                ref={searchRef}
+                                id="search"
+                                type="text"
+                                placeholder="Buscar clube A ou B (atalho: /)"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="border rounded-lg pl-9 pr-8 py-2 w-72 max-w-[90vw]"
+                            />
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
+                            {search && (
+                                <button
+                                    aria-label="Limpar busca"
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                                    onClick={() => setSearch("")}
+                                >×</button>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                            <span className="text-gray-600">Ordenar:</span>
+                            <select className="border rounded-lg px-2 py-2" value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
+                                <option value="recent">Mais recentes</option>
+                                <option value="oldest">Mais antigas</option>
+                                <option value="goals">Mais gols</option>
+                            </select>
+                        </div>
                     </div>
 
-                    {/* Buscar */}
-                    <div className="flex flex-col">
-                        <label htmlFor="search" className="text-sm text-gray-600">Buscar</label>
-                        <input
-                            id="search"
-                            type="text"
-                            placeholder="Clube A ou B"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="border rounded-lg px-3 py-2 w-56"
-                        />
-                    </div>
-
-                    {/* Filtro: somente com logos (opcional) */}
-                    <div className="flex items-center gap-2 mt-2 sm:mt-0">
-                        <input
-                            id="onlyWithLogos"
-                            type="checkbox"
-                            checked={onlyWithLogos}
-                            onChange={(e) => setOnlyWithLogos(e.target.checked)}
-                            className="h-4 w-4"
-                        />
-                        <label htmlFor="onlyWithLogos" className="text-sm text-gray-600">Somente com logos</label>
+                    <div className="flex items-center gap-2">
+                        <button
+                            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                            onClick={() => {
+                                // forçar reload mantendo filtros
+                                if (clubId) {
+                                    const ev = new Event("visibilitychange"); // só para consistência visual
+                                    document.dispatchEvent(ev);
+                                }
+                                // refire useEffect mudando um no-op state (ou depender de matchType)
+                                setMatchType((t) => t);
+                            }}
+                        >Atualizar</button>
                     </div>
                 </div>
             </div>
 
+            {/* Estados */}
             {loading && (
-                <div className="grid gap-3">
+                <div className="grid gap-3 mt-4">
                     <Skeleton className="h-20" />
                     <Skeleton className="h-20" />
                     <Skeleton className="h-20" />
@@ -513,24 +654,60 @@ export default function Home() {
             )}
 
             {error && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded">{error}</div>
-            )}
-
-            {!loading && !error && clubId && filtered.length === 0 && (
-                <div className="p-3 bg-gray-50 border rounded text-gray-700">Nenhum resultado encontrado.</div>
-            )}
-
-            {!clubId && (
-                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
-                    Informe um clube no menu (boo “Alterar clube”) para começar.
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center justify-between">
+                    <span>{error}</span>
+                    <button className="px-3 py-1.5 rounded-lg border bg-white hover:bg-red-50" onClick={() => setMatchType((t) => t)}>Tentar novamente</button>
                 </div>
             )}
 
-            <div className="grid gap-3">
-                {filtered.map((m) => (
-                    <MatchCard key={m.matchId} m={m} matchType={matchType} />
+            {!loading && !error && clubId && filtered.length === 0 && (
+                <div className="mt-4 p-3 bg-gray-50 border rounded text-gray-700">
+                    Nenhum resultado encontrado. Dicas:
+                    <ul className="list-disc ml-5 mt-2 text-sm text-gray-600">
+                        <li>Verifique a grafia dos clubes.</li>
+                        <li>Altere o filtro de tipo (Todos/Liga/Playoff).</li>
+                        <li>Desmarque “Somente com logos”.</li>
+                    </ul>
+                </div>
+            )}
+
+            {!clubId && (
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
+                    Informe um clube no menu (botão “Alterar clube”) para começar.
+                </div>
+            )}
+
+            {/* Lista */}
+            <div className="mt-4 grid gap-2">
+                {groups.slice(0, Math.ceil(visible / 10)).map(([dayKey, items]) => (
+                    <div key={dayKey}>
+                        <div className="grid gap-2 mt-2">
+                            {items.map((m, idx) => {
+                                const globalIndex = filtered.indexOf(m);
+                                if (globalIndex >= visible) return null;
+                                return <MatchCard key={m.matchId} m={m} matchType={matchType} />;
+                            })}
+                        </div>
+                    </div>
                 ))}
             </div>
+
+            {/* Paginação cliente */}
+            {hasResults && visible < filtered.length && (
+                <div className="flex justify-center mt-4">
+                    <button
+                        className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                        onClick={() => setVisible((v) => v + 30)}
+                    >
+                        Mostrar mais ({Math.min(filtered.length - visible, 30)})
+                    </button>
+                </div>
+            )}
+
+            {/* Rodapé */}
+            {hasResults && (
+                <div className="mt-8 text-xs text-gray-500 text-center">Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.</div>
+            )}
         </div>
     );
 }
