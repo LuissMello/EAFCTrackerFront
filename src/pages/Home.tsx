@@ -45,6 +45,9 @@ interface MatchResultDto {
     resultText?: string;
 }
 
+// Filtro de tipo
+type MatchTypeFilter = "All" | "League" | "Playoff";
+
 // ======================
 // Helpers
 // ======================
@@ -89,10 +92,10 @@ function Skeleton({ className = "" }: { className?: string }) {
     return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
 }
 
-function MatchCard({ m }: { m: MatchResultDto }) {
+function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFilter }) {
     return (
         <Link
-            to={`/match/${m.matchId}`}
+            to={`/match/${m.matchId}?matchType=${matchType}`}
             className="block bg-white shadow-sm rounded-xl p-4 hover:shadow transition border"
             title="Ver detalhes da partida"
         >
@@ -168,6 +171,9 @@ export default function Home() {
     const [search, setSearch] = useState("");
     const [onlyWithLogos, setOnlyWithLogos] = useState(false);
 
+    // NOVO: estado do dropdown
+    const [matchType, setMatchType] = useState<MatchTypeFilter>("All");
+
     useEffect(() => {
         // sem clubId, não busca
         if (!clubId) {
@@ -181,13 +187,17 @@ export default function Home() {
                 setLoading(true);
                 setError(null);
 
-                // se o seu axios `api` já tem baseURL, use o caminho relativo:
-                // const { data } = await api.get<MatchResultDto[]>("/api/Matches/matches/results", { params: { clubId } });
+                // Monte os params — omita "All" se seu backend não tratar esse valor
+                const params: any = { clubId };
+                if (matchType !== "All") params.matchType = matchType;
+
+                // se o seu axios `api` já tem baseURL, use caminho relativo:
+                // const { data } = await api.get<MatchResultDto[]>("/api/Matches/matches/results", { params });
 
                 // caso contrário, mantenha a URL absoluta:
                 const { data } = await api.get<MatchResultDto[]>(
                     "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/matches/results",
-                    { params: { clubId } }
+                    { params }
                 );
 
                 if (!cancel) setResults(data ?? []);
@@ -201,7 +211,7 @@ export default function Home() {
         return () => {
             cancel = true;
         };
-    }, [clubId]);
+    }, [clubId, matchType]); // <- refaz a busca quando o filtro muda
 
     const filtered = useMemo(() => {
         const term = search.trim().toLowerCase();
@@ -229,7 +239,23 @@ export default function Home() {
                     </p>
                 </div>
 
-                <div className="flex gap-2 items-end">
+                <div className="flex gap-3 items-end">
+                    {/* Dropdown de tipo */}
+                    <div className="flex flex-col">
+                        <label htmlFor="matchType" className="text-sm text-gray-600">Tipo</label>
+                        <select
+                            id="matchType"
+                            value={matchType}
+                            onChange={(e) => setMatchType(e.target.value as MatchTypeFilter)}
+                            className="border rounded-lg px-3 py-2 w-40 bg-white"
+                        >
+                            <option value="All">Todos</option>
+                            <option value="League">League</option>
+                            <option value="Playoff">Playoff</option>
+                        </select>
+                    </div>
+
+                    {/* Buscar */}
                     <div className="flex flex-col">
                         <label htmlFor="search" className="text-sm text-gray-600">Buscar</label>
                         <input
@@ -241,6 +267,16 @@ export default function Home() {
                             className="border rounded-lg px-3 py-2 w-56"
                         />
                     </div>
+
+                    {/* (Opcional) Mostrar só partidas com escudo */}
+                    {/* <label className="flex items-center gap-2 text-sm text-gray-700 mb-1">
+                        <input
+                            type="checkbox"
+                            checked={onlyWithLogos}
+                            onChange={(e) => setOnlyWithLogos(e.target.checked)}
+                        />
+                        Somente com escudos
+                    </label> */}
                 </div>
             </div>
 
@@ -268,7 +304,7 @@ export default function Home() {
 
             <div className="grid gap-3">
                 {filtered.map((m) => (
-                    <MatchCard key={m.matchId} m={m} />
+                    <MatchCard key={m.matchId} m={m} matchType={matchType} />
                 ))}
             </div>
         </div>
