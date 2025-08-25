@@ -54,6 +54,9 @@ type MatchTypeFilter = "All" | "League" | "Playoff";
 
 type SortKey = "recent" | "oldest" | "goals";
 
+// NOVO: filtro por cartões vermelhos
+type RedCardFilter = "all" | "none" | "1plus" | "2plus";
+
 // ======================
 // Helpers
 // ======================
@@ -480,6 +483,17 @@ export default function Home() {
     const [search, setSearch] = useState(searchParams.get("q") ?? "");
     const [matchType, setMatchType] = useState<MatchTypeFilter>((searchParams.get("type") as MatchTypeFilter) || "All");
     const [sortKey, setSortKey] = useState<SortKey>(((searchParams.get("sort") as SortKey) || "recent"));
+
+    // NOVO: estado do filtro de cartões vermelhos, inicializando via URL (?rc=none|1|2)
+    const initialRc = (() => {
+        const v = searchParams.get("rc");
+        if (v === "none") return "none" as RedCardFilter;
+        if (v === "1" || v === "1plus") return "1plus" as RedCardFilter;
+        if (v === "2" || v === "2plus") return "2plus" as RedCardFilter;
+        return "all" as RedCardFilter;
+    })();
+    const [redFilter, setRedFilter] = useState<RedCardFilter>(initialRc);
+
     const [visible, setVisible] = useState(30); // paginação no cliente
 
     // Atalhos
@@ -497,11 +511,12 @@ export default function Home() {
 
     // Persistência leve
     useEffect(() => {
-        const payload = { q: search, type: matchType !== "All" ? matchType : undefined, sort: sortKey !== "recent" ? sortKey : undefined } as Record<string, string | undefined>;
+        const rcParam = redFilter === "all" ? undefined : (redFilter === "none" ? "none" : redFilter === "1plus" ? "1" : "2");
+        const payload = { q: search, type: matchType !== "All" ? matchType : undefined, sort: sortKey !== "recent" ? sortKey : undefined, rc: rcParam } as Record<string, string | undefined>;
         const next = new URLSearchParams();
         Object.entries(payload).forEach(([k, v]) => { if (v) next.set(k, v); });
         setSearchParams(next, { replace: true });
-    }, [search, matchType, sortKey, setSearchParams]);
+    }, [search, matchType, sortKey, redFilter, setSearchParams]);
 
     // Carregamento
     useEffect(() => {
@@ -542,7 +557,16 @@ export default function Home() {
     // Filtro + ordenação
     const filtered = useMemo(() => {
         const term = search.trim().toLowerCase();
-        const base = results.filter((m) => (term ? `${m.clubAName} ${m.clubBName}`.toLowerCase().includes(term) : true));
+        const byText = (m: MatchResultDto) => (term ? `${m.clubAName} ${m.clubBName}`.toLowerCase().includes(term) : true);
+        const byReds = (m: MatchResultDto) => {
+            const reds = (m.clubARedCards ?? 0) + (m.clubBRedCards ?? 0);
+            if (redFilter === "none") return reds === 0;
+            if (redFilter === "1plus") return reds >= 1;
+            if (redFilter === "2plus") return reds >= 2;
+            return true; // all
+        };
+
+        const base = results.filter((m) => byText(m) && byReds(m));
 
         const sorted = [...base].sort((a, b) => {
             if (sortKey === "recent") return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
@@ -554,7 +578,7 @@ export default function Home() {
         });
 
         return sorted;
-    }, [results, search, sortKey]);
+    }, [results, search, sortKey, redFilter]);
 
     // Resumo (perspectiva do clube selecionado)
     const summary = useMemo(() => {
@@ -628,6 +652,16 @@ export default function Home() {
                                 >×</button>
                             )}
                         </div>
+                        {/* NOVO: Filtro por cartões vermelhos */}
+                        <div className="flex items-center gap-2 text-sm">
+                            <span className="text-gray-600">Vermelhos:</span>
+                            <select className="border rounded-lg px-2 py-2" value={redFilter} onChange={(e) => setRedFilter(e.target.value as RedCardFilter)}>
+                                <option value="all">Todos</option>
+                                <option value="none">Nenhum</option>
+                                <option value="1plus">1+</option>
+                                <option value="2plus">2+</option>
+                            </select>
+                        </div>
                         <div className="flex items-center gap-2 text-sm">
                             <span className="text-gray-600">Ordenar:</span>
                             <select className="border rounded-lg px-2 py-2" value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
@@ -675,6 +709,7 @@ export default function Home() {
                     <ul className="list-disc ml-5 mt-2 text-sm text-gray-600">
                         <li>Verifique a grafia dos clubes.</li>
                         <li>Altere o filtro de tipo (Todos/Liga/Playoff).</li>
+                        <li>Ajuste o filtro de cartões vermelhos.</li>
                     </ul>
                 </div>
             )}
