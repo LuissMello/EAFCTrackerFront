@@ -52,7 +52,7 @@ interface MatchResultDto {
 
 type MatchTypeFilter = "All" | "League" | "Playoff";
 
-type SortKey = "recent" | "oldest" | "goals";
+type SortKey = "recent" | "oldest" | "gf" | "ga";
 
 // NOVO: filtro por cartões vermelhos
 type RedCardFilter = "all" | "none" | "1plus" | "2plus";
@@ -482,7 +482,13 @@ export default function Home() {
 
     const [search, setSearch] = useState(searchParams.get("q") ?? "");
     const [matchType, setMatchType] = useState<MatchTypeFilter>((searchParams.get("type") as MatchTypeFilter) || "All");
-    const [sortKey, setSortKey] = useState<SortKey>(((searchParams.get("sort") as SortKey) || "recent"));
+    const [sortKey, setSortKey] = useState<SortKey>(() => {
+        const v = (searchParams.get("sort") || "recent").toLowerCase();
+        if (v === "goals" || v === "gf" || v === "goalsfor") return "gf";
+        if (v === "ga" || v === "goalsagainst") return "ga";
+        if (v === "oldest") return "oldest";
+        return "recent";
+    });
 
     // NOVO: estado do filtro de cartões vermelhos, inicializando via URL (?rc=none|1|2)
     const initialRc = (() => {
@@ -568,17 +574,29 @@ export default function Home() {
 
         const base = results.filter((m) => byText(m) && byReds(m));
 
+        // perspectiva do clube para ordenar por gols pró/contra
+        const tRaw = (club as any)?.teamId;
+        const myTeamIdNum = typeof tRaw === "number" ? tRaw : Number(tRaw);
+
         const sorted = [...base].sort((a, b) => {
             if (sortKey === "recent") return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
             if (sortKey === "oldest") return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-            const ga = a.clubAGoals + a.clubBGoals;
-            const gb = b.clubAGoals + b.clubBGoals;
-            if (gb !== ga) return gb - ga;
+
+            if (sortKey === "gf" || sortKey === "ga") {
+                const pa = perspectiveFor(a, club?.clubName, Number.isFinite(myTeamIdNum) ? myTeamIdNum : undefined);
+                const pb = perspectiveFor(b, club?.clubName, Number.isFinite(myTeamIdNum) ? myTeamIdNum : undefined);
+                const va = sortKey === "gf" ? pa.myGoals : pa.oppGoals;
+                const vb = sortKey === "gf" ? pb.myGoals : pb.oppGoals;
+                if (vb !== va) return vb - va; // desc
+                return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+            }
+
+            // fallback (recent)
             return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
         });
 
         return sorted;
-    }, [results, search, sortKey, redFilter]);
+    }, [results, search, sortKey, redFilter, club?.clubName, (club as any)?.teamId]);
 
     // Resumo (perspectiva do clube selecionado)
     const summary = useMemo(() => {
@@ -667,82 +685,83 @@ export default function Home() {
                             <select className="border rounded-lg px-2 py-2" value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
                                 <option value="recent">Mais recentes</option>
                                 <option value="oldest">Mais antigas</option>
-                                <option value="goals">Mais gols</option>
-                            </select>
+                                <option value="gf">Mais gols feitos</option>
+                                    <option value="ga">Mais gols recebidos</option>
+                                    </select>
+                                </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                                onClick={() => {
+                                    if (clubId) {
+                                        const ev = new Event("visibilitychange");
+                                        document.dispatchEvent(ev);
+                                    }
+                                    setMatchType((t) => t);
+                                }}
+                            >Atualizar</button>
                         </div>
                     </div>
+                </div>
 
-                    <div className="flex items-center gap-2">
-                        <button
-                            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                            onClick={() => {
-                                if (clubId) {
-                                    const ev = new Event("visibilitychange");
-                                    document.dispatchEvent(ev);
-                                }
-                                setMatchType((t) => t);
-                            }}
-                        >Atualizar</button>
+                {/* Estados */}
+                {loading && (
+                    <div className="grid gap-3 mt-4">
+                        <Skeleton className="h-20" />
+                        <Skeleton className="h-20" />
+                        <Skeleton className="h-20" />
                     </div>
+                )}
+
+                {error && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center justify-between">
+                        <span>{error}</span>
+                        <button className="px-3 py-1.5 rounded-lg border bg-white hover:bg-red-50" onClick={() => setMatchType((t) => t)}>Tentar novamente</button>
+                    </div>
+                )}
+
+                {!loading && !error && clubId && filtered.length === 0 && (
+                    <div className="mt-4 p-3 bg-gray-50 border rounded text-gray-700">
+                        Nenhum resultado encontrado. Dicas:
+                        <ul className="list-disc ml-5 mt-2 text-sm text-gray-600">
+                            <li>Verifique a grafia dos clubes.</li>
+                            <li>Altere o filtro de tipo (Todos/Liga/Playoff).</li>
+                            <li>Ajuste o filtro de cartões vermelhos.</li>
+                        </ul>
+                    </div>
+                )}
+
+                {!clubId && (
+                    <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
+                        Informe um clube no menu (botão “Alterar clube”) para começar.
+                    </div>
+                )}
+
+                {/* Lista simples (sem cabeçalho por dia) */}
+                <div className="mt-4 grid gap-2">
+                    {filtered.slice(0, visible).map((m) => (
+                        <MatchCard key={m.matchId} m={m} matchType={matchType} />
+                    ))}
                 </div>
+
+                {/* Paginação cliente */}
+                {hasResults && visible < filtered.length && (
+                    <div className="flex justify-center mt-4">
+                        <button
+                            className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                            onClick={() => setVisible((v) => v + 30)}
+                        >
+                            Mostrar mais ({Math.min(filtered.length - visible, 30)})
+                        </button>
+                    </div>
+                )}
+
+                {/* Rodapé */}
+                {hasResults && (
+                    <div className="mt-8 text-xs text-gray-500 text-center">Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.</div>
+                )}
             </div>
-
-            {/* Estados */}
-            {loading && (
-                <div className="grid gap-3 mt-4">
-                    <Skeleton className="h-20" />
-                    <Skeleton className="h-20" />
-                    <Skeleton className="h-20" />
-                </div>
-            )}
-
-            {error && (
-                <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center justify-between">
-                    <span>{error}</span>
-                    <button className="px-3 py-1.5 rounded-lg border bg-white hover:bg-red-50" onClick={() => setMatchType((t) => t)}>Tentar novamente</button>
-                </div>
-            )}
-
-            {!loading && !error && clubId && filtered.length === 0 && (
-                <div className="mt-4 p-3 bg-gray-50 border rounded text-gray-700">
-                    Nenhum resultado encontrado. Dicas:
-                    <ul className="list-disc ml-5 mt-2 text-sm text-gray-600">
-                        <li>Verifique a grafia dos clubes.</li>
-                        <li>Altere o filtro de tipo (Todos/Liga/Playoff).</li>
-                        <li>Ajuste o filtro de cartões vermelhos.</li>
-                    </ul>
-                </div>
-            )}
-
-            {!clubId && (
-                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
-                    Informe um clube no menu (botão “Alterar clube”) para começar.
-                </div>
-            )}
-
-            {/* Lista simples (sem cabeçalho por dia) */}
-            <div className="mt-4 grid gap-2">
-                {filtered.slice(0, visible).map((m) => (
-                    <MatchCard key={m.matchId} m={m} matchType={matchType} />
-                ))}
-            </div>
-
-            {/* Paginação cliente */}
-            {hasResults && visible < filtered.length && (
-                <div className="flex justify-center mt-4">
-                    <button
-                        className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                        onClick={() => setVisible((v) => v + 30)}
-                    >
-                        Mostrar mais ({Math.min(filtered.length - visible, 30)})
-                    </button>
-                </div>
-            )}
-
-            {/* Rodapé */}
-            {hasResults && (
-                <div className="mt-8 text-xs text-gray-500 text-center">Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.</div>
-            )}
-        </div>
-    );
+            );
 }
