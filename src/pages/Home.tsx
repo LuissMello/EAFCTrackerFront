@@ -57,7 +57,6 @@ type SortKey = "recent" | "oldest" | "goals";
 // ======================
 // Helpers
 // ======================
-const fmtDate = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" });
 const fmtDateTime = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" });
 const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
 
@@ -348,7 +347,7 @@ function Segmented({ value, onChange }: { value: MatchTypeFilter; onChange: (v: 
 }
 
 // ======================
-// Cart de partida
+// Cart de partida (com responsividade corrigida)
 // ======================
 function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFilter }) {
     const patternA = guessPattern(m.clubADetails);
@@ -356,7 +355,6 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
 
     const aWins = m.clubAGoals > m.clubBGoals;
     const bWins = m.clubBGoals > m.clubAGoals;
-    const draw = m.clubAGoals === m.clubBGoals;
 
     return (
         <Link
@@ -364,6 +362,7 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
             className={`block bg-white rounded-xl p-4 border transition shadow-sm hover:shadow ${aWins ? "border-green-200" : bWins ? "border-red-200" : "border-gray-200"}`}
             title="Ver detalhes da partida"
         >
+            {/* Linha de topo: data + resultado */}
             <div className="flex items-center justify-between gap-2">
                 <div className="text-xs text-gray-500">
                     <span className="hidden sm:inline">{fmtDateTime.format(new Date(m.timestamp))}</span>
@@ -372,60 +371,74 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                 <OutcomeBadge a={m.clubAGoals} b={m.clubBGoals} />
             </div>
 
-            <div className="mt-2 grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center gap-3">
+            {/* Linha principal em 3 colunas SEMPRE */}
+            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
                 {/* Clube A */}
                 <div className="flex items-center gap-2 min-w-0">
-                    <img
-                        src={crestUrl(m.clubADetails?.crestAssetId)}
-                        onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
-                        alt={`Escudo ${m.clubAName}`}
-                        style={{ width: AVATAR_PX, height: AVATAR_PX }}
-                        className="rounded-full object-contain bg-white border"
-                        loading="lazy"
-                    />
+                    {/* Escudo com largura fixa */}
+                    <div className="w-10 shrink-0">
+                        <img
+                            src={crestUrl(m.clubADetails?.crestAssetId)}
+                            onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
+                            alt={`Escudo ${m.clubAName}`}
+                            style={{ width: AVATAR_PX, height: AVATAR_PX }}
+                            className="rounded-full object-contain bg-white border"
+                            loading="lazy"
+                        />
+                    </div>
                     <div className="min-w-0">
                         <div className="truncate leading-tight font-medium" title={m.clubAName}>{m.clubAName}</div>
                         <div className="flex items-center gap-2 mt-1">
-                            <KitJersey
-                                colors={[m.clubADetails?.kitColor1, m.clubADetails?.kitColor2, m.clubADetails?.kitColor3, m.clubADetails?.kitColor4]}
-                                pattern={patternA}
-                                sizePx={AVATAR_PX}
-                                title={`Camisa ${m.clubAName}`}
-                            />
+                            {/* Camisa com largura fixa e centralização */}
+                            <div className="w-10 shrink-0 flex justify-center">
+                                <KitJersey
+                                    colors={[m.clubADetails?.kitColor1, m.clubADetails?.kitColor2, m.clubADetails?.kitColor3, m.clubADetails?.kitColor4]}
+                                    pattern={patternA}
+                                    sizePx={AVATAR_PX}
+                                    title={`Camisa ${m.clubAName}`}
+                                />
+                            </div>
                             <RedCardBadge count={m.clubARedCards} />
                         </div>
                     </div>
                 </div>
 
-                {/* Placar */}
-                <div className="justify-self-center px-3 py-1 rounded bg-gray-50 font-semibold text-lg border text-center min-w-[84px]">
-                    <span className={aWins ? "text-green-700" : bWins ? "text-gray-500" : ""}>{m.clubAGoals}</span>
+                {/* Placar centralizado pelo grid */}
+                <div className="justify-self-center place-self-center px-3 py-1 rounded bg-gray-50 font-semibold text-lg border text-center min-w-[84px]">
+                    <span className={aWins ? "text-green-700" : ""}>{m.clubAGoals}</span>
                     <span className="text-gray-400"> x </span>
-                    <span className={bWins ? "text-green-700" : aWins ? "text-gray-500" : ""}>{m.clubBGoals}</span>
+                    <span className={bWins ? "text-green-700" : ""}>{m.clubBGoals}</span>
                 </div>
 
                 {/* Clube B */}
-                <div className="flex items-center gap-2 min-w-0 sm:justify-end">
-                    <div className="min-w-0 text-right">
+                <div className="flex items-center gap-2 min-w-0 sm:justify-end sm:flex-row-reverse">
+                    {/* Escudo com largura fixa */}
+                    <div className="w-10 shrink-0">
+                        <img
+                            src={crestUrl(m.clubBDetails?.crestAssetId)}
+                            onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
+                            alt={`Escudo ${m.clubBName}`}
+                            style={{ width: AVATAR_PX, height: AVATAR_PX }}
+                            className="rounded-full object-contain bg-white border"
+                            loading="lazy"
+                        />
+                    </div>
+
+                    <div className="min-w-0 sm:text-right">
                         <div className="truncate leading-tight font-medium" title={m.clubBName}>{m.clubBName}</div>
-                        <div className="flex items-center justify-end gap-2 mt-1">
-                            <KitJersey
-                                colors={[m.clubBDetails?.kitColor1, m.clubBDetails?.kitColor2, m.clubBDetails?.kitColor3, m.clubBDetails?.kitColor4]}
-                                pattern={patternB}
-                                sizePx={AVATAR_PX}
-                                title={`Camisa ${m.clubBName}`}
-                            />
+                        <div className="flex items-center gap-2 mt-1 sm:justify-end">
+                            {/* Camisa com largura fixa e centralização */}
+                            <div className="w-10 shrink-0 flex justify-center">
+                                <KitJersey
+                                    colors={[m.clubBDetails?.kitColor1, m.clubBDetails?.kitColor2, m.clubBDetails?.kitColor3, m.clubBDetails?.kitColor4]}
+                                    pattern={patternB}
+                                    sizePx={AVATAR_PX}
+                                    title={`Camisa ${m.clubBName}`}
+                                />
+                            </div>
                             <RedCardBadge count={m.clubBRedCards} />
                         </div>
                     </div>
-                    <img
-                        src={crestUrl(m.clubBDetails?.crestAssetId)}
-                        onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
-                        alt={`Escudo ${m.clubBName}`}
-                        style={{ width: AVATAR_PX, height: AVATAR_PX }}
-                        className="rounded-full object-contain bg-white border"
-                        loading="lazy"
-                    />
                 </div>
             </div>
 
@@ -451,7 +464,6 @@ export default function Home() {
     const [error, setError] = useState<string | null>(null);
 
     const [search, setSearch] = useState(searchParams.get("q") ?? "");
-    const [onlyWithLogos, setOnlyWithLogos] = useState(searchParams.get("logos") === "1");
     const [matchType, setMatchType] = useState<MatchTypeFilter>((searchParams.get("type") as MatchTypeFilter) || "All");
     const [sortKey, setSortKey] = useState<SortKey>(((searchParams.get("sort") as SortKey) || "recent"));
     const [visible, setVisible] = useState(30); // paginação no cliente
@@ -471,11 +483,11 @@ export default function Home() {
 
     // Persistência leve
     useEffect(() => {
-        const payload = { q: search, logos: onlyWithLogos ? "1" : undefined, type: matchType !== "All" ? matchType : undefined, sort: sortKey !== "recent" ? sortKey : undefined } as Record<string, string | undefined>;
+        const payload = { q: search, type: matchType !== "All" ? matchType : undefined, sort: sortKey !== "recent" ? sortKey : undefined } as Record<string, string | undefined>;
         const next = new URLSearchParams();
         Object.entries(payload).forEach(([k, v]) => { if (v) next.set(k, v); });
         setSearchParams(next, { replace: true });
-    }, [search, onlyWithLogos, matchType, sortKey, setSearchParams]);
+    }, [search, matchType, sortKey, setSearchParams]);
 
     // Carregamento
     useEffect(() => {
@@ -513,17 +525,14 @@ export default function Home() {
         };
     }, [clubId, matchType]);
 
-    // Filtro + ordenação + agrupamento
+    // Filtro + ordenação
     const filtered = useMemo(() => {
         const term = search.trim().toLowerCase();
-        const base = results
-            .filter((m) => (term ? `${m.clubAName} ${m.clubBName}`.toLowerCase().includes(term) : true))
-            .filter((m) => (onlyWithLogos ? Boolean(m.clubADetails?.crestAssetId) && Boolean(m.clubBDetails?.crestAssetId) : true));
+        const base = results.filter((m) => (term ? `${m.clubAName} ${m.clubBName}`.toLowerCase().includes(term) : true));
 
         const sorted = [...base].sort((a, b) => {
             if (sortKey === "recent") return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
             if (sortKey === "oldest") return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-            // "goals": somatório de gols desc
             const ga = a.clubAGoals + a.clubBGoals;
             const gb = b.clubAGoals + b.clubBGoals;
             if (gb !== ga) return gb - ga;
@@ -531,14 +540,14 @@ export default function Home() {
         });
 
         return sorted;
-    }, [results, search, onlyWithLogos, sortKey]);
+    }, [results, search, sortKey]);
 
     // Resumo
     const summary = useMemo(() => {
         const s = filtered.reduce(
             (acc, m) => {
                 acc.jogos++;
-                acc.golsPro += m.clubAGoals; // assumindo clube A como nosso? Se não, ajuste aqui com base no clubId se disponível
+                acc.golsPro += m.clubAGoals; // ver nota no chat sobre considerar "nosso" clube
                 acc.golsContra += m.clubBGoals;
                 if (m.clubAGoals > m.clubBGoals) acc.v++; else if (m.clubAGoals < m.clubBGoals) acc.d++; else acc.e++;
                 acc.cartoes += (m.clubARedCards ?? 0) + (m.clubBRedCards ?? 0);
@@ -548,18 +557,6 @@ export default function Home() {
         );
         return { ...s, saldo: s.golsPro - s.golsContra };
     }, [filtered]);
-
-    // Agrupar por dia (string yyyy-mm-dd)
-    const groups = useMemo(() => {
-        const map = new Map<string, MatchResultDto[]>();
-        for (const m of filtered) {
-            const d = new Date(m.timestamp);
-            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-            if (!map.has(key)) map.set(key, []);
-            map.get(key)!.push(m);
-        }
-        return Array.from(map.entries()).sort((a, b) => (sortKey === "oldest" ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0])));
-    }, [filtered, sortKey]);
 
     const hasResults = filtered.length > 0;
 
@@ -631,12 +628,10 @@ export default function Home() {
                         <button
                             className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                             onClick={() => {
-                                // forçar reload mantendo filtros
                                 if (clubId) {
-                                    const ev = new Event("visibilitychange"); // só para consistência visual
+                                    const ev = new Event("visibilitychange");
                                     document.dispatchEvent(ev);
                                 }
-                                // refire useEffect mudando um no-op state (ou depender de matchType)
                                 setMatchType((t) => t);
                             }}
                         >Atualizar</button>
@@ -666,7 +661,6 @@ export default function Home() {
                     <ul className="list-disc ml-5 mt-2 text-sm text-gray-600">
                         <li>Verifique a grafia dos clubes.</li>
                         <li>Altere o filtro de tipo (Todos/Liga/Playoff).</li>
-                        <li>Desmarque “Somente com logos”.</li>
                     </ul>
                 </div>
             )}
@@ -677,18 +671,10 @@ export default function Home() {
                 </div>
             )}
 
-            {/* Lista */}
+            {/* Lista simples (sem cabeçalho por dia) */}
             <div className="mt-4 grid gap-2">
-                {groups.slice(0, Math.ceil(visible / 10)).map(([dayKey, items]) => (
-                    <div key={dayKey}>
-                        <div className="grid gap-2 mt-2">
-                            {items.map((m, idx) => {
-                                const globalIndex = filtered.indexOf(m);
-                                if (globalIndex >= visible) return null;
-                                return <MatchCard key={m.matchId} m={m} matchType={matchType} />;
-                            })}
-                        </div>
-                    </div>
+                {filtered.slice(0, visible).map((m) => (
+                    <MatchCard key={m.matchId} m={m} matchType={matchType} />
                 ))}
             </div>
 
