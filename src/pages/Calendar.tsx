@@ -67,20 +67,11 @@ const ptTime = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-di
 
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 const toYmd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const fromYmd = (s: string) => {
-    const [y, m, d] = s.split("-").map(Number);
-    return new Date(y, m - 1, d);
-};
+const fromYmd = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
 function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function addMonths(d: Date, months: number) { return new Date(d.getFullYear(), d.getMonth() + months, 1); }
 function addDays(d: Date, days: number) { const nd = new Date(d); nd.setDate(nd.getDate() + days); return nd; }
-function getGridStart(date: Date) {
-    const first = startOfMonth(date);
-    const dow = (first.getDay() + 6) % 7; // 0 = segunda
-    const gridStart = new Date(first);
-    gridStart.setDate(first.getDate() - dow);
-    return gridStart;
-}
+function getGridStart(date: Date) { const first = startOfMonth(date); const dow = (first.getDay() + 6) % 7; const gridStart = new Date(first); gridStart.setDate(first.getDate() - dow); return gridStart; }
 function getWeekStart(d: Date) { const dow = (d.getDay() + 6) % 7; const ws = new Date(d); ws.setDate(d.getDate() - dow); return new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()); }
 const crestUrl = (id?: string | null) => id ? `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${id}.png` : null;
 
@@ -147,6 +138,12 @@ export default function CalendarPage() {
     const monthCacheRef = useRef<Record<string, CalendarMonthDto>>({});
     const dayCacheRef = useRef<Record<string, CalendarDayDetailsDto>>({});
 
+    // Altura dinâmica para fazer o calendário CABER na página (desktop e mobile)
+    const pageRef = useRef<HTMLDivElement | null>(null);
+    const headerRef = useRef<HTMLDivElement | null>(null);
+    const legendRef = useRef<HTMLDivElement | null>(null);
+    const [gridHeight, setGridHeight] = useState<number>(520);
+
     const year = referenceMonth.getFullYear();
     const month1to12 = referenceMonth.getMonth() + 1;
     const monthKey = `${year}-${pad(month1to12)}`;
@@ -156,10 +153,7 @@ export default function CalendarPage() {
     // Cabeçalhos SEG–DOM
     const weekdays = useMemo(() => {
         const base = new Date(2023, 0, 2); // segunda
-        return Array.from({ length: 7 }, (_, i) => {
-            const d = new Date(base); d.setDate(base.getDate() + i);
-            return ptWeekday.format(d).toUpperCase();
-        });
+        return Array.from({ length: 7 }, (_, i) => { const d = new Date(base); d.setDate(base.getDate() + i); return ptWeekday.format(d).toUpperCase(); });
     }, []);
 
     // Grid (Mensal: 6 semanas / Semanal: 7 dias)
@@ -188,6 +182,22 @@ export default function CalendarPage() {
         setErrorDay(null);
     }, [clubId, year, month1to12]);
 
+    // Recalcula a altura disponível para o grid (fazendo o calendário caber na viewport)
+    useEffect(() => {
+        function recompute() {
+            const vh = window.innerHeight; // usa área útil do navegador
+            const headerH = headerRef.current?.getBoundingClientRect().height ?? 0;
+            const legendH = legendRef.current?.getBoundingClientRect().height ?? 0;
+            const paddingY = 32; // p-4 (top+bottom)
+            const guard = 8; // pequena folga
+            const available = Math.max(280, Math.floor(vh - headerH - legendH - paddingY - guard));
+            setGridHeight(available);
+        }
+        recompute();
+        window.addEventListener("resize", recompute);
+        return () => window.removeEventListener("resize", recompute);
+    }, [viewMode]);
+
     // Buscar mês (com cache) + prefetch meses adjacentes
     useEffect(() => {
         if (!clubId) return;
@@ -195,10 +205,7 @@ export default function CalendarPage() {
 
         async function fetchMonth(y: number, m: number, write = true) {
             const k = `${y}-${pad(m)}`;
-            if (monthCacheRef.current[k]) {
-                if (!disposed && write) setMonthData(monthCacheRef.current[k]);
-                return;
-            }
+            if (monthCacheRef.current[k]) { if (!disposed && write) setMonthData(monthCacheRef.current[k]); return; }
             if (write) { setLoadingMonth(true); setErrorMonth(null); setMonthData(null); }
             try {
                 const { data } = await api.get<CalendarMonthDto>(
@@ -255,17 +262,11 @@ export default function CalendarPage() {
         if (e.key === "ArrowLeft") {
             e.preventDefault();
             if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, -1));
-            else {
-                const newStart = addDays(referenceWeekStart, -7);
-                setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart));
-            }
+            else { const newStart = addDays(referenceWeekStart, -7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); }
         } else if (e.key === "ArrowRight") {
             e.preventDefault();
             if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, 1));
-            else {
-                const newStart = addDays(referenceWeekStart, 7);
-                setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart));
-            }
+            else { const newStart = addDays(referenceWeekStart, 7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); }
         } else if (e.key.toLowerCase() === "t") {
             const today = new Date(); setReferenceMonth(startOfMonth(today)); setReferenceWeekStart(getWeekStart(today));
         } else if (e.key.toLowerCase() === "m") {
@@ -276,9 +277,7 @@ export default function CalendarPage() {
     }
 
     if (!clubId) {
-        return (
-            <div className="p-4 max-w-6xl mx-auto">Defina um <b>clubId</b> no topo para visualizar o calendário.</div>
-        );
+        return (<div className="p-4 max-w-6xl mx-auto">Defina um <b>clubId</b> no topo para visualizar o calendário.</div>);
     }
 
     // Título dinâmico para a semana
@@ -290,83 +289,37 @@ export default function CalendarPage() {
     }, [referenceWeekStart]);
 
     // Heatmap simples por quantidade de jogos
-    function cellTone(count?: number) {
-        if (!count || count <= 0) return "";
-        if (count >= 4) return "bg-blue-50";
-        if (count === 3) return "bg-indigo-50";
-        if (count === 2) return "bg-violet-50";
-        return "bg-purple-50";
-    }
+    function cellTone(count?: number) { if (!count || count <= 0) return ""; if (count >= 4) return "bg-blue-50"; if (count === 3) return "bg-indigo-50"; if (count === 2) return "bg-violet-50"; return "bg-purple-50"; }
 
-    // Util para restaurar foco ao fechar drawer
-    const drawerCloseRef = useRef<HTMLButtonElement | null>(null);
+    const ROWS = viewMode === "monthly" ? 6 : 1;
+    const rowGapPx = (ROWS - 1) * 8; // gap-2 (8px)
+    const minRow = viewMode === "monthly" ? 56 : 88; // altura mínima segura
+    const rowHeight = Math.max(minRow, Math.floor((gridHeight - rowGapPx) / ROWS));
 
     return (
-        <div className="p-4 max-w-6xl mx-auto" onKeyDown={handleKeyNav} aria-live="polite">
+        <div ref={pageRef} className="p-4 max-w-6xl mx-auto min-h-[100dvh]" onKeyDown={handleKeyNav} aria-live="polite">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div ref={headerRef} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                 <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => {
-                            if (viewMode === "monthly") {
-                                setReferenceMonth(addMonths(referenceMonth, -1));
-                            } else {
-                                const newStart = addDays(referenceWeekStart, -7);
-                                setReferenceWeekStart(newStart);
-                                setReferenceMonth(startOfMonth(newStart));
-                            }
-                        }}
-                        className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                        aria-label={viewMode === "monthly" ? "Mês anterior" : "Semana anterior"}
-                    >
-                        ◀
-                    </button>
-                    <button
-                        onClick={() => { const today = new Date(); setReferenceMonth(startOfMonth(today)); setReferenceWeekStart(getWeekStart(today)); }}
-                        className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                    >
-                        Hoje
-                    </button>
-                    <button
-                        onClick={() => {
-                            if (viewMode === "monthly") {
-                                setReferenceMonth(addMonths(referenceMonth, 1));
-                            } else {
-                                const newStart = addDays(referenceWeekStart, 7);
-                                setReferenceWeekStart(newStart);
-                                setReferenceMonth(startOfMonth(newStart));
-                            }
-                        }}
-                        className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                        aria-label={viewMode === "monthly" ? "Próximo mês" : "Próxima semana"}
-                    >
-                        ▶
-                    </button>
+                    <button onClick={() => { if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, -1)); else { const newStart = addDays(referenceWeekStart, -7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); } }} className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50" aria-label={viewMode === "monthly" ? "Mês anterior" : "Semana anterior"}>◀</button>
+                    <button onClick={() => { const today = new Date(); setReferenceMonth(startOfMonth(today)); setReferenceWeekStart(getWeekStart(today)); }} className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50">Hoje</button>
+                    <button onClick={() => { if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, 1)); else { const newStart = addDays(referenceWeekStart, 7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); } }} className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50" aria-label={viewMode === "monthly" ? "Próximo mês" : "Próxima semana"}>▶</button>
 
-                    <h1 className="text-2xl font-bold ml-2">
-                        {viewMode === "monthly" ? `${ptMonth.format(referenceMonth)} de ${referenceMonth.getFullYear()}` : `Semana: ${weekTitle}`}
-                    </h1>
+                    <h1 className="text-2xl font-bold ml-2">{viewMode === "monthly" ? `${ptMonth.format(referenceMonth)} de ${referenceMonth.getFullYear()}` : `Semana: ${weekTitle}`}</h1>
                 </div>
 
                 {/* Toggle Mensal / Semanal */}
                 <div className="flex items-center gap-3">
-                    <div className="text-sm text-gray-600">
-                        Clube atual:{" "}
-                        <span className="font-semibold">{clubName ? `${clubName} (${clubId})` : clubId}</span>
-                    </div>
+                    <div className="text-sm text-gray-600">Clube atual: <span className="font-semibold">{clubName ? `${clubName} (${clubId})` : clubId}</span></div>
                     <div role="tablist" aria-label="Modo de visualização" className="inline-flex rounded-lg border overflow-hidden">
-                        <button role="tab" aria-selected={viewMode === "monthly"} onClick={() => setViewMode("monthly")} className={`px-3 py-1.5 text-sm ${viewMode === "monthly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
-                            Mensal
-                        </button>
-                        <button role="tab" aria-selected={viewMode === "weekly"} onClick={() => setViewMode("weekly")} className={`px-3 py-1.5 text-sm border-l ${viewMode === "weekly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
-                            Semanal
-                        </button>
+                        <button role="tab" aria-selected={viewMode === "monthly"} onClick={() => setViewMode("monthly")} className={`px-3 py-1.5 text-sm ${viewMode === "monthly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>Mensal</button>
+                        <button role="tab" aria-selected={viewMode === "weekly"} onClick={() => setViewMode("weekly")} className={`px-3 py-1.5 text-sm border-l ${viewMode === "weekly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>Semanal</button>
                     </div>
                 </div>
             </div>
 
             {/* Legenda/ajuda */}
-            <div className="flex items-center gap-3 text-xs text-gray-600 mb-2">
+            <div ref={legendRef} className="flex items-center gap-3 text-xs text-gray-600 mb-2">
                 <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400/70" />Partidas no dia</span>
                 <span className="px-1 rounded bg-green-100 text-green-700">V</span>
                 <span className="px-1 rounded bg-yellow-100 text-yellow-700">E</span>
@@ -376,13 +329,11 @@ export default function CalendarPage() {
 
             {/* Cabeçalhos dos dias da semana */}
             <div className="grid grid-cols-7 gap-2 text-center mb-2">
-                {weekdays.map((w) => (
-                    <div key={w} className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{w}</div>
-                ))}
+                {weekdays.map((w) => (<div key={w} className="text-[11px] sm:text-xs font-semibold text-gray-600 uppercase tracking-wide">{w}</div>))}
             </div>
 
-            {/* Grid (Mensal ou Semanal) */}
-            <div role="grid" aria-label={viewMode === "monthly" ? "Calendário mensal" : "Calendário semanal"} className="grid grid-cols-7 gap-2">
+            {/* Grid (Mensal ou Semanal) - ajusta para caber na viewport */}
+            <div role="grid" aria-label={viewMode === "monthly" ? "Calendário mensal" : "Calendário semanal"} className="grid grid-cols-7 gap-2" style={{ height: gridHeight, gridAutoRows: `${rowHeight}px` }}>
                 {gridDays.map((d) => {
                     const ymd = toYmd(d);
                     const summary = summaryByDate[ymd];
@@ -395,13 +346,12 @@ export default function CalendarPage() {
                             key={ymd}
                             onClick={(e) => { if (disabled) return; setSelectedDate(ymd); setLastActiveButton(e.currentTarget); }}
                             className={[
-                                "relative border p-1 sm:p-2 rounded-xl transition focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                "relative border p-1 sm:p-2 rounded-xl transition focus:outline-none focus:ring-2 focus:ring-blue-500 h-full",
                                 viewMode === "monthly" ? (inMonth ? "bg-white" : "bg-gray-50") : "bg-white",
                                 disabled ? "opacity-60 cursor-default" : "hover:shadow-md cursor-pointer",
                                 cellTone(summary?.matchesCount),
                                 isToday ? "ring-1 ring-blue-300" : "",
-                                "overflow-hidden w-full flex flex-col",
-                                viewMode === "monthly" ? "aspect-square" : "aspect-[2/1]"
+                                "overflow-hidden w-full flex flex-col"
                             ].join(" ")}
                             aria-disabled={disabled}
                             aria-pressed={selectedDate === ymd}
@@ -468,9 +418,7 @@ export default function CalendarPage() {
                     <div className="absolute right-0 top-0 h-full w-full sm:w-[560px] bg-white shadow-xl p-4 overflow-y-auto">
                         <div className="flex items-center justify-between mb-3">
                             <div>
-                                <h2 id={dialogTitleId} className="text-xl font-semibold">
-                                    {ptDay.format(fromYmd(selectedDate))} {ptMonth.format(fromYmd(selectedDate))}
-                                </h2>
+                                <h2 id={dialogTitleId} className="text-xl font-semibold">{ptDay.format(fromYmd(selectedDate))} {ptMonth.format(fromYmd(selectedDate))}</h2>
                                 {dayData && (
                                     <p className="text-sm text-gray-600">
                                         {dayData.totalMatches} jogo(s) • GP {dayData.goalsFor} • GC {dayData.goalsAgainst} •
@@ -480,18 +428,10 @@ export default function CalendarPage() {
                                     </p>
                                 )}
                             </div>
-                            <button ref={drawerCloseRef} className="px-3 py-2 rounded-lg border hover:bg-gray-50" onClick={() => { setSelectedDate(null); setDayData(null); lastActiveButton?.focus(); }}>
-                                Fechar
-                            </button>
+                            <button className="px-3 py-2 rounded-lg border hover:bg-gray-50" onClick={() => { setSelectedDate(null); setDayData(null); lastActiveButton?.focus(); }}>Fechar</button>
                         </div>
 
-                        {loadingDay && (
-                            <div className="space-y-3" aria-live="polite">
-                                <Skeleton className="h-16" />
-                                <Skeleton className="h-16" />
-                                <Skeleton className="h-16" />
-                            </div>
-                        )}
+                        {loadingDay && (<div className="space-y-3" aria-live="polite"><Skeleton className="h-16" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div>)}
 
                         {errorDay && (
                             <div className="p-3 bg-red-50 text-red-700 rounded border border-red-200 flex items-center justify-between">
@@ -502,9 +442,7 @@ export default function CalendarPage() {
                             </div>
                         )}
 
-                        {!loadingDay && dayData && dayData.matches.length === 0 && (
-                            <div className="p-3 bg-gray-50 text-gray-700 rounded border">Nenhuma partida neste dia.</div>
-                        )}
+                        {!loadingDay && dayData && dayData.matches.length === 0 && (<div className="p-3 bg-gray-50 text-gray-700 rounded border">Nenhuma partida neste dia.</div>)}
 
                         {!loadingDay && dayData && dayData.matches.length > 0 && (
                             <div className="space-y-3">
@@ -537,9 +475,7 @@ export default function CalendarPage() {
                                                 <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Nota Média</span><span className="font-semibold">{m.stats.avgRating.toFixed(2)}</span></div>
                                             </div>
 
-                                            <div className="mt-2 text-right">
-                                                <Link to={`/match/${m.matchId}`} className="text-sm text-blue-700 hover:underline">Ver detalhes da partida</Link>
-                                            </div>
+                                            <div className="mt-2 text-right"><Link to={`/match/${m.matchId}`} className="text-sm text-blue-700 hover:underline">Ver detalhes da partida</Link></div>
                                         </div>
                                     );
                                 })}

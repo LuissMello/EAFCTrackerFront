@@ -9,7 +9,7 @@ import ClubPicker from "./components/ClubPicker.tsx";
 
 function Navbar() {
     return (
-        <nav className="bg-blue-600 text-white p-4 flex flex-wrap items-center gap-3">
+        <nav className="bg-black text-white p-4 flex flex-wrap items-center gap-3">
             <Link className="font-bold" to="/">Partidas</Link>
             <Link className="font-bold" to="/stats">Estatísticas</Link>
             <Link className="font-bold" to="/calendar">Calendário</Link>

@@ -94,6 +94,20 @@ function fromNow(ts: string) {
     return rtf.format(Math.sign(diffMs) * days, "day");
 }
 
+// Helpers adicionais: perspectiva pelo clube selecionado
+function perspectiveFor(m: MatchResultDto, myClubName?: string | null, myTeamIdNum?: number) {
+    if (typeof myTeamIdNum === "number" && Number.isFinite(myTeamIdNum)) {
+        if (m.clubADetails?.teamId === myTeamIdNum) return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+        if (m.clubBDetails?.teamId === myTeamIdNum) return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
+    }
+    const name = (myClubName ?? "").toLowerCase();
+    if (name) {
+        if ((m.clubAName ?? "").toLowerCase() === name) return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+        if ((m.clubBName ?? "").toLowerCase() === name) return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
+    }
+    return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+}
+
 // ======================
 // Mini camisa (SVG) com padrões
 // ======================
@@ -353,29 +367,33 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
     const patternA = guessPattern(m.clubADetails);
     const patternB = guessPattern(m.clubBDetails);
 
-    const aWins = m.clubAGoals > m.clubBGoals;
-    const bWins = m.clubBGoals > m.clubAGoals;
+    // Perspectiva baseada no clube selecionado
+    const { club } = useClub();
+    const tRaw = (club as any)?.teamId;
+    const myTeamIdNum = typeof tRaw === "number" ? tRaw : Number(tRaw);
+    const p = perspectiveFor(m, club?.clubName, Number.isFinite(myTeamIdNum) ? myTeamIdNum : undefined);
+    const outcome = p.myGoals === p.oppGoals ? "draw" : p.myGoals > p.oppGoals ? "win" : "loss";
+    const borderClass = outcome === "win" ? "border-green-200" : outcome === "loss" ? "border-red-200" : "border-gray-200";
 
     return (
         <Link
             to={`/match/${m.matchId}?matchType=${matchType}`}
-            className={`block bg-white rounded-xl p-4 border transition shadow-sm hover:shadow ${aWins ? "border-green-200" : bWins ? "border-red-200" : "border-gray-200"}`}
+            className={`block bg-white rounded-xl p-4 border transition shadow-sm hover:shadow ${borderClass}`}
             title="Ver detalhes da partida"
         >
-            {/* Linha de topo: data + resultado */}
+            {/* Linha de topo: data + resultado segundo o clube selecionado */}
             <div className="flex items-center justify-between gap-2">
                 <div className="text-xs text-gray-500">
                     <span className="hidden sm:inline">{fmtDateTime.format(new Date(m.timestamp))}</span>
                     <span className="sm:hidden">{fromNow(m.timestamp)}</span>
                 </div>
-                <OutcomeBadge a={m.clubAGoals} b={m.clubBGoals} />
+                <OutcomeBadge a={p.myGoals} b={p.oppGoals} />
             </div>
 
             {/* Linha principal em 3 colunas SEMPRE */}
             <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
                 {/* Clube A */}
                 <div className="flex items-center gap-2 min-w-0">
-                    {/* Escudo com largura fixa */}
                     <div className="w-10 shrink-0">
                         <img
                             src={crestUrl(m.clubADetails?.crestAssetId)}
@@ -389,7 +407,6 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                     <div className="min-w-0">
                         <div className="truncate leading-tight font-medium" title={m.clubAName}>{m.clubAName}</div>
                         <div className="flex items-center gap-2 mt-1">
-                            {/* Camisa com largura fixa e centralização */}
                             <div className="w-10 shrink-0 flex justify-center">
                                 <KitJersey
                                     colors={[m.clubADetails?.kitColor1, m.clubADetails?.kitColor2, m.clubADetails?.kitColor3, m.clubADetails?.kitColor4]}
@@ -405,14 +422,13 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
 
                 {/* Placar centralizado pelo grid */}
                 <div className="justify-self-center place-self-center px-3 py-1 rounded bg-gray-50 font-semibold text-lg border text-center min-w-[84px]">
-                    <span className={aWins ? "text-green-700" : ""}>{m.clubAGoals}</span>
+                    <span className={`${p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubAGoals}</span>
                     <span className="text-gray-400"> x </span>
-                    <span className={bWins ? "text-green-700" : ""}>{m.clubBGoals}</span>
+                    <span className={`${!p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubBGoals}</span>
                 </div>
 
                 {/* Clube B */}
-                <div className="flex items-center gap-2 min-w-0 sm:justify-end sm:flex-row-reverse">
-                    {/* Escudo com largura fixa */}
+                <div className="flex items-center gap-2 min-w-0 md:justify-end md:flex-row-reverse">
                     <div className="w-10 shrink-0">
                         <img
                             src={crestUrl(m.clubBDetails?.crestAssetId)}
@@ -423,11 +439,9 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                             loading="lazy"
                         />
                     </div>
-
-                    <div className="min-w-0 sm:text-right">
+                    <div className="min-w-0 md:text-right">
                         <div className="truncate leading-tight font-medium" title={m.clubBName}>{m.clubBName}</div>
-                        <div className="flex items-center gap-2 mt-1 sm:justify-end">
-                            {/* Camisa com largura fixa e centralização */}
+                        <div className="flex items-center gap-2 mt-1 md:justify-end">
                             <div className="w-10 shrink-0 flex justify-center">
                                 <KitJersey
                                     colors={[m.clubBDetails?.kitColor1, m.clubBDetails?.kitColor2, m.clubBDetails?.kitColor3, m.clubBDetails?.kitColor4]}
@@ -542,21 +556,21 @@ export default function Home() {
         return sorted;
     }, [results, search, sortKey]);
 
-    // Resumo
+    // Resumo (perspectiva do clube selecionado)
     const summary = useMemo(() => {
-        const s = filtered.reduce(
-            (acc, m) => {
-                acc.jogos++;
-                acc.golsPro += m.clubAGoals; // ver nota no chat sobre considerar "nosso" clube
-                acc.golsContra += m.clubBGoals;
-                if (m.clubAGoals > m.clubBGoals) acc.v++; else if (m.clubAGoals < m.clubBGoals) acc.d++; else acc.e++;
-                acc.cartoes += (m.clubARedCards ?? 0) + (m.clubBRedCards ?? 0);
-                return acc;
-            },
-            { jogos: 0, v: 0, e: 0, d: 0, golsPro: 0, golsContra: 0, cartoes: 0 }
-        );
+        const tRaw = (club as any)?.teamId;
+        const myTeamIdNum = typeof tRaw === "number" ? tRaw : Number(tRaw);
+        const s = filtered.reduce((acc, m) => {
+            const p = perspectiveFor(m, club?.clubName, Number.isFinite(myTeamIdNum) ? myTeamIdNum : undefined);
+            acc.jogos++;
+            acc.golsPro += p.myGoals;
+            acc.golsContra += p.oppGoals;
+            if (p.myGoals > p.oppGoals) acc.v++; else if (p.myGoals < p.oppGoals) acc.d++; else acc.e++;
+            acc.cartoes += (m.clubARedCards ?? 0) + (m.clubBRedCards ?? 0);
+            return acc;
+        }, { jogos: 0, v: 0, e: 0, d: 0, golsPro: 0, golsContra: 0, cartoes: 0 });
         return { ...s, saldo: s.golsPro - s.golsContra };
-    }, [filtered]);
+    }, [filtered, club?.clubName, (club as any)?.teamId]);
 
     const hasResults = filtered.length > 0;
 
