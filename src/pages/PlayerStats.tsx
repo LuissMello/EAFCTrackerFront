@@ -195,7 +195,7 @@ export default function PlayerStats() {
 
     const isGK = useMemo(() => {
         const pos = (data?.position || "").toLowerCase();
-        return pos.includes("gk") || pos.includes("gol") || pos.includes("gl");
+        return pos.includes("gk") || pos.includes("gol") || pos.includes("gl") || pos.includes("goalkeeper");
     }, [data?.position]);
 
     const computedPassAcc = useMemo(() => {
