@@ -110,6 +110,15 @@ export default function PlayerStatisticsPage() {
     const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("psp.pageSize")) || 20);
     const [showAdvanced, setShowAdvanced] = useState<boolean>(() => localStorage.getItem("psp.adv") === "1");
 
+    // NOVO: filtro por quantidade de jogadores do time adversário (2..11) — enviado ao backend
+    const initialOpp = (() => {
+        const raw = localStorage.getItem("psp.opp");
+        if (!raw || raw === "all") return "all" as const;
+        const n = parseInt(raw, 10);
+        return !Number.isNaN(n) && n >= 2 && n <= 11 ? (n as number) : ("all" as const);
+    })();
+    const [oppPlayers, setOppPlayers] = useState<number | "all">(initialOpp);
+
     type SortKey = keyof PlayerStats;
     type SortOrder = "asc" | "desc";
     const [sortKey, setSortKey] = useState<SortKey>(() => (localStorage.getItem("psp.sortKey") as SortKey) || "totalGoals");
@@ -125,6 +134,7 @@ export default function PlayerStatisticsPage() {
     useEffect(() => { localStorage.setItem("psp.sortKey", sortKey); }, [sortKey]);
     useEffect(() => { localStorage.setItem("psp.sortOrder", sortOrder); }, [sortOrder]);
     useEffect(() => { localStorage.setItem("psp.adv", showAdvanced ? "1" : "0"); }, [showAdvanced]);
+    useEffect(() => { localStorage.setItem("psp.opp", oppPlayers === "all" ? "all" : String(oppPlayers)); }, [oppPlayers]);
 
     // Busca
     const fetchStats = useCallback(async (count: number) => {
@@ -144,9 +154,12 @@ export default function PlayerStatisticsPage() {
         abortRef.current = controller;
 
         try {
+            const params: Record<string, any> = { count, clubId };
+            if (oppPlayers !== "all") params.opponentCount = oppPlayers;
+
             const { data } = await api.get(
                 "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/limited",
-                { params: { count, clubId }, signal: controller.signal }
+                { params, signal: controller.signal }
             );
             setPlayers(data.players ?? []);
             setClubStats(data.clubs?.[0] ?? null);
@@ -157,7 +170,7 @@ export default function PlayerStatisticsPage() {
             setLoading(false);
             setFetching(false);
         }
-    }, [clubId]);
+    }, [clubId, oppPlayers]); // depende do filtro para re-buscar
 
     useEffect(() => {
         fetchStats(matchCount);
@@ -211,7 +224,7 @@ export default function PlayerStatisticsPage() {
         return sorted.slice(start, start + pageSize);
     }, [sorted, page, pageSize]);
 
-    useEffect(() => { setPage(1); }, [minMatches, search, sortKey, sortOrder, pageSize]);
+    useEffect(() => { setPage(1); }, [minMatches, search, sortKey, sortOrder, pageSize, oppPlayers]);
 
     return (
         <div className="p-4 sm:p-6 max-w-[98vw] mx-auto">
@@ -263,6 +276,30 @@ export default function PlayerStatisticsPage() {
                             onChange={(e) => setSearch(e.target.value)}
                             className="border rounded-lg px-3 py-2 w-56"
                         />
+                    </div>
+
+                    {/* NOVO: Filtro por jogadores do adversário (2..11) */}
+                    <div className="flex flex-col">
+                        <label htmlFor="oppPlayers" className="text-sm text-gray-600">Adversário (jogadores)</label>
+                        <select
+                            id="oppPlayers"
+                            className="border rounded-lg px-3 py-2 w-40"
+                            value={oppPlayers}
+                            onChange={(e) => {
+                                const v = e.target.value;
+                                if (v === "all") setOppPlayers("all");
+                                else {
+                                    const n = parseInt(v, 10);
+                                    setOppPlayers(!Number.isNaN(n) ? Math.min(11, Math.max(2, n)) : "all");
+                                }
+                            }}
+                            title="Filtra as partidas consideradas nas estatísticas pela quantidade de jogadores do time adversário (2 a 11)."
+                        >
+                            <option value="all">Todos</option>
+                            {Array.from({ length: 10 }, (_, i) => i + 2).map(n => (
+                                <option key={n} value={n}>{n}</option>
+                            ))}
+                        </select>
                     </div>
 
                     <div className="flex flex-col">
@@ -430,6 +467,7 @@ export default function PlayerStatisticsPage() {
                 <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
                     <div className="text-sm text-gray-600">
                         Mostrando {pageItems.length} de {sorted.length} jogadores (pág. {page}/{totalPages})
+                        {oppPlayers !== "all" ? <> — filtro adversário: <strong>{oppPlayers}</strong> jogadores</> : null}
                     </div>
                     <div className="flex gap-2">
                         <button
