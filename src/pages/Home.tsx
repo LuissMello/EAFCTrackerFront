@@ -565,7 +565,7 @@ export default function Home() {
                 const params: any = { clubId };
                 if (matchType !== "All") params.matchType = matchType;
                 if (oppPlayers !== "all") params.opp = oppPlayers; // (se quiser aplicar também aqui no backend)
-                const { data } = await api.get<MatchResultDto[]>("https://localhost:5000/api/Matches/matches/results", { params, signal: (controller as any).signal });
+                const { data } = await api.get<MatchResultDto[]>("https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/matches/results", { params, signal: (controller as any).signal });
                 if (mounted) { setResults(Array.isArray(data) ? data : []); setVisible(30); }
             } catch (err: any) {
                 if (mounted) setError(err?.message ?? "Erro ao carregar resultados");
