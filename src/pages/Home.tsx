@@ -571,7 +571,7 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                     <PersonIcon className="text-gray-700" />
                     <span className="font-semibold tabular-nums">{m.clubAPlayerCount ?? "-"}</span>
                 </div>
-                <span className="text-gray-400">—</span>
+                <span className="text-gray-400">-</span>
                 <div className="inline-flex items-center gap-1">
                     <span className="font-semibold tabular-nums">{m.clubBPlayerCount ?? "-"}</span>
                     <PersonIcon className="text-gray-700" />
