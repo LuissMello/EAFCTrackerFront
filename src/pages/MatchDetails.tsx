@@ -372,7 +372,7 @@ export default function MatchDetails() {
     }, [players, selectedStat, onlySelectedClubPlayers, selectedClubId, playerQuery]);
 
     // ======================
-    // Chart de clubes (horizontal) — somente para a estatística selecionada
+    // Chart de clubes (horizontal) - somente para a estatística selecionada
     // ======================
     const clubChart = useMemo(() => {
         if (orderedClubs.length < 2) return null;
@@ -406,7 +406,7 @@ export default function MatchDetails() {
                 responsive: true,
                 maintainAspectRatio: false,
                 indexAxis: "y" as const,
-                plugins: { title: { display: true, text: `Clubes — ${label}` } },
+                plugins: { title: { display: true, text: `Clubes - ${label}` } },
                 scales: { x: { beginAtZero: true } },
                 elements: { bar: { borderWidth: 2, barThickness: 18 } },
             },
@@ -623,7 +623,7 @@ export default function MatchDetails() {
                         <li key={p.playerId}>
                             <span className="font-medium">{p.playerName}</span>
                             <span className="text-gray-500">
-                                {" "}— {orderedClubs.find((c) => c.clubId === p.clubId)?.clubName ?? "Clube"}
+                                {" "}- {orderedClubs.find((c) => c.clubId === p.clubId)?.clubName ?? "Clube"}
                             </span>
                         </li>
                     ))}
@@ -707,7 +707,7 @@ export default function MatchDetails() {
         orderedClubs.map((clubRow) => (
             <div key={clubRow.clubId} className="bg-white shadow-sm rounded-xl p-4 border">
                 <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-lg font-semibold">{clubRow.clubName} — Jogadores</h3>
+                    <h3 className="text-lg font-semibold">{clubRow.clubName} - Jogadores</h3>
                     <div className="flex items-center gap-2 text-sm">
                         <label className="text-gray-700">Ordenar por:</label>
                         <select

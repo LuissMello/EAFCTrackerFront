@@ -110,7 +110,7 @@ export default function PlayerStatisticsPage() {
     const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("psp.pageSize")) || 20);
     const [showAdvanced, setShowAdvanced] = useState<boolean>(() => localStorage.getItem("psp.adv") === "1");
 
-    // NOVO: filtro por quantidade de jogadores do time adversário (2..11) — enviado ao backend
+    // NOVO: filtro por quantidade de jogadores do time adversário (2..11) - enviado ao backend
     const initialOpp = (() => {
         const raw = localStorage.getItem("psp.opp");
         if (!raw || raw === "all") return "all" as const;
@@ -467,7 +467,7 @@ export default function PlayerStatisticsPage() {
                 <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
                     <div className="text-sm text-gray-600">
                         Mostrando {pageItems.length} de {sorted.length} jogadores (pág. {page}/{totalPages})
-                        {oppPlayers !== "all" ? <> — filtro adversário: <strong>{oppPlayers}</strong> jogadores</> : null}
+                        {oppPlayers !== "all" ? <> - filtro adversário: <strong>{oppPlayers}</strong> jogadores</> : null}
                     </div>
                     <div className="flex gap-2">
                         <button

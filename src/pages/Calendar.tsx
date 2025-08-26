@@ -355,7 +355,7 @@ export default function CalendarPage() {
                             ].join(" ")}
                             aria-disabled={disabled}
                             aria-pressed={selectedDate === ymd}
-                            aria-label={`${ptDay.format(d)} ${ptMonth.format(d)} — ${summary ? `${summary.matchesCount} jogo(s)` : "sem jogos"}`}
+                            aria-label={`${ptDay.format(d)} ${ptMonth.format(d)} - ${summary ? `${summary.matchesCount} jogo(s)` : "sem jogos"}`}
                             title={summary ? `${summary.matchesCount} jogo(s)` : "Sem jogos"}
                         >
                             {/* Cabeçalho do dia */}

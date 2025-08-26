@@ -268,7 +268,7 @@ export default function TrendsPage() {
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold">
-                        Tendências &amp; Streaks — {data?.clubName ?? club?.clubName ?? ""}
+                        Tendências &amp; Streaks - {data?.clubName ?? club?.clubName ?? ""}
                     </h1>
                     {activeClubId && (
                         <div className="text-xs text-gray-600 mt-1">
@@ -349,11 +349,11 @@ export default function TrendsPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="bg-white border rounded-xl p-4">
                             <div className="text-xs text-gray-500 mb-1">Forma (Últimos 5)</div>
-                            <div className="font-mono tracking-wide">{data.formLast5 || "—"}</div>
+                            <div className="font-mono tracking-wide">{data.formLast5 || "-"}</div>
                         </div>
                         <div className="bg-white border rounded-xl p-4">
                             <div className="text-xs text-gray-500 mb-1">Forma (Últimos 10)</div>
-                            <div className="font-mono tracking-wide">{data.formLast10 || "—"}</div>
+                            <div className="font-mono tracking-wide">{data.formLast10 || "-"}</div>
                         </div>
                         <div className="bg-white border rounded-xl p-4">
                             <div className="grid grid-cols-3 text-center">
