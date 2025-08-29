@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useId, useCallback } from 
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
+import { Crown, Hand, Star, Square } from "lucide-react";
 
 /* ======================
    Tipos
@@ -40,6 +41,14 @@ interface ClubDetailsDto {
     TeamId?: number | null;
 }
 
+interface ClubMatchSummaryDto {
+    redCards: number;
+    hadHatTrick: boolean;
+    hatTrickPlayerNames: Array<string | null>;
+    goalkeeperPlayerName?: string | null;
+    manOfTheMatchPlayerName?: string | null;
+}
+
 interface MatchResultDto {
     matchId: number;
     timestamp: string;
@@ -49,12 +58,14 @@ interface MatchResultDto {
     clubARedCards?: number | null;
     clubAPlayerCount?: number | null;
     clubADetails?: ClubDetailsDto | null;
+    clubASummary?: ClubMatchSummaryDto | null;
 
     clubBName: string;
     clubBGoals: number;
     clubBRedCards?: number | null;
     clubBPlayerCount?: number | null;
     clubBDetails?: ClubDetailsDto | null;
+    clubBSummary?: ClubMatchSummaryDto | null;
 
     resultText?: string | null;
 }
@@ -135,21 +146,6 @@ function Badge({ color = "gray", children }: { color?: "gray" | "green" | "red" 
     return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${palette[color]}`}>{children}</span>;
 }
 
-function RedCardBadge({ count }: { count?: number | null }) {
-    const c = typeof count === "number" ? count : 0;
-    const has = c > 0;
-    return (
-        <span
-            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[12px] ${has ? "bg-red-50 border-red-200 text-red-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
-            title={`Cartões vermelhos: ${c}`}
-            aria-label={`Cartões vermelhos: ${c}`}
-        >
-            <span className={`inline-block w-2.5 h-3.5 rounded-[2px] ${has ? "bg-red-600" : "bg-gray-300"}`} />
-            <span className="tabular-nums">{c}</span>
-        </span>
-    );
-}
-
 function OutcomeBadge({ a, b }: { a: number; b: number }) {
     if (a > b) return <Badge color="green">Vitória</Badge>;
     if (a < b) return <Badge color="red">Derrota</Badge>;
@@ -190,7 +186,7 @@ const PersonIcon = ({ className = "" }: { className?: string }) => (
 );
 
 /* ======================
-   Jersey (SVG) – braços/clipPaths OK
+   Jersey (SVG)
 ====================== */
 type JerseyPattern = "plain" | "hoops" | "stripes" | "sash" | "halves" | "quarters";
 const KNOWN_TEMPLATES: Record<string, JerseyPattern> = {};
@@ -386,7 +382,130 @@ function KitJersey({
 }
 
 /* ======================
-   Cart de partida
+   Novo: Card de Resumo (ícones reais)
+====================== */
+function Chip({
+    children,
+    className = "",
+    title,
+}: {
+    children: React.ReactNode;
+    className?: string;
+    title?: string;
+}) {
+    return (
+        <span
+            title={title}
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[12px] ${className}`}
+        >
+            {children}
+        </span>
+    );
+}
+
+function SummaryItem({
+    title,
+    redCards,
+    hatTrickNames,
+    goalkeeperName,
+    motmName,
+    align = "left",
+}: {
+    title: string;
+    redCards?: number | null;
+    hatTrickNames?: Array<string | null>;
+    goalkeeperName?: string | null;
+    motmName?: string | null;
+    align?: "left" | "right";
+}) {
+    const reds = typeof redCards === "number" ? redCards : 0;
+    const textAlign = align === "right" ? "text-right" : "text-left";
+    const dir = align === "right" ? "justify-end" : "justify-start";
+
+    const hatList = (hatTrickNames ?? []).filter((n): n is string => !!n);
+
+    return (
+        <div className={`flex flex-col gap-1 ${textAlign}`}>
+            <div className={`flex ${dir} gap-2 flex-wrap items-center`}>
+                {/* Vermelhos */}
+                <Chip
+                    title={`Cartões vermelhos: ${reds}`}
+                    className={`${reds > 0 ? "bg-red-50 border-red-200 text-red-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
+                >
+                    <Square className={`${reds > 0 ? "text-red-600" : "text-gray-300"}`} size={14} />
+                    <span className="tabular-nums">{reds}</span>
+                </Chip>
+
+                {/* Hat-tricks (vários) */}
+                {hatList.length === 0 ? (
+                    <Chip className="bg-gray-50 border-gray-200 text-gray-400" title="Sem hat-trick">
+                        <Crown size={14} className="text-gray-400" />
+                        <span>—</span>
+                    </Chip>
+                ) : (
+                    hatList.map((name, i) => (
+                        <Chip
+                            key={`${name}-${i}`}
+                            className="bg-green-50 border-green-200 text-green-700"
+                            title={`Hat-trick: ${name}`}
+                        >
+                            <Crown size={14} className="text-green-700" />
+                            <span className="truncate max-w-[180px]">{name}</span>
+                        </Chip>
+                    ))
+                )}
+
+                {/* Goleiro */}
+                <Chip
+                    className={`${goalkeeperName ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
+                    title={goalkeeperName ? `Goleiro: ${goalkeeperName}` : "Goleiro não identificado"}
+                >
+                    <Hand size={14} className={`${goalkeeperName ? "text-blue-700" : "text-gray-400"}`} />
+                    <span className="truncate max-w-[180px]">{goalkeeperName ?? "—"}</span>
+                </Chip>
+
+                {/* Man of the Match */}
+                <Chip
+                    className={`${motmName ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
+                    title={motmName ? `Man of the Match: ${motmName}` : "Sem Man of the Match"}
+                >
+                    <Star size={14} className={`${motmName ? "text-amber-600" : "text-gray-400"}`} />
+                    <span className="truncate max-w-[180px]">{motmName ?? "—"}</span>
+                </Chip>
+            </div>
+        </div>
+    );
+}
+
+function SummaryCard({ m }: { m: MatchResultDto }) {
+    const a = m.clubASummary;
+    const b = m.clubBSummary;
+    return (
+        <div className="mt-3 p-3 sm:p-4 rounded-lg border bg-white/70">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
+                <SummaryItem
+                    title={m.clubAName}
+                    redCards={a?.redCards ?? m.clubARedCards ?? 0}
+                    hatTrickNames={a?.hatTrickPlayerNames}
+                    goalkeeperName={a?.goalkeeperPlayerName ?? null}
+                    motmName={a?.manOfTheMatchPlayerName ?? null}
+                    align="left"
+                />
+                <SummaryItem
+                    title={m.clubBName}
+                    redCards={b?.redCards ?? m.clubBRedCards ?? 0}
+                    hatTrickNames={b?.hatTrickPlayerNames}
+                    goalkeeperName={b?.goalkeeperPlayerName ?? null}
+                    motmName={b?.manOfTheMatchPlayerName ?? null}
+                    align="right"
+                />
+            </div>
+        </div>
+    );
+}
+
+/* ======================
+   Card de partida
 ====================== */
 function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFilter }) {
     const patternA = guessPattern(m.clubADetails);
@@ -417,7 +536,7 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                 <OutcomeBadge a={p.myGoals} b={p.oppGoals} />
             </div>
 
-            {/* DESKTOP: times + placar na mesma linha centralizada */}
+            {/* DESKTOP: times + placar */}
             <div className="hidden sm:grid items-center justify-center grid-cols-[auto_auto_auto] sm:gap-6 sm:max-w-[820px] sm:mx-auto mt-2">
                 {/* A */}
                 <div className="flex items-center gap-2 min-w-0">
@@ -446,7 +565,6 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                                     sizePx={AVATAR_PX}
                                 />
                             </div>
-                            <RedCardBadge count={m.clubARedCards} />
                         </div>
                     </div>
                 </div>
@@ -485,13 +603,12 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                                     sizePx={AVATAR_PX}
                                 />
                             </div>
-                            <RedCardBadge count={m.clubBRedCards} />
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* MOBILE: linha com A (esquerda) e B (direita), camisas/cartões logo abaixo de cada lado; depois o placar */}
+            {/* MOBILE: times + placar */}
             <div className="sm:hidden mt-2 space-y-2">
                 {/* Linha 1: nomes + escudos */}
                 <div className="flex items-center justify-between gap-3">
@@ -526,7 +643,7 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                     </div>
                 </div>
 
-                {/* Linha 2: camisas + cartões (abaixo de cada lado) */}
+                {/* Linha 2: camisas */}
                 <div className="flex items-start justify-between">
                     <div className="flex flex-col items-start gap-1">
                         <KitJersey
@@ -536,10 +653,9 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                                 m.clubADetails?.kitColor3 ?? (m.clubADetails as any)?.KitColor3,
                                 m.clubADetails?.kitColor4 ?? (m.clubADetails as any)?.KitColor4,
                             ]}
-                            pattern={patternA}
+                            pattern={guessPattern(m.clubADetails)}
                             sizePx={AVATAR_PX}
                         />
-                        <RedCardBadge count={m.clubARedCards} />
                     </div>
 
                     <div className="flex flex-col items-end gap-1">
@@ -550,14 +666,13 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                                 m.clubBDetails?.kitColor3 ?? (m.clubBDetails as any)?.KitColor3,
                                 m.clubBDetails?.kitColor4 ?? (m.clubBDetails as any)?.KitColor4,
                             ]}
-                            pattern={patternB}
+                            pattern={guessPattern(m.clubBDetails)}
                             sizePx={AVATAR_PX}
                         />
-                        <RedCardBadge count={m.clubBRedCards} />
                     </div>
                 </div>
 
-                {/* Placar centralizado abaixo dos times */}
+                {/* Placar centralizado */}
                 <div className="mt-1 px-3 py-2 rounded-lg bg-gray-50 font-semibold text-lg border text-center mx-auto w-40">
                     <span className={`${p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubAGoals}</span>
                     <span className="text-gray-400"> x </span>
@@ -578,10 +693,13 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
                 </div>
             </div>
 
-            {/* Estádio centralizado (por último no mobile, como na imagem) */}
+            {/* Estádio */}
             <div className="mt-2 text-xs sm:text-sm text-gray-600 text-center font-medium">
                 {stadiumName || "Estádio não informado"}
             </div>
+
+            {/* Resumo com ícones */}
+            <SummaryCard m={m} />
         </Link>
     );
 }
@@ -696,7 +814,9 @@ export default function Home() {
         const term = search.trim().toLowerCase();
         const byText = (m: MatchResultDto) => (term ? `${m.clubAName} ${m.clubBName}`.toLowerCase().includes(term) : true);
         const byReds = (m: MatchResultDto) => {
-            const reds = (m.clubARedCards ?? 0) + (m.clubBRedCards ?? 0);
+            const redsA = m.clubASummary?.redCards ?? (m.clubARedCards ?? 0);
+            const redsB = m.clubBSummary?.redCards ?? (m.clubBRedCards ?? 0);
+            const reds = redsA + redsB;
             if (redFilter === "none") return reds === 0;
             if (redFilter === "1plus") return reds >= 1;
             if (redFilter === "2plus") return reds >= 2;
@@ -747,7 +867,9 @@ export default function Home() {
                 if (p.myGoals > p.oppGoals) acc.v++;
                 else if (p.myGoals < p.oppGoals) acc.d++;
                 else acc.e++;
-                acc.cartoes += (m.clubARedCards ?? 0) + (m.clubBRedCards ?? 0);
+                const redsA = m.clubASummary?.redCards ?? (m.clubARedCards ?? 0);
+                const redsB = m.clubBSummary?.redCards ?? (m.clubBRedCards ?? 0);
+                acc.cartoes += redsA + redsB;
                 return acc;
             },
             { jogos: 0, v: 0, e: 0, d: 0, golsPro: 0, golsContra: 0, cartoes: 0 }
@@ -762,7 +884,6 @@ export default function Home() {
             const ev = new Event("visibilitychange");
             document.dispatchEvent(ev);
         }
-        // força recarga mantendo filtros
         setVisible((v) => v);
     }, [clubId]);
 
