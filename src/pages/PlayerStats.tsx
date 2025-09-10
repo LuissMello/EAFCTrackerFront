@@ -177,7 +177,7 @@ export default function PlayerStats() {
                 setLoading(true);
                 setError(null);
                 const { data } = await api.get<MatchPlayerStatsDto>(
-                    `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/player/${matchId}/${playerId}`,
+                    `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/matches/${matchId}/players/${playerId}/statistics`,
                     { signal: controller.signal }
                 );
                 setData(data);
@@ -192,6 +192,7 @@ export default function PlayerStats() {
 
         return () => controller.abort();
     }, [matchId, playerId]);
+
 
     const isGK = useMemo(() => {
         const pos = (data?.position || "").toLowerCase();

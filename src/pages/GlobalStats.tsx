@@ -136,7 +136,6 @@ export default function PlayerStatisticsPage() {
     useEffect(() => { localStorage.setItem("psp.adv", showAdvanced ? "1" : "0"); }, [showAdvanced]);
     useEffect(() => { localStorage.setItem("psp.opp", oppPlayers === "all" ? "all" : String(oppPlayers)); }, [oppPlayers]);
 
-    // Busca
     const fetchStats = useCallback(async (count: number) => {
         if (!clubId) {
             setPlayers([]);
@@ -154,11 +153,11 @@ export default function PlayerStatisticsPage() {
         abortRef.current = controller;
 
         try {
-            const params: Record<string, any> = { count, clubId };
+            const params: Record<string, any> = { count };
             if (oppPlayers !== "all") params.opponentCount = oppPlayers;
 
             const { data } = await api.get(
-                "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/limited",
+                `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/${clubId}/matches/statistics/limited`,
                 { params, signal: controller.signal }
             );
             setPlayers(data.players ?? []);
@@ -170,7 +169,8 @@ export default function PlayerStatisticsPage() {
             setLoading(false);
             setFetching(false);
         }
-    }, [clubId, oppPlayers]); // depende do filtro para re-buscar
+    }, [clubId, oppPlayers]);
+
 
     useEffect(() => {
         fetchStats(matchCount);
