@@ -6,6 +6,7 @@ import GlobalStats from "./pages/GlobalStats.tsx";
 import Calendar from "./pages/Calendar.tsx";
 import Trends from "./pages/Trends.tsx";
 import ClubPicker from "./components/ClubPicker.tsx";
+import { ClubProvider } from "./hooks/useClub.tsx";
 
 function Navbar() {
     return (
@@ -25,17 +26,19 @@ function Navbar() {
 export default function App() {
     return (
         <Router>
-            <div className="min-h-screen bg-gray-100">
-                <Navbar />
-                <Routes>
-                    <Route path="/" element={<Home />} />
-                    <Route path="/match/:matchId" element={<MatchDetails />} />
-                    <Route path="/statistics/player/:matchId/:playerId" element={<PlayerStats />} />
-                    <Route path="/stats" element={<GlobalStats />} />
-                    <Route path="/calendar" element={<Calendar />} />
-                    <Route path="/trends" element={<Trends />} />
-                </Routes>
-            </div>
+            <ClubProvider>
+                <div className="min-h-screen bg-gray-100">
+                    <Navbar />
+                    <Routes>
+                        <Route path="/" element={<Home />} />
+                        <Route path="/match/:matchId" element={<MatchDetails />} />
+                        <Route path="/statistics/player/:matchId/:playerId" element={<PlayerStats />} />
+                        <Route path="/stats" element={<GlobalStats />} />
+                        <Route path="/calendar" element={<Calendar />} />
+                        <Route path="/trends" element={<Trends />} />
+                    </Routes>
+                </div>
+            </ClubProvider>
         </Router>
     );
 }
