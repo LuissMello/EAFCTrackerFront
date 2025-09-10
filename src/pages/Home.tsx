@@ -786,13 +786,14 @@ export default function Home() {
                 setLoading(true);
                 setError(null);
 
-                const params: any = { clubId };
+                const params: any = {};
                 if (matchType !== "All") params.matchType = matchType;
 
                 const { data } = await api.get<MatchResultDto[]>(
-                    "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/matches/results",
+                    `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/${clubId}/matches/results`,
                     { params, signal: (controller as any).signal }
                 );
+
                 if (mounted) {
                     setResults(Array.isArray(data) ? data : []);
                     setVisible(30);
