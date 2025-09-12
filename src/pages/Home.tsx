@@ -531,7 +531,7 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
             <div className="flex items-center justify-between gap-2">
                 <div className="text-xs text-gray-500">
                     <span className="hidden sm:inline">{fmtDateTime.format(new Date(m.timestamp))}</span>
-                    <span className="sm:hidden">{fromNow(m.timestamp)}</span>
+                    <span className="sm:hidden">{fmtDateTime.format(new Date(m.timestamp))}</span>
                 </div>
                 <OutcomeBadge a={p.myGoals} b={p.oppGoals} />
             </div>
