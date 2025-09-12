@@ -309,7 +309,7 @@ export default function MatchDetails() {
             setLoading(true);
             setError(null);
             const { data } = await api.get<FullMatchStatisticsDto>(
-                `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Matches/statistics/${matchId}`
+                `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/matches/${matchId}/statistics`
             );
             if (!cancel) setStats(data);
         } catch (err: any) {
@@ -319,6 +319,8 @@ export default function MatchDetails() {
         }
         return () => { cancel = true; };
     }, [matchId]);
+
+
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
