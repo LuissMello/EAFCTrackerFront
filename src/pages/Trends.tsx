@@ -6,12 +6,13 @@ import {
     LinearScale,
     PointElement,
     LineElement,
+    BarElement,
     Title,
     Tooltip,
     Legend,
     Filler,
 } from "chart.js";
-import { Line } from "react-chartjs-2";
+import { Line, Bar } from "react-chartjs-2";
 import { useClub } from "../hooks/useClub.tsx";
 
 ChartJS.register(
@@ -19,6 +20,7 @@ ChartJS.register(
     LinearScale,
     PointElement,
     LineElement,
+    BarElement,
     Title,
     Tooltip,
     Legend,
@@ -80,26 +82,37 @@ interface TopItemDto {
 // Helpers
 // =========================
 
-const BR_DATE = new Intl.DateTimeFormat("pt-BR");
+const BR_DATE = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+});
 const formatDate = (iso: string) => BR_DATE.format(new Date(iso));
 
 const COLORS = {
-    blue: {
-        border: "rgba(37, 99, 235, 1)",
-        fill: "rgba(59, 130, 246, 0.15)",
-    },
-    emerald: {
-        border: "rgba(16, 185, 129, 1)",
-        fill: "rgba(52, 211, 153, 0.15)",
-    },
-    amber: {
-        border: "rgba(245, 158, 11, 1)",
-        fill: "rgba(251, 191, 36, 0.15)",
-    },
+    blue: { border: "rgba(37,99,235,1)", fill: "rgba(59,130,246,0.15)" },
+    emerald: { border: "rgba(16,185,129,1)", fill: "rgba(52,211,153,0.15)" },
+    amber: { border: "rgba(245,158,11,1)", fill: "rgba(251,191,36,0.15)" },
+    indigo: { border: "rgba(79,70,229,1)", fill: "rgba(129,140,248,0.15)" },
+    rose: { border: "rgba(244,63,94,1)", fill: "rgba(251,113,133,0.12)" },
+    slate: { border: "rgba(100,116,139,1)", fill: "rgba(148,163,184,0.15)" },
 };
 
 const pillColor = (r: Result) =>
     r === "W" ? "bg-green-600" : r === "D" ? "bg-gray-500" : "bg-red-600";
+
+// simples média móvel (não recalcula percentuais a partir de tentativas; só suaviza a série recebida)
+function movingAvg(arr: number[], win = 5) {
+    if (!arr || arr.length === 0) return [];
+    const out: number[] = [];
+    let sum = 0;
+    for (let i = 0; i < arr.length; i++) {
+        sum += arr[i] ?? 0;
+        if (i >= win) sum -= arr[i - win] ?? 0;
+        out.push(i >= win - 1 ? sum / win : arr[i]); // antes da janela completa, mostra o próprio valor
+    }
+    return out;
+}
 
 // =========================
 // Component
@@ -107,7 +120,7 @@ const pillColor = (r: Result) =>
 
 export default function TrendsPage() {
     const { club } = useClub();
-    const activeClubId = club?.clubId; // number | undefined
+    const activeClubId = club?.clubId;
 
     const [last, setLast] = useState(20);
     const [loading, setLoading] = useState(true);
@@ -115,6 +128,15 @@ export default function TrendsPage() {
     const [tops, setTops] = useState<TopItemDto[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [reloadNonce, setReloadNonce] = useState<number>(0);
+
+    // UI state novo
+    type Metric = "pass" | "tackle" | "rating" | "gfga" | "gdiff";
+    const [metric, setMetric] = useState<Metric>("pass");
+    type ChartKind = "line" | "area" | "bar";
+    const [chartKind, setChartKind] = useState<ChartKind>("line");
+    const [smooth, setSmooth] = useState(true);
+    type XMode = "index" | "date";
+    const [xMode, setXMode] = useState<XMode>("index");
 
     const mountedRef = useRef(true);
     useEffect(() => {
@@ -162,103 +184,188 @@ export default function TrendsPage() {
 
     // -------- Derived --------
     const series = data?.series ?? [];
+    const n = series.length;
 
-    const labels = useMemo(() => series.map((p) => formatDate(p.timestamp)), [series]);
+    const xIndexLabels = useMemo(() => series.map((_, i) => `Jogo ${i + 1}`), [series]);
+    const xDateLabels = useMemo(() => series.map((p) => formatDate(p.timestamp)), [series]);
+    const xLabels = xMode === "index" ? xIndexLabels : xDateLabels;
 
-    const passData = useMemo(
-        () => ({
-            labels,
+    // valores base
+    const pass = series.map((s) => s.passAccuracyPercent ?? 0);
+    const tackle = series.map((s) => s.tackleSuccessPercent ?? 0);
+    const rating = series.map((s) => s.avgRating ?? 0);
+    const gf = series.map((s) => s.goalsFor ?? 0);
+    const ga = series.map((s) => s.goalsAgainst ?? 0);
+    const gdiff = series.map((_, i) => (gf[i] ?? 0) - (ga[i] ?? 0));
+
+    // aplica suavização, se marcado
+    const passPlot = smooth ? movingAvg(pass, 5) : pass;
+    const tacklePlot = smooth ? movingAvg(tackle, 5) : tackle;
+    const ratingPlot = smooth ? movingAvg(rating, 5) : rating;
+    const gfPlot = smooth ? movingAvg(gf, 5) : gf;
+    const gaPlot = smooth ? movingAvg(ga, 5) : ga;
+    const gdiffPlot = smooth ? movingAvg(gdiff, 5) : gdiff;
+
+    // ponto pequeno/sem ponto quando há muitos jogos
+    const manyPoints = n > 25;
+    const pointRadius = manyPoints ? 0 : 2;
+
+    // Seleção dinâmica de datasets por métrica
+    const chartData = useMemo(() => {
+        if (metric === "gfga") {
+            return {
+                labels: xLabels,
+                datasets: [
+                    {
+                        type: chartKind === "bar" ? "bar" : "line",
+                        label: "Gols feitos",
+                        data: gfPlot,
+                        borderColor: COLORS.indigo.border,
+                        backgroundColor:
+                            chartKind === "bar" ? COLORS.indigo.fill : COLORS.indigo.fill,
+                        borderWidth: 2,
+                        tension: 0.3,
+                        pointRadius,
+                        fill: chartKind === "area",
+                    },
+                    {
+                        type: chartKind === "bar" ? "bar" : "line",
+                        label: "Gols levados",
+                        data: gaPlot,
+                        borderColor: COLORS.rose.border,
+                        backgroundColor:
+                            chartKind === "bar" ? COLORS.rose.fill : COLORS.rose.fill,
+                        borderWidth: 2,
+                        tension: 0.3,
+                        pointRadius,
+                        fill: chartKind === "area",
+                    },
+                ],
+            };
+        }
+
+        if (metric === "gdiff") {
+            // barras com cor por sinal do valor; para line/area, mantém linha única
+            const base = {
+                labels: xLabels,
+                datasets: [
+                    {
+                        label: "Dif. de gols (GF - GA)",
+                        data: gdiffPlot,
+                        borderColor: COLORS.emerald.border,
+                        backgroundColor:
+                            chartKind === "bar"
+                                ? (ctx: any) =>
+                                    (ctx.raw ?? 0) >= 0
+                                        ? "rgba(16,185,129,0.6)"
+                                        : "rgba(244,63,94,0.6)"
+                                : COLORS.emerald.fill,
+                        borderWidth: 2,
+                        tension: 0.3,
+                        pointRadius,
+                        fill: chartKind === "area",
+                    } as any,
+                ],
+            };
+            return base;
+        }
+
+        // métricas simples
+        const mapMetric: Record<
+            Exclude<Metric, "gfga" | "gdiff">,
+            { label: string; color: keyof typeof COLORS; values: number[] }
+        > = {
+            pass: { label: "Precisão de passe (%)", color: "blue", values: passPlot },
+            tackle: { label: "Êxito em desarmes (%)", color: "emerald", values: tacklePlot },
+            rating: { label: "Nota média", color: "amber", values: ratingPlot },
+        };
+        const { label, color, values } = mapMetric[metric];
+
+        return {
+            labels: xLabels,
             datasets: [
                 {
-                    label: "Precisão de passe",
-                    data: data?.movingAvgPassAcc_5 ?? [],
-                    borderColor: COLORS.blue.border,
-                    backgroundColor: COLORS.blue.fill,
+                    label,
+                    data: values,
+                    borderColor: COLORS[color].border,
+                    backgroundColor:
+                        chartKind === "bar" ? COLORS[color].fill : COLORS[color].fill,
                     borderWidth: 2,
-                    pointRadius: 2,
                     tension: 0.3,
-                    fill: true,
+                    pointRadius,
+                    fill: chartKind === "area",
                 },
             ],
-        }),
-        [labels, data?.movingAvgPassAcc_5]
-    );
+        };
+    }, [metric, chartKind, xLabels, passPlot, tacklePlot, ratingPlot, gfPlot, gaPlot, gdiffPlot, pointRadius]);
 
-    const tackleData = useMemo(
-        () => ({
-            labels,
-            datasets: [
-                {
-                    label: "Êxito em desarmes",
-                    data: data?.movingAvgTackleAcc_5 ?? [],
-                    borderColor: COLORS.emerald.border,
-                    backgroundColor: COLORS.emerald.fill,
-                    borderWidth: 2,
-                    pointRadius: 2,
-                    tension: 0.3,
-                    fill: true,
-                },
-            ],
-        }),
-        [labels, data?.movingAvgTackleAcc_5]
-    );
-
-    const ratingData = useMemo(
-        () => ({
-            labels,
-            datasets: [
-                {
-                    label: "Nota média",
-                    data: data?.movingAvgRating_5 ?? [],
-                    borderColor: COLORS.amber.border,
-                    backgroundColor: COLORS.amber.fill,
-                    borderWidth: 2,
-                    pointRadius: 2,
-                    tension: 0.3,
-                    fill: true,
-                },
-            ],
-        }),
-        [labels, data?.movingAvgRating_5]
-    );
-
-    const baseLineOptions: any = useMemo(
+    // opções de eixo/tooltip mais limpas
+    const baseOptions: any = useMemo(
         () => ({
             responsive: true,
             maintainAspectRatio: false,
+            animation: false,
+            interaction: { mode: "index", intersect: false },
             plugins: {
-                legend: { display: true },
+                legend: { display: true, position: "top" },
                 tooltip: {
                     callbacks: {
+                        title: (items: any[]) => {
+                            const i = items?.[0]?.dataIndex ?? 0;
+                            const s = series[i];
+                            if (!s) return items?.[0]?.label ?? "";
+                            const title = xMode === "index" ? `Jogo ${i + 1}` : items?.[0]?.label;
+                            const date = formatDate(s.timestamp);
+                            const vs = s.opponentName ? ` vs ${s.opponentName}` : "";
+                            const placar = ` • ${s.goalsFor}-${s.goalsAgainst}`;
+                            return `${title} — ${date}${vs}${placar}`;
+                        },
                         label: (ctx: any) => {
                             const v = ctx.raw as number;
-                            return `${ctx.dataset.label}: ${Number.isFinite(v) ? v.toFixed(2) : "-"}`;
+                            return `${ctx.dataset.label}: ${Number.isFinite(v) ? v.toFixed(metric === "rating" ? 2 : 1) : "-"
+                                }`;
                         },
                     },
                 },
             },
             scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        autoSkip: true,
+                        maxTicksLimit: 8,
+                    },
+                },
                 y: {
                     beginAtZero: true,
                     grid: { color: "rgba(0,0,0,0.05)" },
-                    ticks: { callback: (v: any) => `${v}` },
-                },
-                x: {
-                    grid: { display: false },
+                    ticks: {
+                        // rating costuma variar pouco; força uma escala mais útil
+                        callback: (v: any) => `${v}`,
+                    },
                 },
             },
+            elements: {
+                point: { radius: pointRadius },
+                line: { borderJoinStyle: "round", borderCapStyle: "round" },
+            },
         }),
-        []
+        [series, xMode, pointRadius, metric]
     );
 
+    const ChartComponent =
+        metric === "gfga" || metric === "gdiff"
+            ? chartKind === "bar"
+                ? Bar
+                : Line
+            : chartKind === "bar"
+                ? Bar
+                : Line;
+
     const lastResults = series.map((s) => s.result as Result);
-
-    // -------- Actions --------
     const quickLasts = [5, 10, 20, 50];
-
     const forceReload = () => setReloadNonce(Date.now());
 
-  
     // =========================
     // Render
     // =========================
@@ -268,7 +375,7 @@ export default function TrendsPage() {
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold">
-                        Tendências &amp; Streaks - {data?.clubName ?? club?.clubName ?? ""}
+                        Tendências &amp; Streaks — {data?.clubName ?? club?.clubName ?? ""}
                     </h1>
                     {activeClubId && (
                         <div className="text-xs text-gray-600 mt-1">
@@ -277,7 +384,7 @@ export default function TrendsPage() {
                     )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm text-gray-700">Últimos</span>
                     <div className="flex items-center gap-1">
                         {quickLasts.map((n) => (
@@ -322,11 +429,7 @@ export default function TrendsPage() {
                 <div className="grid gap-3">
                     <div className="animate-pulse bg-white border rounded-xl p-4 h-20" />
                     <div className="animate-pulse bg-white border rounded-xl p-4 h-24" />
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div className="animate-pulse bg-white border rounded-xl h-[260px]" />
-                        <div className="animate-pulse bg-white border rounded-xl h-[260px]" />
-                        <div className="animate-pulse bg-white border rounded-xl h-[260px]" />
-                    </div>
+                    <div className="animate-pulse bg-white border rounded-xl p-4 h-[340px]" />
                     <div className="animate-pulse bg-white border rounded-xl p-4 h-48" />
                 </div>
             )}
@@ -373,44 +476,73 @@ export default function TrendsPage() {
                         </div>
                     </div>
 
-                    {/* Timeline W/D/L com detalhes */}
+                    {/* CONTROLES DO GRÁFICO */}
                     <div className="bg-white border rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-2">
-                            <div className="text-sm font-semibold">Linha do tempo (W/D/L)</div>
-                            <div className="text-xs text-gray-500">toque/hover para ver o adversário e o placar</div>
-                        </div>
-                        {series.length === 0 ? (
-                            <div className="text-sm text-gray-600">Sem partidas no período selecionado.</div>
-                        ) : (
-                            <div className="flex flex-wrap gap-2">
-                                {series.map((s) => (
-                                    <div key={s.matchId} className="flex items-center gap-2 group">
-                                        <span
-                                            className={`text-white text-xs px-2 py-1 rounded ${pillColor(s.result as Result)} cursor-default`}
-                                            title={`${formatDate(s.timestamp)} • vs ${s.opponentName} • ${s.goalsFor}-${s.goalsAgainst}${s.momOccurred ? " • MOM" : ""
-                                                }`}
-                                        >
-                                            {s.result}
-                                        </span>
-                                        <span className="text-xs text-gray-600 group-hover:underline">
-                                            {formatDate(s.timestamp)}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <label className="text-sm text-gray-700">
+                                Métrica
+                                <select
+                                    className="ml-2 border rounded px-2 py-1 text-sm"
+                                    value={metric}
+                                    onChange={(e) => setMetric(e.target.value as any)}
+                                >
+                                    <option value="pass">Precisão de passe (%)</option>
+                                    <option value="tackle">Êxito em desarmes (%)</option>
+                                    <option value="rating">Nota média</option>
+                                    <option value="gfga">Gols feitos × levados</option>
+                                    <option value="gdiff">Dif. de gols (GF−GA)</option>
+                                </select>
+                            </label>
 
-                    {/* Gráficos */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div className="bg-white border rounded-xl p-4 h-[280px]">
-                            <Line data={passData as any} options={baseLineOptions} />
+                            <label className="text-sm text-gray-700">
+                                Visual
+                                <select
+                                    className="ml-2 border rounded px-2 py-1 text-sm"
+                                    value={chartKind}
+                                    onChange={(e) => setChartKind(e.target.value as any)}
+                                >
+                                    <option value="line">Linha</option>
+                                    <option value="area">Área</option>
+                                    <option value="bar">Barras</option>
+                                </select>
+                            </label>
+
+                            <label className="text-sm text-gray-700">
+                                Eixo X
+                                <select
+                                    className="ml-2 border rounded px-2 py-1 text-sm"
+                                    value={xMode}
+                                    onChange={(e) => setXMode(e.target.value as any)}
+                                >
+                                    <option value="index">Jogo #</option>
+                                    <option value="date">Data</option>
+                                </select>
+                            </label>
                         </div>
-                        <div className="bg-white border rounded-xl p-4 h-[280px]">
-                            <Line data={tackleData as any} options={baseLineOptions} />
+
+                        {/* GRÁFICO PRINCIPAL */}
+                        <div className="mt-4 h-[340px]">
+                            <ChartComponent data={chartData as any} options={baseOptions} />
                         </div>
-                        <div className="bg-white border rounded-xl p-4 h-[280px]">
-                            <Line data={ratingData as any} options={baseLineOptions} />
+
+                        {/* FAIXA DE RESULTADOS COMPACTA */}
+                        <div className="mt-4">
+                            <div className="text-xs text-gray-500 mb-2">Resultados no período</div>
+                            {series.length === 0 ? (
+                                <div className="text-sm text-gray-600">Sem partidas no período selecionado.</div>
+                            ) : (
+                                <div className="flex gap-1 overflow-x-auto no-scrollbar py-1">
+                                    {series.map((s, i) => (
+                                        <span
+                                            key={s.matchId}
+                                            title={`${formatDate(s.timestamp)} • vs ${s.opponentName} • ${s.goalsFor}-${s.goalsAgainst}`}
+                                            className={`inline-block w-5 h-5 rounded ${pillColor(
+                                                s.result as Result
+                                            )}`}
+                                        />
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -434,7 +566,12 @@ export default function TrendsPage() {
                                 </thead>
                                 <tbody>
                                     {[...tops]
-                                        .sort((a, b) => b.goals - a.goals || b.assists - a.assists || b.avgRating - a.avgRating)
+                                        .sort(
+                                            (a, b) =>
+                                                b.goals - a.goals ||
+                                                b.assists - a.assists ||
+                                                b.avgRating - a.avgRating
+                                        )
                                         .map((t) => (
                                             <tr key={t.playerEntityId} className="border-t">
                                                 <td className="p-2 text-left whitespace-nowrap">{t.playerName}</td>
