@@ -213,8 +213,14 @@ const asNonNegativeIntString = (s?: string | null) => {
 };
 
 // Aceita apenas >=1 (para bestDivision nos assets)
-const asPositiveIntString = (s?: string | null) => {
-    const n = Number(String(s ?? "").trim());
+export const asPositiveIntString = (s?: string | null) => {
+    if (s == null) return null;
+    const cleaned = String(s)
+        .replace(/\uFEFF/g, "")               // BOM
+        .replace(/[\u200B-\u200D]/g, "")      // zero-width
+        .replace(/\u00A0/g, " ")              // NBSP
+        .trim();
+    const n = Number(cleaned);
     return Number.isFinite(n) && n > 0 ? String(Math.trunc(n)) : null;
 };
 
@@ -226,10 +232,8 @@ const divisionCrestUrl = (bestDivision?: string | null) => {
 };
 
 const reputationTierUrl = (tier?: string | null) => {
-    const n = asPositiveIntString(tier);
-    return n
-        ? `https://media.contentapi.ea.com/content/dam/eacom/fc/pro-clubs/reputation-tier${n}.png`
-        : null;
+    const n = Number(tier);
+    return `https://media.contentapi.ea.com/content/dam/eacom/fc/pro-clubs/reputation-tier${n}.png`
 };
 
 // --- Mapas de rótulos fornecidos ---
