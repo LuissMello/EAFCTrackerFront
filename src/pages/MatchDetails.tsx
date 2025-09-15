@@ -206,9 +206,16 @@ function fmt(value: number | undefined | null) {
         : (Math.round((value as number) * 100) / 100).toFixed(2);
 }
 
+// Aceita >= 0 (para reputationtier=0)
+const asNonNegativeIntString = (s?: string | null) => {
+    const n = Number(String(s ?? "").trim());
+    return Number.isFinite(n) && n >= 0 ? String(Math.trunc(n)) : null;
+};
+
+// Aceita apenas >=1 (para bestDivision nos assets)
 const asPositiveIntString = (s?: string | null) => {
-    const n = parseInt(String(s ?? ""), 10);
-    return Number.isFinite(n) && n > 0 ? String(n) : null;
+    const n = Number(String(s ?? "").trim());
+    return Number.isFinite(n) && n > 0 ? String(Math.trunc(n)) : null;
 };
 
 const divisionCrestUrl = (bestDivision?: string | null) => {
@@ -223,6 +230,35 @@ const reputationTierUrl = (tier?: string | null) => {
     return n
         ? `https://media.contentapi.ea.com/content/dam/eacom/fc/pro-clubs/reputation-tier${n}.png`
         : null;
+};
+
+// --- Mapas de rótulos fornecidos ---
+const REPUTATION_LABELS: Record<string, string> = {
+    "0": "Hometown Heroes",
+    "1": "Emerging Stars",
+    "2": "Well Known",
+    "3": "World Renown",
+};
+
+const HIGHEST_PLACEMENT_LABELS: Record<string, string> = {
+    "1": "Champion",
+    "2": "Runner-Up",
+    "3": "Competitive",
+    "4": "Mid-Table",
+    "5": "Also-ran",
+    "6": "Participant",
+};
+
+// Progress bar minúscula (cabe dentro do cartão/quadrado)
+const TinyBar: React.FC<{ pct: number; className?: string; title?: string }> = ({ pct, className = "", title }) => {
+    const w = Math.max(0, Math.min(100, pct));
+    return (
+        <div className={`w-full ${className}`} title={title} aria-label={title}>
+            <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-600" style={{ width: `${w}%` }} />
+            </div>
+        </div>
+    );
 };
 
 // meta de estatísticas disponíveis na UI
@@ -319,8 +355,6 @@ export default function MatchDetails() {
         }
         return () => { cancel = true; };
     }, [matchId]);
-
-
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -590,6 +624,22 @@ export default function MatchDetails() {
                             const divUrl = divisionCrestUrl(o?.bestDivision);
                             const repUrl = reputationTierUrl(o?.reputationtier);
 
+                            // rótulos
+                            const repKey = asNonNegativeIntString(o?.reputationtier) ?? "0";
+                            const repLabel = REPUTATION_LABELS[repKey] ?? (o?.reputationtier ?? "–");
+
+                            const highestKey = asNonNegativeIntString(o?.bestFinishGroup) ?? "6";
+                            const highestLabel =
+                                HIGHEST_PLACEMENT_LABELS[highestKey] ?? (o?.bestFinishGroup ?? "–");
+
+                            // progress: reputation 0..3 (0=baixo, 3=alto)
+                            const repNum = Number(repKey);
+                            const repPct = Number.isFinite(repNum) ? (repNum / 3) * 100 : 0;
+
+                            // progress: highestPlacement 1..6 (1=alto, 6=baixo) → invertido
+                            const hpNum = Number(highestKey);
+                            const hpPct = Number.isFinite(hpNum) ? ((6 - hpNum) / 5) * 100 : 0;
+
                             return (
                                 <div key={c.clubId} className="rounded-lg border p-3">
                                     <div className="flex items-center justify-between">
@@ -613,32 +663,49 @@ export default function MatchDetails() {
 
                                     <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                                         {/* Skill + Reputation/Division logos */}
-                                        <div className="p-2 rounded border flex items-center justify-between">
-                                            <div>
-                                                <div className="text-gray-500">Skill Rating</div>
-                                                <div className="font-semibold">{o?.skillRating ?? "–"}</div>
+                                        <div className="p-2 rounded border">
+                                            {/* Título + progress minúscula */}
+                                            <div className="text-gray-500">Skill Rating</div>
+                                            <TinyBar pct={repPct} className="mt-1" title={`Reputation: ${repLabel}`} />
+                                            <div className="mt-1 flex items-start justify-between gap-3">
+                                                <div>
+                                                    <div className="font-semibold">{o?.skillRating ?? "–"}</div>
+                                                </div>
+                                                <div className="flex flex-col items-center min-w-[48px]">
+                                                    {repUrl && (
+                                                        <img
+                                                            src={repUrl}
+                                                            alt={`Reputação ${repKey ?? ""}`}
+                                                            className="w-10 h-10 object-contain"
+                                                        />
+                                                    )}
+                                                    <div className="mt-1 text-[11px] leading-tight text-gray-600 text-center">
+                                                        {repLabel}
+                                                    </div>
+                                                </div>
                                             </div>
-                                            {repUrl && (
-                                                <img
-                                                    src={repUrl}
-                                                    alt={`Reputação ${o?.reputationtier ?? ""}`}
-                                                    className="w-10 h-10 object-contain"
-                                                />
-                                            )}
                                         </div>
 
-                                        <div className="p-2 rounded border flex items-center justify-between">
-                                            <div>
-                                                <div className="text-gray-500">Melhor Divisão</div>
-                                                <div className="font-semibold">{o?.bestFinishGroup ?? "–"}</div>
+                                        <div className="p-2 rounded border">
+                                            <div className="text-gray-500">Melhor Divisão</div>
+                                            <TinyBar pct={hpPct} className="mt-1" title={`Placement: ${highestLabel}`} />
+                                            <div className="mt-1 flex items-start justify-between gap-3">
+                                                <div>
+                                                    <div className="font-semibold">{highestLabel}</div>
+                                                </div>
+                                                <div className="flex flex-col items-center min-w-[48px]">
+                                                    {divUrl && (
+                                                        <img
+                                                            src={divUrl}
+                                                            alt={`Divisão ${o?.bestDivision ?? ""}`}
+                                                            className="w-10 h-10 object-contain"
+                                                        />
+                                                    )}
+                                                    <div className="mt-1 text-[11px] leading-tight text-gray-600 text-center">
+                                                        {highestLabel}
+                                                    </div>
+                                                </div>
                                             </div>
-                                            {divUrl && (
-                                                <img
-                                                    src={divUrl}
-                                                    alt={`Divisão ${o?.bestDivision ?? ""}`}
-                                                    className="w-10 h-10 object-contain"
-                                                />
-                                            )}
                                         </div>
 
                                         <div className="p-2 rounded border">
