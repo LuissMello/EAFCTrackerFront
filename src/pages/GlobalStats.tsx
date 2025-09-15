@@ -11,6 +11,7 @@ interface PlayerStats {
     clubId: number;
     matchesPlayed: number;
     totalGoals: number;
+    totalGoalsConceded: number;
     totalAssists: number;
     totalShots: number;
     totalPassesMade: number;
@@ -36,6 +37,7 @@ interface ClubStats {
     clubName: string;
     matchesPlayed: number;
     totalGoals: number;
+    totalGoalsConceded: number;
     totalAssists: number;
     totalShots: number;
     totalPassesMade: number;
@@ -53,6 +55,9 @@ interface ClubStats {
     winPercent: number;
     passAccuracyPercent: number;
     goalAccuracyPercent: number;
+
+    // NOVO: gols sofridos pelo clube (para % de defesa)
+    totalGoalsAgainst?: number;
 }
 
 // ========================
@@ -99,7 +104,7 @@ export default function PlayerStatisticsPage() {
     const [players, setPlayers] = useState<PlayerStats[]>([]);
     const [clubStats, setClubStats] = useState<ClubStats | null>(null);
     const [loading, setLoading] = useState(true);
-    const [fetching, setFetching] = useState(false); // mantém dados enquanto atualiza
+    const [fetching, setFetching] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // preferências (persistem)
@@ -110,7 +115,7 @@ export default function PlayerStatisticsPage() {
     const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("psp.pageSize")) || 20);
     const [showAdvanced, setShowAdvanced] = useState<boolean>(() => localStorage.getItem("psp.adv") === "1");
 
-    // NOVO: filtro por quantidade de jogadores do time adversário (2..11) - enviado ao backend
+    // filtro por quantidade de jogadores do adversário
     const initialOpp = (() => {
         const raw = localStorage.getItem("psp.opp");
         if (!raw || raw === "all") return "all" as const;
@@ -147,7 +152,7 @@ export default function PlayerStatisticsPage() {
         setFetching(true);
         setLoading(true);
 
-        // cancelamento de requisição anterior
+        // cancela requisição anterior
         abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
@@ -160,7 +165,9 @@ export default function PlayerStatisticsPage() {
                 `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/${clubId}/matches/statistics/limited`,
                 { params, signal: controller.signal }
             );
+
             setPlayers(data.players ?? []);
+            // Se o backend já devolver totalGoalsAgainst em clubs[0], cai direto no tipo
             setClubStats(data.clubs?.[0] ?? null);
         } catch (err: any) {
             if (err?.name === "CanceledError" || err?.message === "canceled") return;
@@ -170,7 +177,6 @@ export default function PlayerStatisticsPage() {
             setFetching(false);
         }
     }, [clubId, oppPlayers]);
-
 
     useEffect(() => {
         fetchStats(matchCount);
@@ -185,7 +191,7 @@ export default function PlayerStatisticsPage() {
     }
 
     // Filtros/orden.
-    const deferredSearch = search; // simples; substitua por useDeferredValue se preferir
+    const deferredSearch = search;
     const filtered = useMemo(() => {
         const term = deferredSearch.trim().toLowerCase();
         return players
@@ -210,7 +216,8 @@ export default function PlayerStatisticsPage() {
     const maxByKey = useMemo(() => {
         const keys: (keyof PlayerStats)[] = [
             "totalGoals", "totalAssists", "totalShots", "totalPassesMade", "totalTacklesMade",
-            "avgRating", "winPercent", "passAccuracyPercent", "tackleSuccessPercent", "goalAccuracyPercent"
+            "avgRating", "winPercent", "passAccuracyPercent", "tackleSuccessPercent", "goalAccuracyPercent",
+            "totalSaves",
         ];
         const res = new Map<keyof PlayerStats, number>();
         keys.forEach(k => res.set(k, Math.max(1, ...filtered.map(p => Number(p[k]) || 0))));
@@ -225,6 +232,9 @@ export default function PlayerStatisticsPage() {
     }, [sorted, page, pageSize]);
 
     useEffect(() => { setPage(1); }, [minMatches, search, sortKey, sortOrder, pageSize, oppPlayers]);
+
+    // Gols sofridos pelo clube (para o período filtrado)
+    const clubGoalsAgainst = Number(clubStats?.totalGoalsConceded || 0);
 
     return (
         <div className="p-4 sm:p-6 max-w-[98vw] mx-auto">
@@ -278,7 +288,7 @@ export default function PlayerStatisticsPage() {
                         />
                     </div>
 
-                    {/* NOVO: Filtro por jogadores do adversário (2..11) */}
+                    {/* Filtro por jogadores do adversário */}
                     <div className="flex flex-col">
                         <label htmlFor="oppPlayers" className="text-sm text-gray-600">Adversário (jogadores)</label>
                         <select
@@ -361,6 +371,8 @@ export default function PlayerStatisticsPage() {
                                     { key: "totalGoals", label: "Gols" },
                                     { key: "totalAssists", label: "Assistências" },
                                     { key: "totalShots", label: "Chutes (%)", tooltip: "Chutes totais e % de precisão" },
+                                    // NOVO: Defesas vs Gols Sofridos do Clube
+                                    { key: "totalSaves", label: "Defesas (S/Gc)", tooltip: "Defesas e Gols Sofridos do CLUBE no período: % = S / (S + Gc)" },
                                     { key: "totalPassesMade", label: "Passes (C/T)", tooltip: "Completos / Tentados e %" },
                                     { key: "totalTacklesMade", label: "Desarmes (C/T)", tooltip: "Completos / Tentados e %" },
                                     { key: "totalWins", label: "Vitórias" },
@@ -370,13 +382,6 @@ export default function PlayerStatisticsPage() {
                                     { key: "totalRedCards", label: "Vermelhos" },
                                     { key: "totalMom", label: "MOM" },
                                     { key: "avgRating", label: "Nota" },
-                                    ...(showAdvanced
-                                        ? ([
-                                            { key: "passAccuracyPercent", label: "Passes %" },
-                                            { key: "tackleSuccessPercent", label: "Desarmes %" },
-                                            { key: "goalAccuracyPercent", label: "Chutes %" },
-                                        ] as const)
-                                        : ([] as const)),
                                 ].map((c) => (
                                     <th
                                         key={c.key as string}
@@ -398,7 +403,7 @@ export default function PlayerStatisticsPage() {
                         <tbody>
                             {loading && (
                                 <tr>
-                                    <td colSpan={20} className="p-4">
+                                    <td colSpan={25} className="p-4">
                                         <div className="space-y-2">
                                             <Skeleton className="h-6" />
                                             <Skeleton className="h-6" />
@@ -410,55 +415,63 @@ export default function PlayerStatisticsPage() {
 
                             {!loading && pageItems.length === 0 && (
                                 <tr>
-                                    <td colSpan={20} className="p-4 text-gray-600">Nenhum jogador encontrado.</td>
+                                    <td colSpan={25} className="p-4 text-gray-600">Nenhum jogador encontrado.</td>
                                 </tr>
                             )}
 
                             {!loading &&
-                                pageItems.map((p) => (
-                                    <tr key={p.playerId} className="hover:bg-gray-50">
-                                        <td className="px-3 py-2 font-medium text-left sticky left-0 bg-white/95 backdrop-blur support:bg-white">{p.playerName}</td>
-                                        <td className="px-3 py-2">{int.format(p.matchesPlayed)}</td>
-                                        <td className="px-3 py-2">
-                                            <CellBar value={p.totalGoals} max={maxByKey.get("totalGoals") || 1} format={(v) => int.format(v)} />
-                                        </td>
-                                        <td className="px-3 py-2">
-                                            <CellBar value={p.totalAssists} max={maxByKey.get("totalAssists") || 1} format={(v) => int.format(v)} />
-                                        </td>
-                                        <td className="px-3 py-2">
-                                            {int.format(p.totalShots)} / {p1.format(p.goalAccuracyPercent)}%
-                                        </td>
-                                        <td className="px-3 py-2">
-                                            {int.format(p.totalPassesMade)} / {int.format(p.totalPassAttempts)}
-                                            <div className="mt-1">
-                                                <CellBar value={pct(p.totalPassesMade, p.totalPassAttempts)} max={100} suffix="%" positive format={(v) => p1.format(v)} />
-                                            </div>
-                                        </td>
-                                        <td className="px-3 py-2">
-                                            {int.format(p.totalTacklesMade)} / {int.format(p.totalTackleAttempts)}
-                                            <div className="mt-1">
-                                                <CellBar value={pct(p.totalTacklesMade, p.totalTackleAttempts)} max={100} suffix="%" positive format={(v) => p1.format(v)} />
-                                            </div>
-                                        </td>
-                                        <td className="px-3 py-2">{int.format(p.totalWins)}</td>
-                                        <td className="px-3 py-2">{int.format(p.totalLosses)}</td>
-                                        <td className="px-3 py-2">{int.format(p.totalDraws)}</td>
-                                        <td className="px-3 py-2">
-                                            <CellBar value={p.winPercent} max={100} suffix="%" positive format={(v) => p1.format(v)} />
-                                        </td>
-                                        <td className="px-3 py-2">{int.format(p.totalRedCards)}</td>
-                                        <td className="px-3 py-2">{int.format(p.totalMom)}</td>
-                                        <td className="px-3 py-2">{p2.format(Number(p.avgRating || 0))}</td>
+                                pageItems.map((p) => {
+                                    const saves = Number(p.totalSaves || 0);
+                                    // usando GOLS SOFRIDOS DO CLUBE (agregado do período filtrado)
+                                    const conceded = clubGoalsAgainst; // se não vier do backend, fica 0
+                                    const savePct = pct(saves, saves + conceded);
 
-                                        {showAdvanced && (
-                                            <>
-                                                <td className="px-3 py-2"><CellBar value={p.passAccuracyPercent} max={100} suffix="%" positive format={(v) => p1.format(v)} /></td>
-                                                <td className="px-3 py-2"><CellBar value={p.tackleSuccessPercent} max={100} suffix="%" positive format={(v) => p1.format(v)} /></td>
-                                                <td className="px-3 py-2"><CellBar value={p.goalAccuracyPercent} max={100} suffix="%" positive format={(v) => p1.format(v)} /></td>
-                                            </>
-                                        )}
-                                    </tr>
-                                ))}
+                                    return (
+                                        <tr key={p.playerId} className="hover:bg-gray-50">
+                                            <td className="px-3 py-2 font-medium text-left sticky left-0 bg-white/95 backdrop-blur support:bg-white">{p.playerName}</td>
+                                            <td className="px-3 py-2">{int.format(p.matchesPlayed)}</td>
+                                            <td className="px-3 py-2">
+                                                <CellBar value={p.totalGoals} max={maxByKey.get("totalGoals") || 1} format={(v) => int.format(v)} />
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <CellBar value={p.totalAssists} max={maxByKey.get("totalAssists") || 1} format={(v) => int.format(v)} />
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                {int.format(p.totalShots)} / {p1.format(p.goalAccuracyPercent)}%
+                                            </td>
+
+                                            {/* NOVO: Defesas (S/Gc) + barra de % baseada em gols sofridos do clube */}
+                                            <td className="px-3 py-2">
+                                                {int.format(saves)} / {int.format(conceded)}
+                                                <div className="mt-1">
+                                                    <CellBar value={savePct} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                                                </div>
+                                            </td>
+
+                                            <td className="px-3 py-2">
+                                                {int.format(p.totalPassesMade)} / {int.format(p.totalPassAttempts)}
+                                                <div className="mt-1">
+                                                    <CellBar value={pct(p.totalPassesMade, p.totalPassAttempts)} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                {int.format(p.totalTacklesMade)} / {int.format(p.totalTackleAttempts)}
+                                                <div className="mt-1">
+                                                    <CellBar value={pct(p.totalTacklesMade, p.totalTackleAttempts)} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2">{int.format(p.totalWins)}</td>
+                                            <td className="px-3 py-2">{int.format(p.totalLosses)}</td>
+                                            <td className="px-3 py-2">{int.format(p.totalDraws)}</td>
+                                            <td className="px-3 py-2">
+                                                <CellBar value={p.winPercent} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                                            </td>
+                                            <td className="px-3 py-2">{int.format(p.totalRedCards)}</td>
+                                            <td className="px-3 py-2">{int.format(p.totalMom)}</td>
+                                            <td className="px-3 py-2">{p2.format(Number(p.avgRating || 0))}</td>
+                                        </tr>
+                                    );
+                                })}
                         </tbody>
                     </table>
                 </div>
@@ -494,11 +507,17 @@ export default function PlayerStatisticsPage() {
 // ========================
 // Célula com barra visual
 // ========================
-function CellBar({ value, max, suffix = "", positive = false, format = (n: number) => String(n) }: {
+function CellBar({
+    value,
+    max,
+    suffix = "",
+    positive = false,
+    format = (n: number) => String(n),
+}: {
     value: number;
     max: number;
     suffix?: string;
-    positive?: boolean; // se true, pinta a barra em verde
+    positive?: boolean;
     format?: (n: number) => string;
 }) {
     const width = clamp((value / (max || 1)) * 100);
@@ -509,7 +528,8 @@ function CellBar({ value, max, suffix = "", positive = false, format = (n: numbe
                 style={{ width: `${width}%` }}
             />
             <div className="absolute inset-0 grid place-items-center text-xs font-medium">
-                {format(value)}{suffix}
+                {format(value)}
+                {suffix}
             </div>
         </div>
     );
