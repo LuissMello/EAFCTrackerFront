@@ -166,11 +166,28 @@ interface ClubOverallRow {
     updatedAtUtc?: string | null;
 }
 
+// >>> NOVOS TIPOS (vêm do endpoint atualizado) <<<
+interface PlayoffAchievementDto {
+    seasonId: string;
+    seasonName?: string | null;
+    bestDivision?: string | null;
+    bestFinishGroup?: string | null;
+    retrievedAtUtc?: string | null;
+    updatedAtUtc?: string | null;
+}
+
+interface ClubPlayoffAchievementDto {
+    clubId: number;
+    achievements: PlayoffAchievementDto[];
+}
+
 interface FullMatchStatisticsDto {
     overall: OverallRow;
     players: PlayerRow[];
     clubs: ClubRow[];
     clubsOverall?: ClubOverallRow[];
+    // >>> NOVO: histórico de playoffs por clube <<<
+    clubsPlayoffAchievements?: ClubPlayoffAchievementDto[];
 }
 
 // ======================
@@ -365,6 +382,7 @@ export default function MatchDetails() {
     const players = stats?.players ?? [];
     const clubs = stats?.clubs ?? [];
     const clubsOverall = stats?.clubsOverall ?? [];
+    const playoffBlocks = stats?.clubsPlayoffAchievements ?? [];
 
     // mapa de overall por clubId
     const overallByClub = useMemo(() => {
@@ -372,6 +390,15 @@ export default function MatchDetails() {
         for (const o of clubsOverall) m.set(o.clubId, o);
         return m;
     }, [clubsOverall]);
+
+    // mapa de playoffs por clubId
+    const playoffsByClub = useMemo(() => {
+        const m = new Map<number, PlayoffAchievementDto[]>();
+        for (const block of playoffBlocks) {
+            m.set(block.clubId, block.achievements ?? []);
+        }
+        return m;
+    }, [playoffBlocks]);
 
     // Ordena clubes mantendo o selecionado à esquerda
     const orderedClubs = useMemo(() => {
@@ -644,6 +671,10 @@ export default function MatchDetails() {
                             const hpNum = Number(highestKey);
                             const hpPct = Number.isFinite(hpNum) ? ((6 - hpNum) / 5) * 100 : 0;
 
+                            // playoffs do clube
+                            const playoffs = (playoffsByClub.get(c.clubId) ?? [])
+                                .slice(0, 20); // limite visual
+
                             return (
                                 <div key={c.clubId} className="rounded-lg border p-3">
                                     <div className="flex items-center justify-between">
@@ -742,6 +773,48 @@ export default function MatchDetails() {
                                             <div className="text-gray-500">Rebaixamentos</div>
                                             <div className="font-semibold">{toNum(o?.relegations)}</div>
                                         </div>
+                                        <div className="p-2 rounded border">
+                                            <div className="text-gray-500">Win Streak</div>
+                                            <div className="font-semibold">{toNum(o?.wstreak)}</div>
+                                        </div>
+
+                                        {/* ===== NOVO BLOCO: Histórico de Playoffs (col-span-2) ===== */}
+                                        <div className="p-2 rounded border col-span-2">
+                                            <div className="text-gray-500 mb-1">Histórico de Playoffs</div>
+
+                                            {playoffs.length === 0 ? (
+                                                <div className="text-xs text-gray-600">Sem temporadas concluídas.</div>
+                                            ) : (
+                                                <div className="flex items-stretch gap-3 overflow-x-auto pb-1">
+                                                    {playoffs.map((p) => {
+                                                        const crest = divisionCrestUrl(p.bestDivision) ?? FALLBACK_LOGO;
+                                                        const hpKey = asNonNegativeIntString(p.bestFinishGroup) ?? "";
+                                                        const hpLabel = HIGHEST_PLACEMENT_LABELS[hpKey] ?? (p.bestFinishGroup ?? "–");
+                                                        return (
+                                                            <div
+                                                                key={`${p.seasonId}-${p.bestDivision}-${p.bestFinishGroup}`}
+                                                                className="min-w-[72px] px-2 py-1 border rounded-lg bg-white flex flex-col items-center text-center"
+                                                                title={`${p.seasonName ?? p.seasonId ?? ""} • ${hpLabel}`}
+                                                            >
+                                                                <img
+                                                                    src={crest}
+                                                                    onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
+                                                                    alt={`Divisão ${p.bestDivision ?? ""}`}
+                                                                    className="w-10 h-10 object-contain"
+                                                                />
+                                                                <div className="mt-1 text-[11px] leading-tight font-medium">
+                                                                    {hpLabel}
+                                                                </div>
+                                                                <div className="text-[10px] text-gray-500">
+                                                                    {p.seasonName ?? p.seasonId}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* ===== FIM NOVO BLOCO ===== */}
                                     </div>
                                 </div>
                             );
