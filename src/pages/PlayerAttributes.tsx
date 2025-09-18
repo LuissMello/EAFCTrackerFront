@@ -331,31 +331,56 @@ export default function PlayerAttributesPage() {
                                 {(Object.keys(ATTR_LABELS) as (keyof PlayerMatchStats)[]).map((key) => {
                                     const mine = clamp01to100(Number((base?.statistics as any)?.[key] ?? 0));
                                     const other = clamp01to100(Number((compare as any)?.[key] ?? 0));
-                                    const better = mine >= other;
+
+                                    // tolerância para considerar "igual"
+                                    const EPS = 0.5; // 0.5 ponto ~ ajuste se quiser mais/menos rígido
+                                    const diff = Number(mine - other);
+                                    const isEqual = Math.abs(diff) <= EPS;
+                                    const isAbove = diff > EPS;
+                                    const isBelow = diff < -EPS;
+
+                                    const badgeClass = isEqual
+                                        ? "bg-blue-100 text-blue-800"
+                                        : isAbove
+                                            ? "bg-emerald-100 text-emerald-800"
+                                            : "bg-rose-100 text-rose-800";
+
+                                    const badgeText = isEqual ? "Igual" : isAbove ? "Acima" : "Abaixo";
+
+                                    // Mostra o delta com sinal (ex.: +3 / -2)
+                                    const deltaText =
+                                        (isEqual ? "±0" : `${diff > 0 ? "+" : ""}${Math.round(diff)}`) + "";
+
                                     return (
                                         <div key={String(key)} className="rounded-xl border p-3">
                                             <div className="flex items-center justify-between text-sm">
-                                                <span className="font-medium text-gray-800">{ATTR_LABELS[key]}</span>
-                                                <span
-                                                    className={`text-xs px-2 py-0.5 rounded-full ${better ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-700"
-                                                        }`}
-                                                >
-                                                    {better ? "Acima / =" : "Abaixo"}
+                                                <span className="font-medium text-gray-800">
+                                                    {ATTR_LABELS[key]}
+                                                </span>
+                                                <span className={`text-xs px-2 py-0.5 rounded-full ${badgeClass}`}>
+                                                    {badgeText} <span className="opacity-70">({deltaText})</span>
                                                 </span>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-gray-500">Base: {Math.round(mine)}</div>
+                                                <div className="text-[11px] text-gray-500">
+                                                    Base: {Math.round(mine)}
+                                                </div>
                                                 <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
                                                     <div className="h-2 bg-blue-600" style={{ width: `${mine}%` }} />
                                                 </div>
                                             </div>
+
                                             <div className="mt-2">
                                                 <div className="text-[11px] text-gray-500">
-                                                    {compareMode === "media" ? "Clube (média)" : "Comparação"}: {Math.round(other)}
+                                                    {compareMode === "media" ? "Clube (média)" : "Comparação"}:{" "}
+                                                    {Math.round(other)}
                                                 </div>
                                                 <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
-                                                    <div className="h-2 bg-slate-500" style={{ width: `${other}%` }} />
+                                                    <div
+                                                        className="h-2 bg-slate-500"
+                                                        style={{ width: `${other}%` }}
+                                                    />
                                                 </div>
                                             </div>
                                         </div>
@@ -364,9 +389,12 @@ export default function PlayerAttributesPage() {
                             </div>
                         ) : (
                             <div className="text-sm text-gray-600">
-                                {compareMode === "player" ? "Selecione um jogador para comparar." : "Sem dados para média."}
+                                {compareMode === "player"
+                                    ? "Selecione um jogador para comparar."
+                                    : "Sem dados para média."}
                             </div>
                         )}
+
                     </Card>
                 </div>
             </Card>
