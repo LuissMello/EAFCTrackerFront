@@ -5,6 +5,7 @@ import PlayerStats from "./pages/PlayerStats.tsx";
 import GlobalStats from "./pages/GlobalStats.tsx";
 import Calendar from "./pages/Calendar.tsx";
 import Trends from "./pages/Trends.tsx";
+import PlayerAttributes from "./pages/PlayerAttributes.tsx";
 import ClubPicker from "./components/ClubPicker.tsx";
 import { ClubProvider } from "./hooks/useClub.tsx";
 
@@ -15,6 +16,7 @@ function Navbar() {
             <Link className="font-bold" to="/stats">Estatísticas</Link>
             <Link className="font-bold" to="/calendar">Calendário</Link>
             <Link className="font-bold" to="/trends">Trends</Link>
+            <Link className="font-bold" to="/attributes">Atributos</Link>
 
             <div className="ml-auto flex items-center gap-2">
                 <ClubPicker />
@@ -36,6 +38,7 @@ export default function App() {
                         <Route path="/stats" element={<GlobalStats />} />
                         <Route path="/calendar" element={<Calendar />} />
                         <Route path="/trends" element={<Trends />} />
+                        <Route path="/attributes" element={<PlayerAttributes />} />
                     </Routes>
                 </div>
             </ClubProvider>
