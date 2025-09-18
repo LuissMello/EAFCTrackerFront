@@ -31,6 +31,7 @@ type PlayerAttrRow = {
     playerId: number;
     playerName: string;
     clubId: number;
+    pos?: string | null;
     statistics: PlayerMatchStats | null;
 };
 
@@ -71,6 +72,12 @@ const ATTR_LABELS: Record<keyof PlayerMatchStats, string> = {
     reflexosGL: "REFLEXOS (GL)",
     posGL: "POSICIONAMENTO (GL)",
 };
+
+function isGk(pos?: string | null) {
+    if (!pos) return false;
+    const p = pos.trim().toLowerCase();
+    return p === "gk" || p === "gol" || p === "goalkeeper" || p === "goleiro";
+}
 
 /******** UI atômicos ********/
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
@@ -145,6 +152,7 @@ export default function PlayerAttributesPage() {
                     playerId: Number(pick(row, "playerId", "PlayerId")),
                     playerName: String(pick(row, "playerName", "PlayerName") ?? ""),
                     clubId: Number(pick(row, "clubId", "ClubId") ?? 0),
+                    pos: pick<string>(row, "pos", "Pos") ?? null, 
                     statistics: mapAttr(pick(row, "statistics", "Statistics")),
                 }));
 
@@ -171,7 +179,15 @@ export default function PlayerAttributesPage() {
 
     const teamAverage = useMemo(() => {
         if (rows.length === 0) return null;
-        const statsAll = rows.map((r) => r.statistics).filter(Boolean) as PlayerMatchStats[];
+
+        // desconsidera goleiros por garantia
+        const fieldPlayers = rows.filter(r => !isGk(r.pos));
+        const statsAll = fieldPlayers
+            .map((r) => r.statistics)
+            .filter(Boolean) as PlayerMatchStats[];
+
+        if (statsAll.length === 0) return null;
+
         const keys = Object.keys(ATTR_LABELS) as (keyof PlayerMatchStats)[];
         const avg: Record<string, number> = {};
         keys.forEach((k) => {
