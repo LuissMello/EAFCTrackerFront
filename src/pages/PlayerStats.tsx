@@ -212,12 +212,8 @@ function StatTile({
       </div>
     </div>
   );
-  
-  return hint ? (
-    <Tooltip content={hint}>{tileContent}</Tooltip>
-  ) : (
-    tileContent
-  );
+
+  return hint ? <Tooltip content={hint}>{tileContent}</Tooltip> : tileContent;
 }
 
 function ProgressBar({ value, label }: { value: number; label: string }) {
@@ -605,6 +601,10 @@ export default function PlayerStatsPage() {
   const shotToGoalConv = calculateShotToGoalConversion(player.goals, player.shots);
   const tackleSuccessPct = player.tackleAttempts > 0 ? (player.tacklesMade / player.tackleAttempts) * 100 : 0;
 
+  // ? Calculate save percentage for goalkeepers
+  const savePct =
+    GK && player.saves + player.goalsConceded > 0 ? (player.saves / (player.saves + player.goalsConceded)) * 100 : 0;
+
   return (
     <div className="p-4 max-w-6xl mx-auto">
       {/* Header */}
@@ -647,6 +647,9 @@ export default function PlayerStatsPage() {
           <StatTile label="Desarmes tentados" value={fmtNum(player.tackleAttempts)} />
           {GK && <StatTile label="Defesas" value={fmtNum(player.saves)} />}
           {GK && <StatTile label="Gols sofridos" value={fmtNum(player.goalsConceded)} />}
+          {GK && savePct > 0 && (
+            <StatTile label="% de defesas" value={fmtPct(savePct)} statType="savePercentage" rawValue={savePct} />
+          )}
           <StatTile label="Nota" value={Number.isFinite(player.rating) ? Number(player.rating).toFixed(2) : "0.00"} />
           <StatTile label="Cartões vermelhos" value={fmtNum(player.redCards)} />
           <StatTile label="Score" value={fmtNum(player.score)} />

@@ -58,6 +58,12 @@ const STAT_THRESHOLDS: Record<string, StatThresholds> = {
     good: 70,
     veryGood: 70,
   },
+  savePercentage: {
+    poor: 50,
+    decent: 60,
+    good: 70,
+    veryGood: 80,
+  },
 };
 
 // ? Color scheme

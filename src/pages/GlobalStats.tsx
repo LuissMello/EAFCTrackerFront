@@ -616,7 +616,14 @@ export default function PlayerStatisticsPage() {
                       <td className="px-3 py-2">
                         {int.format(saves)} / {int.format(conceded)}
                         <div className="mt-1">
-                          <CellBar value={savePct} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                          <CellBar 
+                            value={savePct} 
+                            max={100} 
+                            suffix="%" 
+                            positive 
+                            format={(v) => p1.format(v)}
+                            statType="savePercentage"
+                          />
                         </div>
                       </td>
                       <td className="px-3 py-2">
