@@ -55,8 +55,8 @@ const STAT_THRESHOLDS: Record<string, StatThresholds> = {
   winRate: {
     poor: 30,
     decent: 50,
-    good: 70,
-    veryGood: 70,
+    good: 60,
+    veryGood: 75,
   },
   savePercentage: {
     poor: 50,
@@ -109,4 +109,48 @@ export function classifyStat(statType: string, value: number): QualityInfo | nul
 export function calculateShotToGoalConversion(goals: number, shots: number): number {
   if (!shots || shots === 0) return 0;
   return (goals / shots) * 100;
+}
+
+// ? Get detailed quality information with tier distances
+export function getStatQualityDetails(statType: string, value: number): string | null {
+  const thresholds = STAT_THRESHOLDS[statType];
+  const quality = classifyStat(statType, value);
+
+  if (!thresholds || !quality || !Number.isFinite(value)) return null;
+
+  const statNames: Record<string, string> = {
+    shotToGoalConversion: "Conversão de chutes",
+    shotsOnTarget: "Chutes no gol",
+    passCompletion: "Precisão de passe",
+    goalsPerMatch: "Gols por partida",
+    tackleDuelWin: "Sucesso nos desarmes",
+    teamPossession: "Posse de bola",
+    winRate: "Taxa de vitória",
+    savePercentage: "% de defesas",
+  };
+
+  const statName = statNames[statType] || statType;
+  const lines: string[] = [`${statName}: ${value.toFixed(1)}% (${quality.label})`];
+
+  // ? Find next tier
+  if (quality.level !== "veryGood") {
+    const nextThreshold =
+      quality.level === "poor" ? thresholds.decent : quality.level === "decent" ? thresholds.good : thresholds.veryGood;
+    const nextLabel = quality.level === "poor" ? "Razoável" : quality.level === "decent" ? "Bom" : "Excelente";
+    const diff = nextThreshold - value;
+    lines.push(`↑ Próximo nível (${nextLabel}): +${diff.toFixed(1)}%`);
+  } else {
+    lines.push("✓ Nível máximo alcançado!");
+  }
+
+  // ? Find previous tier
+  if (quality.level !== "poor") {
+    const prevThreshold =
+      quality.level === "veryGood" ? thresholds.good : quality.level === "good" ? thresholds.decent : thresholds.poor;
+    const prevLabel = quality.level === "veryGood" ? "Bom" : quality.level === "good" ? "Razoável" : "Ruim";
+    const diff = value - prevThreshold;
+    lines.push(`↓ Nível anterior (${prevLabel}): -${diff.toFixed(1)}%`);
+  }
+
+  return lines.join("\n");
 }

@@ -4,7 +4,7 @@ import api from "../services/api.ts";
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js";
 import { Bar } from "react-chartjs-2";
 import { useClub } from "../hooks/useClub.tsx";
-import { classifyStat } from "../utils/statClassifier.ts";
+import { classifyStat, getStatQualityDetails } from "../utils/statClassifier.ts";
 import { StatWithQuality } from "../components/StatQualityIndicator.tsx";
 import { Tooltip as CustomTooltip } from "../components/Tooltip.tsx";
 
@@ -1121,6 +1121,8 @@ export default function MatchDetails() {
                           <StatWithQuality
                             value={fmt(p.goalAccuracyPercent)}
                             quality={classifyStat("shotToGoalConversion", p.goalAccuracyPercent)}
+                            statType="shotToGoalConversion"
+                            rawValue={p.goalAccuracyPercent}
                           />
                         </span>
                       </div>
@@ -1134,6 +1136,8 @@ export default function MatchDetails() {
                           <StatWithQuality
                             value={fmt(p.passAccuracyPercent)}
                             quality={classifyStat("passCompletion", p.passAccuracyPercent)}
+                            statType="passCompletion"
+                            rawValue={p.passAccuracyPercent}
                           />
                         </span>
                       </div>
@@ -1147,6 +1151,8 @@ export default function MatchDetails() {
                           <StatWithQuality
                             value={fmt(p.tackleSuccessPercent)}
                             quality={classifyStat("tackleDuelWin", p.tackleSuccessPercent)}
+                            statType="tackleDuelWin"
+                            rawValue={p.tackleSuccessPercent}
                           />
                         </span>
                       </div>
@@ -1228,6 +1234,8 @@ export default function MatchDetails() {
                           <StatWithQuality
                             value={fmt(p.goalAccuracyPercent)}
                             quality={classifyStat("shotToGoalConversion", p.goalAccuracyPercent)}
+                            statType="shotToGoalConversion"
+                            rawValue={p.goalAccuracyPercent}
                           />
                         </td>
                         <td className="p-2 tabular-nums">{p.totalPassesMade}</td>
@@ -1236,6 +1244,8 @@ export default function MatchDetails() {
                           <StatWithQuality
                             value={fmt(p.passAccuracyPercent)}
                             quality={classifyStat("passCompletion", p.passAccuracyPercent)}
+                            statType="passCompletion"
+                            rawValue={p.passAccuracyPercent}
                           />
                         </td>
                         <td className="p-2 tabular-nums">{p.totalTacklesMade}</td>
@@ -1244,6 +1254,8 @@ export default function MatchDetails() {
                           <StatWithQuality
                             value={fmt(p.tackleSuccessPercent)}
                             quality={classifyStat("tackleDuelWin", p.tackleSuccessPercent)}
+                            statType="tackleDuelWin"
+                            rawValue={p.tackleSuccessPercent}
                           />
                         </td>
                         <td className="p-2 tabular-nums">{p.totalCleanSheets ?? 0}</td>

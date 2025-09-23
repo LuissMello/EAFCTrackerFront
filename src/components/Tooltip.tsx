@@ -8,6 +8,7 @@ interface TooltipProps {
   hideDelay?: number; // ? default: 0ms
   position?: "top" | "bottom" | "left" | "right"; // ? default: 'top'
   className?: string;
+  wrapperClassName?: string; // ? for customizing the wrapper div
 }
 
 interface TooltipPosition {
@@ -22,6 +23,7 @@ export function Tooltip({
   hideDelay = 0,
   position = "top",
   className = "",
+  wrapperClassName,
 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
@@ -178,7 +180,7 @@ export function Tooltip({
 
   const tooltipClasses = `
     fixed z-[9999] px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded shadow-lg
-    pointer-events-none whitespace-nowrap
+    pointer-events-none whitespace-pre-line
     transition-[opacity,transform] duration-150 ease-out transform-gpu
     ${isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95"}
     ${className}
@@ -186,7 +188,12 @@ export function Tooltip({
 
   return (
     <>
-      <div ref={targetRef} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} className="inline-block">
+      <div 
+        ref={targetRef} 
+        onMouseEnter={handleMouseEnter} 
+        onMouseLeave={handleMouseLeave} 
+        className={wrapperClassName || "inline-block"}
+      >
         {children}
       </div>
       {typeof document !== "undefined" &&

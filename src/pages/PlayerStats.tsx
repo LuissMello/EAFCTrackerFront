@@ -208,7 +208,7 @@ function StatTile({
     <div className="rounded-2xl border bg-white p-3 shadow-sm hover:shadow transition-shadow">
       <div className="text-xs text-gray-500">{label}</div>
       <div className="mt-1 text-lg font-semibold text-gray-900">
-        {quality ? <StatWithQuality value={value} quality={quality} /> : value}
+        {quality ? <StatWithQuality value={value} quality={quality} statType={statType} rawValue={rawValue} /> : value}
       </div>
     </div>
   );

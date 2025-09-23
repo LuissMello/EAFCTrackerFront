@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
-import { classifyStat } from "../utils/statClassifier.ts";
+import { classifyStat, getStatQualityDetails } from "../utils/statClassifier.ts";
 import { StatQualityIndicator } from "../components/StatQualityIndicator.tsx";
 import { Tooltip } from "../components/Tooltip.tsx";
 
@@ -106,7 +106,7 @@ function StatCard({
       <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
       <div className="text-2xl font-semibold leading-tight flex items-center gap-2">
         {value}
-        {quality && <StatQualityIndicator quality={quality} size="medium" />}
+        {quality && <StatQualityIndicator quality={quality} size="medium" statType={statType} value={rawValue} />}
       </div>
       {sub ? <div className="text-xs text-gray-500">{sub}</div> : null}
     </div>
@@ -739,7 +739,7 @@ function CellBar({
     barColor = qualityColors[quality.level];
   }
 
-  return (
+  const cellBarContent = (
     <div className="relative w-full h-6 rounded-md border border-gray-200 overflow-hidden bg-gray-50">
       <div className={`h-full ${barColor}`} style={{ width: `${width}%` }} />
       <div className="absolute inset-0 grid place-items-center text-xs font-medium">
@@ -747,5 +747,16 @@ function CellBar({
         {suffix}
       </div>
     </div>
+  );
+  
+  return statType ? (
+    <Tooltip 
+      content={getStatQualityDetails(statType, value) || `${format(value)}${suffix}`}
+      wrapperClassName="block"
+    >
+      {cellBarContent}
+    </Tooltip>
+  ) : (
+    cellBarContent
   );
 }

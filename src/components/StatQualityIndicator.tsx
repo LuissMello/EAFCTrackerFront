@@ -1,14 +1,22 @@
 import React from "react";
-import { QualityInfo } from "../utils/statClassifier";
+import { QualityInfo, getStatQualityDetails } from "../utils/statClassifier.ts";
 import { Tooltip } from "./Tooltip.tsx";
 
 interface StatQualityIndicatorProps {
   quality: QualityInfo | null;
   size?: "small" | "medium" | "large";
   showLabel?: boolean;
+  statType?: string;
+  value?: number;
 }
 
-export function StatQualityIndicator({ quality, size = "small", showLabel = false }: StatQualityIndicatorProps) {
+export function StatQualityIndicator({
+  quality,
+  size = "small",
+  showLabel = false,
+  statType,
+  value,
+}: StatQualityIndicatorProps) {
   if (!quality) return null;
 
   const sizeClasses = {
@@ -26,7 +34,11 @@ export function StatQualityIndicator({ quality, size = "small", showLabel = fals
 
   return (
     <div className="inline-flex items-center gap-1">
-      <Tooltip content={quality.label}>
+      <Tooltip
+        content={
+          statType && value !== undefined ? getStatQualityDetails(statType, value) || quality.label : quality.label
+        }
+      >
         <div className={`rounded-full ${sizeClasses[size]} ${dotColors[quality.level]}`} />
       </Tooltip>
       {showLabel && <span className={`text-xs ${quality.color}`}>{quality.label}</span>}
@@ -39,13 +51,15 @@ interface StatWithQualityProps {
   value: string | React.ReactNode;
   quality: QualityInfo | null;
   className?: string;
+  statType?: string;
+  rawValue?: number;
 }
 
-export function StatWithQuality({ value, quality, className = "" }: StatWithQualityProps) {
+export function StatWithQuality({ value, quality, className = "", statType, rawValue }: StatWithQualityProps) {
   return (
     <div className={`inline-flex items-center gap-1.5 ${className}`}>
       <span>{value}</span>
-      <StatQualityIndicator quality={quality} size="small" />
+      <StatQualityIndicator quality={quality} size="small" statType={statType} value={rawValue} />
     </div>
   );
 }
