@@ -17,10 +17,10 @@ export interface StatThresholds {
 // ? Define stat thresholds
 const STAT_THRESHOLDS: Record<string, StatThresholds> = {
   shotToGoalConversion: {
-    poor: 10,
-    decent: 15,
-    good: 25,
-    veryGood: 35,
+    poor: 15,
+    decent: 25,
+    good: 35,
+    veryGood: 45,
   },
   shotsOnTarget: {
     poor: 40,
@@ -32,7 +32,7 @@ const STAT_THRESHOLDS: Record<string, StatThresholds> = {
     poor: 75,
     decent: 85,
     good: 90,
-    veryGood: 90,
+    veryGood: 95,
   },
   goalsPerMatch: {
     poor: 2.0,
@@ -41,16 +41,16 @@ const STAT_THRESHOLDS: Record<string, StatThresholds> = {
     veryGood: 4.0,
   },
   tackleDuelWin: {
-    poor: 50,
-    decent: 60,
-    good: 70,
-    veryGood: 70,
+    poor: 25,
+    decent: 35,
+    good: 45,
+    veryGood: 55,
   },
   teamPossession: {
     poor: 45,
     decent: 55,
     good: 65,
-    veryGood: 65,
+    veryGood: 70,
   },
   winRate: {
     poor: 30,
@@ -134,10 +134,10 @@ export function getStatQualityDetails(statType: string, value: number): string |
 
   // ? Find next tier
   if (quality.level !== "veryGood") {
-    const nextThreshold =
-      quality.level === "poor" ? thresholds.decent : quality.level === "decent" ? thresholds.good : thresholds.veryGood;
+    const currentThreshold = thresholds[quality.level];
     const nextLabel = quality.level === "poor" ? "Razoável" : quality.level === "decent" ? "Bom" : "Excelente";
-    const diff = nextThreshold - value;
+
+    const diff = currentThreshold - value;
     lines.push(`↑ Próximo nível (${nextLabel}): +${diff.toFixed(1)}%`);
   } else {
     lines.push("✓ Nível máximo alcançado!");
