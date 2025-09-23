@@ -332,8 +332,7 @@ const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ class
 // ======================
 export default function MatchDetails() {
     const { matchId } = useParams();
-    const { club } = useClub();
-    const selectedClubId = club?.clubId ?? null;
+    const { club, selectedClubIds } = useClub();
     const [searchParams, setSearchParams] = useSearchParams();
 
     const [stats, setStats] = useState<FullMatchStatisticsDto | null>(null);
@@ -400,7 +399,30 @@ export default function MatchDetails() {
         return m;
     }, [playoffBlocks]);
 
-    // Ordena clubes mantendo o selecionado à esquerda
+    // >>> DEDUZIR O CLUB SELECIONADO DENTRO DESTE JOGO <<<
+    const selectedClubId = useMemo<number | null>(() => {
+        if (!stats?.clubs?.length) return club?.clubId ?? null;
+
+        // 1) algum id da seleção múltipla que esteja neste jogo
+        for (const id of selectedClubIds) {
+            if (stats.clubs.some(c => c.clubId === id)) return id;
+        }
+
+        // 2) fallback: primeiro do contexto, se estiver no jogo
+        if (club?.clubId && stats.clubs.some(c => c.clubId === club.clubId)) return club.clubId;
+
+        // 3) fallback final: primeiro clube do jogo
+        return stats.clubs[0]?.clubId ?? null;
+    }, [stats?.clubs, selectedClubIds, club?.clubId]);
+
+    // Se não houver selecionado válido, garante que o toggle não fique ligado
+    useEffect(() => {
+        if (!selectedClubId && onlySelectedClubPlayers) {
+            setOnlySelectedClubPlayers(false);
+        }
+    }, [selectedClubId, onlySelectedClubPlayers]);
+
+    // Ordena clubes mantendo o selecionado (do jogo) à esquerda
     const orderedClubs = useMemo(() => {
         if (!selectedClubId || clubs.length < 2) return clubs;
         const idx = clubs.findIndex((c) => c.clubId === selectedClubId);
@@ -425,10 +447,10 @@ export default function MatchDetails() {
     // Identificar goleiro por clube (maior totalSaves > 0; desempate por avgRating e playerId)
     const gkByClub = useMemo(() => {
         const map = new Map<number, PlayerRow | undefined>();
-        for (const club of clubs) {
-            const pClub = players.filter(p => p.clubId === club.clubId && (p.totalSaves ?? 0) > 0);
+        for (const clubRow of clubs) {
+            const pClub = players.filter(p => p.clubId === clubRow.clubId && (p.totalSaves ?? 0) > 0);
             if (pClub.length === 0) {
-                map.set(club.clubId, undefined);
+                map.set(clubRow.clubId, undefined);
             } else {
                 pClub.sort((a, b) => {
                     const sDiff = (b.totalSaves ?? 0) - (a.totalSaves ?? 0);
@@ -437,7 +459,7 @@ export default function MatchDetails() {
                     if (rDiff !== 0) return rDiff;
                     return a.playerId - b.playerId;
                 });
-                map.set(club.clubId, pClub[0]);
+                map.set(clubRow.clubId, pClub[0]);
             }
         }
         return map;

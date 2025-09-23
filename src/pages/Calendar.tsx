@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState, useId, KeyboardEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
 
@@ -95,7 +95,6 @@ function Crest({ id, alt }: { id?: string | null; alt: string }) {
 }
 function Skeleton({ className = "" }: { className?: string }) { return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />; }
 
-// Pequenos adornos visuais no dia (indicadores de jogos)
 function Dots({ count }: { count: number }) {
     const capped = Math.min(4, count);
     return (
@@ -112,16 +111,32 @@ type ViewMode = "monthly" | "weekly";
 
 export default function CalendarPage() {
     const { club } = useClub();
-    const clubId = club?.clubId ?? null;
-    const clubName = club?.clubName ?? "";
+    const [searchParams, setSearchParams] = useSearchParams();
 
-    // Novo: modo de visualização (padrão Mensal)
+    // 🔹 Suporta seleção múltipla via URL (?clubIds=1,2,3) OU um único via context (?clubId)
+    const urlClubIds = searchParams.get("clubIds");
+    const parsedClubIds = useMemo(
+        () => (urlClubIds ? urlClubIds.split(",").map(s => parseInt(s, 10)).filter(n => Number.isFinite(n)) : []),
+        [urlClubIds]
+    );
+    const singleClubId = club?.clubId ?? null;
+    const selectedClubIds = parsedClubIds.length ? parsedClubIds : (singleClubId ? [singleClubId] : []);
+    const hasAnyClub = selectedClubIds.length > 0;
+    const clubKey = hasAnyClub ? selectedClubIds.join(",") : null; // usado como dependência estável
+
+    const clubName = club?.clubName ?? "";
+    const headerLabel = hasAnyClub
+        ? (selectedClubIds.length === 1 ? `${clubName || selectedClubIds[0]} (${selectedClubIds[0]})` : `${selectedClubIds.length} clubes`)
+        : "-";
+
+    // Estado de visualização
     const [viewMode, setViewMode] = useState<ViewMode>("monthly");
 
     // Âncoras de navegação
     const [referenceMonth, setReferenceMonth] = useState<Date>(startOfMonth(new Date()));
     const [referenceWeekStart, setReferenceWeekStart] = useState<Date>(getWeekStart(new Date()));
 
+    // Dados / estados
     const [monthData, setMonthData] = useState<CalendarMonthDto | null>(null);
     const [loadingMonth, setLoadingMonth] = useState(false);
     const [errorMonth, setErrorMonth] = useState<string | null>(null);
@@ -134,11 +149,9 @@ export default function CalendarPage() {
     const [lastActiveButton, setLastActiveButton] = useState<HTMLButtonElement | null>(null);
     const dialogTitleId = useId();
 
-    // Caches simples (evita refetch ao navegar)
     const monthCacheRef = useRef<Record<string, CalendarMonthDto>>({});
     const dayCacheRef = useRef<Record<string, CalendarDayDetailsDto>>({});
 
-    // Altura dinâmica para fazer o calendário CABER na página (desktop e mobile)
     const pageRef = useRef<HTMLDivElement | null>(null);
     const headerRef = useRef<HTMLDivElement | null>(null);
     const legendRef = useRef<HTMLDivElement | null>(null);
@@ -150,13 +163,11 @@ export default function CalendarPage() {
 
     const todayYmd = toYmd(new Date());
 
-    // Cabeçalhos SEG–DOM
     const weekdays = useMemo(() => {
-        const base = new Date(2023, 0, 2); // segunda
+        const base = new Date(2023, 0, 2);
         return Array.from({ length: 7 }, (_, i) => { const d = new Date(base); d.setDate(base.getDate() + i); return ptWeekday.format(d).toUpperCase(); });
     }, []);
 
-    // Grid (Mensal: 6 semanas / Semanal: 7 dias)
     const gridDays = useMemo(() => {
         if (viewMode === "monthly") {
             const start = getGridStart(referenceMonth);
@@ -174,22 +185,20 @@ export default function CalendarPage() {
 
     const isSameMonth = (d: Date, ref: Date) => d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
 
-    // Sempre que trocar de clube OU mês, limpamos estados de erro/dia
     useEffect(() => {
         setErrorMonth(null);
         setSelectedDate(null);
         setDayData(null);
         setErrorDay(null);
-    }, [clubId, year, month1to12]);
+    }, [clubKey, year, month1to12]);
 
-    // Recalcula a altura disponível para o grid (fazendo o calendário caber na viewport)
     useEffect(() => {
         function recompute() {
-            const vh = window.innerHeight; // usa área útil do navegador
+            const vh = window.innerHeight;
             const headerH = headerRef.current?.getBoundingClientRect().height ?? 0;
             const legendH = legendRef.current?.getBoundingClientRect().height ?? 0;
-            const paddingY = 32; // p-4 (top+bottom)
-            const guard = 8; // pequena folga
+            const paddingY = 32;
+            const guard = 8;
             const available = Math.max(280, Math.floor(vh - headerH - legendH - paddingY - guard));
             setGridHeight(available);
         }
@@ -198,19 +207,76 @@ export default function CalendarPage() {
         return () => window.removeEventListener("resize", recompute);
     }, [viewMode]);
 
-    // Buscar mês (com cache) + prefetch meses adjacentes
+    // ===== Ler do URL no mount =====
+    const didInitFromUrlRef = useRef(false);
     useEffect(() => {
-        if (!clubId) return;
+        if (didInitFromUrlRef.current) return;
+        didInitFromUrlRef.current = true;
+
+        const modeParam = searchParams.get("mode");
+        const ymYear = Number(searchParams.get("year"));
+        const ymMonth = Number(searchParams.get("month"));
+        const weekStartParam = searchParams.get("weekStart");
+        const dateParam = searchParams.get("date");
+
+        if (modeParam === "weekly" || modeParam === "monthly") {
+            setViewMode(modeParam);
+        }
+
+        if (modeParam === "weekly" && weekStartParam) {
+            const ws = fromYmd(weekStartParam);
+            const norm = getWeekStart(ws);
+            setReferenceWeekStart(norm);
+            setReferenceMonth(startOfMonth(norm));
+        } else if (Number.isFinite(ymYear) && Number.isFinite(ymMonth) && ymYear && ymMonth) {
+            const m = new Date(ymYear, ymMonth - 1, 1);
+            setReferenceMonth(startOfMonth(m));
+            setReferenceWeekStart(getWeekStart(m));
+        }
+
+        if (dateParam) setSelectedDate(dateParam);
+    }, [searchParams]);
+
+    // ===== Escrever no URL quando estado muda (preservando clubIds / clubId) =====
+    useEffect(() => {
+        const next = new URLSearchParams(searchParams.toString());
+        next.set("mode", viewMode);
+
+        if (viewMode === "monthly") {
+            next.set("year", String(referenceMonth.getFullYear()));
+            next.set("month", String(referenceMonth.getMonth() + 1));
+            next.delete("weekStart");
+        } else {
+            next.set("weekStart", toYmd(referenceWeekStart));
+            next.delete("year");
+            next.delete("month");
+        }
+
+        if (selectedDate) next.set("date", selectedDate);
+        else next.delete("date");
+
+        const prevStr = searchParams.toString();
+        const nextStr = next.toString();
+        if (prevStr !== nextStr) setSearchParams(next, { replace: true });
+    }, [viewMode, referenceMonth, referenceWeekStart, selectedDate, searchParams, setSearchParams]);
+
+    // ===== Buscar mês (com cache) + prefetch =====
+    useEffect(() => {
+        if (!hasAnyClub || !clubKey) return;
         let disposed = false;
 
         async function fetchMonth(y: number, m: number, write = true) {
-            const k = `${y}-${pad(m)}`;
+            const k = `${y}-${pad(m)}|${clubKey}`;
             if (monthCacheRef.current[k]) { if (!disposed && write) setMonthData(monthCacheRef.current[k]); return; }
             if (write) { setLoadingMonth(true); setErrorMonth(null); setMonthData(null); }
             try {
+                const params: any = { year: y, month: m };
+                if (selectedClubIds.length > 1) params.clubIds = clubKey;
+                else params.clubId = selectedClubIds[0];
+
                 const { data } = await api.get<CalendarMonthDto>(
                     "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Calendar",
-                    { params: { year: y, month: m, clubId } }
+                    { params }
                 );
                 monthCacheRef.current[k] = data;
                 if (!disposed && write) setMonthData(data);
@@ -221,30 +287,34 @@ export default function CalendarPage() {
             }
         }
 
-        // mês atual
         fetchMonth(year, month1to12, true);
-        // prefetch anterior e próximo (não altera UI)
         const prev = addMonths(referenceMonth, -1); fetchMonth(prev.getFullYear(), prev.getMonth() + 1, false);
         const next = addMonths(referenceMonth, 1); fetchMonth(next.getFullYear(), next.getMonth() + 1, false);
 
         return () => { disposed = true; };
-    }, [clubId, year, month1to12]);
+    }, [hasAnyClub, clubKey, selectedClubIds, year, month1to12, referenceMonth]);
 
-    // Buscar dia (com cache)
+    // ===== Buscar dia (com cache) =====
     useEffect(() => {
-        if (!selectedDate || !clubId) return;
+        if (!selectedDate || !hasAnyClub || !clubKey) return;
         let disposed = false;
 
         async function run() {
-            const cached = dayCacheRef.current[selectedDate!];
+            const cacheKey = `${selectedDate}|${clubKey}`;
+            const cached = dayCacheRef.current[cacheKey];
             if (cached) { if (!disposed) setDayData(cached); return; }
+
             setLoadingDay(true); setErrorDay(null); setDayData(null);
             try {
+                const params: any = { date: selectedDate };
+                if (selectedClubIds.length > 1) params.clubIds = clubKey;
+                else params.clubId = selectedClubIds[0];
+
                 const { data } = await api.get<CalendarDayDetailsDto>(
                     "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Calendar/day",
-                    { params: { date: selectedDate, clubId } }
+                    { params }
                 );
-                dayCacheRef.current[selectedDate!] = data;
+                dayCacheRef.current[cacheKey] = data;
                 if (!disposed) setDayData(data);
             } catch (err: any) {
                 if (!disposed) setErrorDay(err?.message ?? "Erro ao carregar o dia");
@@ -254,21 +324,31 @@ export default function CalendarPage() {
         }
         run();
         return () => { disposed = true; };
-    }, [selectedDate, clubId]);
+    }, [selectedDate, hasAnyClub, clubKey, selectedClubIds]);
 
-    // Acessibilidade: teclas de atalho e setas para navegar
+    // Navegação por teclado
     function handleKeyNav(e: KeyboardEvent<HTMLDivElement>) {
         if (e.altKey || e.ctrlKey || e.metaKey) return;
         if (e.key === "ArrowLeft") {
             e.preventDefault();
             if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, -1));
-            else { const newStart = addDays(referenceWeekStart, -7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); }
+            else {
+                const newStart = addDays(referenceWeekStart, -7);
+                setReferenceWeekStart(newStart);
+                setReferenceMonth(startOfMonth(newStart));
+            }
         } else if (e.key === "ArrowRight") {
             e.preventDefault();
             if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, 1));
-            else { const newStart = addDays(referenceWeekStart, 7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); }
+            else {
+                const newStart = addDays(referenceWeekStart, 7);
+                setReferenceWeekStart(newStart);
+                setReferenceMonth(startOfMonth(newStart));
+            }
         } else if (e.key.toLowerCase() === "t") {
-            const today = new Date(); setReferenceMonth(startOfMonth(today)); setReferenceWeekStart(getWeekStart(today));
+            const today = new Date();
+            setReferenceMonth(startOfMonth(today));
+            setReferenceWeekStart(getWeekStart(today));
         } else if (e.key.toLowerCase() === "m") {
             setViewMode("monthly");
         } else if (e.key.toLowerCase() === "s") {
@@ -276,11 +356,7 @@ export default function CalendarPage() {
         }
     }
 
-    if (!clubId) {
-        return (<div className="p-4 max-w-6xl mx-auto">Defina um <b>clubId</b> no topo para visualizar o calendário.</div>);
-    }
-
-    // Título dinâmico para a semana
+    // Título da semana
     const weekTitle = useMemo(() => {
         const start = referenceWeekStart; const end = addDays(start, 6);
         const sameMonthYear = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
@@ -288,12 +364,17 @@ export default function CalendarPage() {
         return `${ptDay.format(start)} ${ptMonth.format(start)} ${start.getFullYear()} – ${ptDay.format(end)} ${ptMonth.format(end)} ${end.getFullYear()}`;
     }, [referenceWeekStart]);
 
-    // Heatmap simples por quantidade de jogos
-    function cellTone(count?: number) { if (!count || count <= 0) return ""; if (count >= 4) return "bg-blue-50"; if (count === 3) return "bg-indigo-50"; if (count === 2) return "bg-violet-50"; return "bg-purple-50"; }
+    function cellTone(count?: number) {
+        if (!count || count <= 0) return "";
+        if (count >= 4) return "bg-blue-50";
+        if (count === 3) return "bg-indigo-50";
+        if (count === 2) return "bg-violet-50";
+        return "bg-purple-50";
+    }
 
     const ROWS = viewMode === "monthly" ? 6 : 1;
-    const rowGapPx = (ROWS - 1) * 8; // gap-2 (8px)
-    const minRow = viewMode === "monthly" ? 56 : 88; // altura mínima segura
+    const rowGapPx = (ROWS - 1) * 8;
+    const minRow = viewMode === "monthly" ? 56 : 88;
     const rowHeight = Math.max(minRow, Math.floor((gridHeight - rowGapPx) / ROWS));
 
     return (
@@ -308,9 +389,10 @@ export default function CalendarPage() {
                     <h1 className="text-2xl font-bold ml-2">{viewMode === "monthly" ? `${ptMonth.format(referenceMonth)} de ${referenceMonth.getFullYear()}` : `Semana: ${weekTitle}`}</h1>
                 </div>
 
-                {/* Toggle Mensal / Semanal */}
                 <div className="flex items-center gap-3">
-                    <div className="text-sm text-gray-600">Clube atual: <span className="font-semibold">{clubName ? `${clubName} (${clubId})` : clubId}</span></div>
+                    <div className="text-sm text-gray-600">
+                        Clube atual: <span className="font-semibold">{headerLabel}</span>
+                    </div>
                     <div role="tablist" aria-label="Modo de visualização" className="inline-flex rounded-lg border overflow-hidden">
                         <button role="tab" aria-selected={viewMode === "monthly"} onClick={() => setViewMode("monthly")} className={`px-3 py-1.5 text-sm ${viewMode === "monthly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>Mensal</button>
                         <button role="tab" aria-selected={viewMode === "weekly"} onClick={() => setViewMode("weekly")} className={`px-3 py-1.5 text-sm border-l ${viewMode === "weekly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>Semanal</button>
@@ -318,8 +400,15 @@ export default function CalendarPage() {
                 </div>
             </div>
 
+            {/* Aviso quando não há clube definido */}
+            {!hasAnyClub && (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
+                    Defina um <b>clubId</b> ou <b>clubIds</b> no topo para visualizar o calendário.
+                </div>
+            )}
+
             {/* Legenda/ajuda */}
-            <div ref={legendRef} className="flex items-center gap-3 text-xs text-gray-600 mb-2">
+            <div ref={legendRef} className="flex items-center gap-3 text-xs text-gray-600 mt-3 mb-2">
                 <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400/70" />Partidas no dia</span>
                 <span className="px-1 rounded bg-green-100 text-green-700">V</span>
                 <span className="px-1 rounded bg-yellow-100 text-yellow-700">E</span>
@@ -332,14 +421,14 @@ export default function CalendarPage() {
                 {weekdays.map((w) => (<div key={w} className="text-[11px] sm:text-xs font-semibold text-gray-600 uppercase tracking-wide">{w}</div>))}
             </div>
 
-            {/* Grid (Mensal ou Semanal) - ajusta para caber na viewport */}
+            {/* Grid */}
             <div role="grid" aria-label={viewMode === "monthly" ? "Calendário mensal" : "Calendário semanal"} className="grid grid-cols-7 gap-2" style={{ height: gridHeight, gridAutoRows: `${rowHeight}px` }}>
                 {gridDays.map((d) => {
                     const ymd = toYmd(d);
                     const summary = summaryByDate[ymd];
                     const inMonth = isSameMonth(d, referenceMonth);
                     const isToday = ymd === todayYmd;
-                    const disabled = !summary;
+                    const disabled = !summary || !hasAnyClub;
 
                     return (
                         <button
@@ -358,7 +447,6 @@ export default function CalendarPage() {
                             aria-label={`${ptDay.format(d)} ${ptMonth.format(d)} - ${summary ? `${summary.matchesCount} jogo(s)` : "sem jogos"}`}
                             title={summary ? `${summary.matchesCount} jogo(s)` : "Sem jogos"}
                         >
-                            {/* Cabeçalho do dia */}
                             <div className="flex items-start justify-between min-w-0">
                                 <span className={`font-semibold ${inMonth ? "text-gray-900" : "text-gray-400"} text-xs sm:text-sm`}>
                                     {ptDay.format(d)}{isToday ? " • hoje" : ""}
@@ -366,10 +454,8 @@ export default function CalendarPage() {
                                 {loadingMonth && !monthData && <Skeleton className="w-6 sm:w-8 h-3 sm:h-4" />}
                             </div>
 
-                            {/* CONTEÚDO */}
-                            {summary && (
+                            {summary && hasAnyClub && (
                                 <div className="flex-1 flex items-center justify-center">
-                                    {/* Mobile (compacto) */}
                                     <div className="sm:hidden text-[10px] text-gray-700 leading-3 text-center">
                                         <div className="font-medium">{summary.matchesCount} jogo(s)</div>
                                         <div className="mt-1 flex items-center justify-center gap-1">
@@ -379,7 +465,6 @@ export default function CalendarPage() {
                                         </div>
                                     </div>
 
-                                    {/* ≥ sm (completo) */}
                                     <div className="hidden sm:block text-[11px] text-gray-700 text-center">
                                         <div className="text-xs">{summary.matchesCount} jogo(s)</div>
                                         <div className="mt-1 flex items-center justify-center gap-1">
@@ -402,7 +487,7 @@ export default function CalendarPage() {
             {errorMonth && (
                 <div className="mt-4 p-3 bg-red-50 text-red-700 rounded border border-red-200 flex items-center justify-between">
                     <span>{errorMonth}</span>
-                    <button className="px-2 py-1 text-sm rounded border" onClick={() => { /* força refetch limpando cache do mês atual */ delete monthCacheRef.current[monthKey]; setReferenceMonth(new Date(referenceMonth)); }}>
+                    <button className="px-2 py-1 text-sm rounded border" onClick={() => { delete monthCacheRef.current[monthKey]; setReferenceMonth(new Date(referenceMonth)); }}>
                         Tentar novamente
                     </button>
                 </div>
@@ -436,7 +521,7 @@ export default function CalendarPage() {
                         {errorDay && (
                             <div className="p-3 bg-red-50 text-red-700 rounded border border-red-200 flex items-center justify-between">
                                 <span>{errorDay}</span>
-                                <button className="px-2 py-1 text-sm rounded border" onClick={() => { if (!selectedDate) return; delete dayCacheRef.current[selectedDate]; setDayData(null); setSelectedDate(selectedDate); }}>
+                                <button className="px-2 py-1 text-sm rounded border" onClick={() => { if (!selectedDate) return; const cacheKey = `${selectedDate}|${clubKey}`; delete dayCacheRef.current[cacheKey]; setDayData(null); setSelectedDate(selectedDate); }}>
                                     Tentar novamente
                                 </button>
                             </div>

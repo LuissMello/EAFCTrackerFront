@@ -1,10 +1,11 @@
+// src/pages/PlayerStatisticsPage.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
+import MultiClubPicker from "../components/MultiClubPicker.tsx";
 
-// ========================
-// Tipos
-// ========================
+/* Tipos (iguais aos seus) */
 interface PlayerStats {
     playerId: number;
     playerName: string;
@@ -55,14 +56,10 @@ interface ClubStats {
     winPercent: number;
     passAccuracyPercent: number;
     goalAccuracyPercent: number;
-
-    // NOVO: gols sofridos pelo clube (para % de defesa)
     totalGoalsAgainst?: number;
 }
 
-// ========================
-// Utilitários
-// ========================
+/* Utils */
 const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);
 const clamp = (v: number, min = 0, max = 100) => Math.max(min, Math.min(max, v));
 
@@ -92,13 +89,20 @@ function StatCard({ label, value, sub }: { label: string; value: React.ReactNode
     );
 }
 
-// ========================
-// Página
-// ========================
 export default function PlayerStatisticsPage() {
     const { club } = useClub();
-    const clubId = club?.clubId;
-    const clubName = club?.clubName;
+    const fallbackClubId = club?.clubId ?? null;
+
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Lê os clubIds da URL (?clubIds=1,2,3). Se não houver, usa clubId único (back-compat).
+    const groupClubIds = useMemo(() => {
+        const raw = searchParams.get("clubIds");
+        if (raw && raw.trim().length) {
+            return raw.split(",").map(s => parseInt(s, 10)).filter(n => !Number.isNaN(n));
+        }
+        return fallbackClubId ? [fallbackClubId] : [];
+    }, [searchParams, fallbackClubId]);
 
     // estado
     const [players, setPlayers] = useState<PlayerStats[]>([]);
@@ -107,13 +111,12 @@ export default function PlayerStatisticsPage() {
     const [fetching, setFetching] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // preferências (persistem)
+    // preferências
     const [matchCount, setMatchCount] = useState<number>(() => Number(localStorage.getItem("psp.matchCount")) || 10);
     const [minMatches, setMinMatches] = useState<number>(() => Number(localStorage.getItem("psp.minMatches")) || 1);
     const [search, setSearch] = useState<string>("");
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("psp.pageSize")) || 20);
-    const [showAdvanced, setShowAdvanced] = useState<boolean>(() => localStorage.getItem("psp.adv") === "1");
 
     // filtro por quantidade de jogadores do adversário
     const initialOpp = (() => {
@@ -138,37 +141,61 @@ export default function PlayerStatisticsPage() {
     useEffect(() => { localStorage.setItem("psp.pageSize", String(pageSize)); }, [pageSize]);
     useEffect(() => { localStorage.setItem("psp.sortKey", sortKey); }, [sortKey]);
     useEffect(() => { localStorage.setItem("psp.sortOrder", sortOrder); }, [sortOrder]);
-    useEffect(() => { localStorage.setItem("psp.adv", showAdvanced ? "1" : "0"); }, [showAdvanced]);
     useEffect(() => { localStorage.setItem("psp.opp", oppPlayers === "all" ? "all" : String(oppPlayers)); }, [oppPlayers]);
 
+    // Atualiza URL quando o usuário muda a seleção via picker local da página (opcional)
+    const handleClubIdsChange = (ids: number[]) => {
+        const next = new URLSearchParams(searchParams);
+        if (ids.length) next.set("clubIds", ids.join(","));
+        else next.delete("clubIds");
+        // manter também clubId quando houver somente 1 (back-compat)
+        if (ids.length === 1) next.set("clubId", String(ids[0])); else next.delete("clubId");
+        setSearchParams(next, { replace: true });
+    };
+
     const fetchStats = useCallback(async (count: number) => {
-        if (!clubId) {
-            setPlayers([]);
-            setClubStats(null);
-            setLoading(false);
-            return;
-        }
         setError(null);
         setFetching(true);
         setLoading(true);
 
-        // cancela requisição anterior
         abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
 
         try {
-            const params: Record<string, any> = { count };
-            if (oppPlayers !== "all") params.opponentCount = oppPlayers;
+            const ids = groupClubIds;
+            const isGrouped = ids.length > 1;
+            if (!isGrouped) {
+                const singleId = ids[0] ?? null;
+                if (!singleId) {
+                    setPlayers([]);
+                    setClubStats(null);
+                    setLoading(false);
+                    return;
+                }
+                const params: Record<string, any> = { count };
+                if (oppPlayers !== "all") params.opponentCount = oppPlayers;
 
-            const { data } = await api.get(
-                `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/${clubId}/matches/statistics/limited`,
-                { params, signal: controller.signal }
-            );
+                const { data } = await api.get(
+                    `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/${singleId}/matches/statistics/limited`,
+                    { params, signal: controller.signal }
+                );
+                setPlayers(data.players ?? []);
+                setClubStats(data.clubs?.[0] ?? null);
+            } else {
+                const params: Record<string, any> = {
+                    count,
+                    clubIds: ids.join(","),
+                };
+                if (oppPlayers !== "all") params.opponentCount = oppPlayers;
 
-            setPlayers(data.players ?? []);
-            // Se o backend já devolver totalGoalsAgainst em clubs[0], cai direto no tipo
-            setClubStats(data.clubs?.[0] ?? null);
+                const { data } = await api.get(
+                    "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/grouped/matches/statistics/limited",
+                    { params, signal: controller.signal }
+                );
+                setPlayers(data.players ?? []);
+                setClubStats(data.clubs?.[0] ?? null);
+            }
         } catch (err: any) {
             if (err?.name === "CanceledError" || err?.message === "canceled") return;
             setError(err?.message ?? "Erro ao buscar estatísticas.");
@@ -176,7 +203,7 @@ export default function PlayerStatisticsPage() {
             setLoading(false);
             setFetching(false);
         }
-    }, [clubId, oppPlayers]);
+    }, [groupClubIds, oppPlayers]);
 
     useEffect(() => {
         fetchStats(matchCount);
@@ -184,10 +211,7 @@ export default function PlayerStatisticsPage() {
 
     function handleSort(key: SortKey) {
         if (sortKey === key) setSortOrder(o => (o === "asc" ? "desc" : "asc"));
-        else {
-            setSortKey(key);
-            setSortOrder("desc");
-        }
+        else { setSortKey(key); setSortOrder("desc"); }
     }
 
     // Filtros/orden.
@@ -205,19 +229,17 @@ export default function PlayerStatisticsPage() {
             const va = a[sortKey] as any;
             const vb = b[sortKey] as any;
             if (typeof va === "number" && typeof vb === "number") return sortOrder === "asc" ? va - vb : vb - va;
-            const sa = String(va);
-            const sb = String(vb);
+            const sa = String(va); const sb = String(vb);
             return sortOrder === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
         });
         return cp;
     }, [filtered, sortKey, sortOrder]);
 
-    // Escalas para barras de célula
+    // Escalas barras
     const maxByKey = useMemo(() => {
         const keys: (keyof PlayerStats)[] = [
             "totalGoals", "totalAssists", "totalShots", "totalPassesMade", "totalTacklesMade",
-            "avgRating", "winPercent", "passAccuracyPercent", "tackleSuccessPercent", "goalAccuracyPercent",
-            "totalSaves",
+            "avgRating", "winPercent", "passAccuracyPercent", "tackleSuccessPercent", "goalAccuracyPercent", "totalSaves",
         ];
         const res = new Map<keyof PlayerStats, number>();
         keys.forEach(k => res.set(k, Math.max(1, ...filtered.map(p => Number(p[k]) || 0))));
@@ -231,9 +253,8 @@ export default function PlayerStatisticsPage() {
         return sorted.slice(start, start + pageSize);
     }, [sorted, page, pageSize]);
 
-    useEffect(() => { setPage(1); }, [minMatches, search, sortKey, sortOrder, pageSize, oppPlayers]);
+    useEffect(() => { setPage(1); }, [minMatches, search, sortKey, sortOrder, pageSize, oppPlayers, groupClubIds.join(",")]);
 
-    // Gols sofridos pelo clube (para o período filtrado)
     const clubGoalsAgainst = Number(clubStats?.totalGoalsConceded || 0);
 
     return (
@@ -249,7 +270,9 @@ export default function PlayerStatisticsPage() {
                     )}
                 </div>
                 <div className="text-sm text-gray-600">
-                    Clube atual: <span className="font-semibold">{clubName ? `${clubName} (${clubId})` : clubId}</span>
+                    {groupClubIds.length > 1
+                        ? <>Agrupando clubes: <span className="font-semibold">{groupClubIds.join(", ")}</span></>
+                        : <>Clube atual: <span className="font-semibold">{groupClubIds[0] ?? "-"}</span></>}
                 </div>
             </div>
 
@@ -326,7 +349,7 @@ export default function PlayerStatisticsPage() {
                 </div>
             </div>
 
-            {/* Cartão/Visão geral do Clube */}
+            {/* Cartões do clube */}
             <section className="mb-6">
                 {loading && !clubStats && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -341,9 +364,21 @@ export default function PlayerStatisticsPage() {
                         <StatCard label="Partidas" value={int.format(clubStats.matchesPlayed)} />
                         <StatCard label="Gols / Assist." value={`${int.format(clubStats.totalGoals)} / ${int.format(clubStats.totalAssists)}`} />
                         <StatCard label="Chutes / Precisão" value={`${int.format(clubStats.totalShots)} / ${p1.format(clubStats.goalAccuracyPercent)}%`} />
-                        <StatCard label="Passes (C/T)" value={`${int.format(clubStats.totalPassesMade)} / ${int.format(clubStats.totalPassAttempts)}`} sub={`${p1.format(pct(clubStats.totalPassesMade, clubStats.totalPassAttempts))}% de acerto`} />
-                        <StatCard label="Desarmes (C/T)" value={`${int.format(clubStats.totalTacklesMade)} / ${int.format(clubStats.totalTackleAttempts)}`} sub={`${p1.format(pct(clubStats.totalTacklesMade, clubStats.totalTackleAttempts))}% de sucesso`} />
-                        <StatCard label="Resultados" value={`${int.format(clubStats.totalWins)}V / ${int.format(clubStats.totalDraws)}E / ${int.format(clubStats.totalLosses)}D`} sub={`${p1.format(clubStats.winPercent)}% vitórias`} />
+                        <StatCard
+                            label="Passes (C/T)"
+                            value={`${int.format(clubStats.totalPassesMade)} / ${int.format(clubStats.totalPassAttempts)}`}
+                            sub={`${p1.format(pct(clubStats.totalPassesMade, clubStats.totalPassAttempts))}% de acerto`}
+                        />
+                        <StatCard
+                            label="Desarmes (C/T)"
+                            value={`${int.format(clubStats.totalTacklesMade)} / ${int.format(clubStats.totalTackleAttempts)}`}
+                            sub={`${p1.format(pct(clubStats.totalTacklesMade, clubStats.totalTackleAttempts))}% de sucesso`}
+                        />
+                        <StatCard
+                            label="Resultados"
+                            value={`${int.format(clubStats.totalWins)}V / ${int.format(clubStats.totalDraws)}E / ${int.format(clubStats.totalLosses)}D`}
+                            sub={`${p1.format(clubStats.winPercent)}% vitórias`}
+                        />
                         <StatCard label="Vermelhos / MOM" value={`${int.format(clubStats.totalRedCards)} / ${int.format(clubStats.totalMom)}`} />
                         <StatCard label="Nota média" value={p2.format(Number(clubStats.avgRating || 0))} />
                     </div>
@@ -357,7 +392,7 @@ export default function PlayerStatisticsPage() {
                 )}
             </section>
 
-            {/* Tabela de jogadores */}
+            {/* Tabela */}
             <section>
                 <h2 className="text-xl font-bold mb-2 text-center">Estatísticas dos Jogadores</h2>
 
@@ -371,7 +406,6 @@ export default function PlayerStatisticsPage() {
                                     { key: "totalGoals", label: "Gols" },
                                     { key: "totalAssists", label: "Assistências" },
                                     { key: "totalShots", label: "Chutes (%)", tooltip: "Chutes totais e % de precisão" },
-                                    // NOVO: Defesas vs Gols Sofridos do Clube
                                     { key: "totalSaves", label: "Defesas (S/Gc)", tooltip: "Defesas e Gols Sofridos do CLUBE no período: % = S / (S + Gc)" },
                                     { key: "totalPassesMade", label: "Passes (C/T)", tooltip: "Completos / Tentados e %" },
                                     { key: "totalTacklesMade", label: "Desarmes (C/T)", tooltip: "Completos / Tentados e %" },
@@ -399,7 +433,6 @@ export default function PlayerStatisticsPage() {
                                 ))}
                             </tr>
                         </thead>
-
                         <tbody>
                             {loading && (
                                 <tr>
@@ -419,59 +452,53 @@ export default function PlayerStatisticsPage() {
                                 </tr>
                             )}
 
-                            {!loading &&
-                                pageItems.map((p) => {
-                                    const saves = Number(p.totalSaves || 0);
-                                    // usando GOLS SOFRIDOS DO CLUBE (agregado do período filtrado)
-                                    const conceded = clubGoalsAgainst; // se não vier do backend, fica 0
-                                    const savePct = pct(saves, saves + conceded);
-
-                                    return (
-                                        <tr key={p.playerId} className="hover:bg-gray-50">
-                                            <td className="px-3 py-2 font-medium text-left sticky left-0 bg-white/95 backdrop-blur support:bg-white">{p.playerName}</td>
-                                            <td className="px-3 py-2">{int.format(p.matchesPlayed)}</td>
-                                            <td className="px-3 py-2">
-                                                <CellBar value={p.totalGoals} max={maxByKey.get("totalGoals") || 1} format={(v) => int.format(v)} />
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                <CellBar value={p.totalAssists} max={maxByKey.get("totalAssists") || 1} format={(v) => int.format(v)} />
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                {int.format(p.totalShots)} / {p1.format(p.goalAccuracyPercent)}%
-                                            </td>
-
-                                            {/* NOVO: Defesas (S/Gc) + barra de % baseada em gols sofridos do clube */}
-                                            <td className="px-3 py-2">
-                                                {int.format(saves)} / {int.format(conceded)}
-                                                <div className="mt-1">
-                                                    <CellBar value={savePct} max={100} suffix="%" positive format={(v) => p1.format(v)} />
-                                                </div>
-                                            </td>
-
-                                            <td className="px-3 py-2">
-                                                {int.format(p.totalPassesMade)} / {int.format(p.totalPassAttempts)}
-                                                <div className="mt-1">
-                                                    <CellBar value={pct(p.totalPassesMade, p.totalPassAttempts)} max={100} suffix="%" positive format={(v) => p1.format(v)} />
-                                                </div>
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                {int.format(p.totalTacklesMade)} / {int.format(p.totalTackleAttempts)}
-                                                <div className="mt-1">
-                                                    <CellBar value={pct(p.totalTacklesMade, p.totalTackleAttempts)} max={100} suffix="%" positive format={(v) => p1.format(v)} />
-                                                </div>
-                                            </td>
-                                            <td className="px-3 py-2">{int.format(p.totalWins)}</td>
-                                            <td className="px-3 py-2">{int.format(p.totalLosses)}</td>
-                                            <td className="px-3 py-2">{int.format(p.totalDraws)}</td>
-                                            <td className="px-3 py-2">
-                                                <CellBar value={p.winPercent} max={100} suffix="%" positive format={(v) => p1.format(v)} />
-                                            </td>
-                                            <td className="px-3 py-2">{int.format(p.totalRedCards)}</td>
-                                            <td className="px-3 py-2">{int.format(p.totalMom)}</td>
-                                            <td className="px-3 py-2">{p2.format(Number(p.avgRating || 0))}</td>
-                                        </tr>
-                                    );
-                                })}
+                            {!loading && pageItems.map((p) => {
+                                const saves = Number(p.totalSaves || 0);
+                                const conceded = clubGoalsAgainst;
+                                const savePct = pct(saves, saves + conceded);
+                                return (
+                                    <tr key={p.playerId} className="hover:bg-gray-50">
+                                        <td className="px-3 py-2 font-medium text-left sticky left-0 bg-white/95 backdrop-blur">{p.playerName}</td>
+                                        <td className="px-3 py-2">{int.format(p.matchesPlayed)}</td>
+                                        <td className="px-3 py-2">
+                                            <CellBar value={p.totalGoals} max={maxByKey.get("totalGoals") || 1} format={(v) => int.format(v)} />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <CellBar value={p.totalAssists} max={maxByKey.get("totalAssists") || 1} format={(v) => int.format(v)} />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {int.format(p.totalShots)} / {p1.format(p.goalAccuracyPercent)}%
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {int.format(saves)} / {int.format(conceded)}
+                                            <div className="mt-1">
+                                                <CellBar value={savePct} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {int.format(p.totalPassesMade)} / {int.format(p.totalPassAttempts)}
+                                            <div className="mt-1">
+                                                <CellBar value={pct(p.totalPassesMade, p.totalPassAttempts)} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {int.format(p.totalTacklesMade)} / {int.format(p.totalTackleAttempts)}
+                                            <div className="mt-1">
+                                                <CellBar value={pct(p.totalTacklesMade, p.totalTackleAttempts)} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2">{int.format(p.totalWins)}</td>
+                                        <td className="px-3 py-2">{int.format(p.totalLosses)}</td>
+                                        <td className="px-3 py-2">{int.format(p.totalDraws)}</td>
+                                        <td className="px-3 py-2">
+                                            <CellBar value={p.winPercent} max={100} suffix="%" positive format={(v) => p1.format(v)} />
+                                        </td>
+                                        <td className="px-3 py-2">{int.format(p.totalRedCards)}</td>
+                                        <td className="px-3 py-2">{int.format(p.totalMom)}</td>
+                                        <td className="px-3 py-2">{p2.format(Number(p.avgRating || 0))}</td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -483,20 +510,8 @@ export default function PlayerStatisticsPage() {
                         {oppPlayers !== "all" ? <> - filtro adversário: <strong>{oppPlayers}</strong> jogadores</> : null}
                     </div>
                     <div className="flex gap-2">
-                        <button
-                            className="px-3 py-1 rounded border bg-white disabled:opacity-50"
-                            onClick={() => setPage((p) => Math.max(1, p - 1))}
-                            disabled={page <= 1}
-                        >
-                            Anterior
-                        </button>
-                        <button
-                            className="px-3 py-1 rounded border bg-white disabled:opacity-50"
-                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                            disabled={page >= totalPages}
-                        >
-                            Próxima
-                        </button>
+                        <button className="px-3 py-1 rounded border bg-white disabled:opacity-50" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>Anterior</button>
+                        <button className="px-3 py-1 rounded border bg-white disabled:opacity-50" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Próxima</button>
                     </div>
                 </div>
             </section>
@@ -504,32 +519,16 @@ export default function PlayerStatisticsPage() {
     );
 }
 
-// ========================
-// Célula com barra visual
-// ========================
+/* CellBar */
 function CellBar({
-    value,
-    max,
-    suffix = "",
-    positive = false,
-    format = (n: number) => String(n),
-}: {
-    value: number;
-    max: number;
-    suffix?: string;
-    positive?: boolean;
-    format?: (n: number) => string;
-}) {
+    value, max, suffix = "", positive = false, format = (n: number) => String(n),
+}: { value: number; max: number; suffix?: string; positive?: boolean; format?: (n: number) => string; }) {
     const width = clamp((value / (max || 1)) * 100);
     return (
         <div className="relative w-full h-6 rounded-md border border-gray-200 overflow-hidden bg-gray-50">
-            <div
-                className={`h-full ${positive ? "bg-emerald-200" : "bg-gray-300"}`}
-                style={{ width: `${width}%` }}
-            />
+            <div className={`h-full ${positive ? "bg-emerald-200" : "bg-gray-300"}`} style={{ width: `${width}%` }} />
             <div className="absolute inset-0 grid place-items-center text-xs font-medium">
-                {format(value)}
-                {suffix}
+                {format(value)}{suffix}
             </div>
         </div>
     );

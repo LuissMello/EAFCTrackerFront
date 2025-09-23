@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useId, useCallback } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState, useId, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
@@ -34,7 +34,7 @@ interface ClubDetailsDto {
     crestColor?: string | null;
     crestAssetId?: string | null;
     selectedKitType?: string | null;
-    // aliases possíveis em PascalCase
+    // PascalCase aliases
     Name?: string | null;
     StadName?: string | null;
     CrestAssetId?: string | null;
@@ -114,7 +114,12 @@ function fromNow(ts: string) {
     return rtf.format(Math.sign(diffMs) * days, "day");
 }
 
-function perspectiveFor(m: MatchResultDto, myClubName?: string | null, myTeamIdNum?: number) {
+/** Perspectiva antiga (fallback) */
+function perspectiveForByNameOrTeam(
+    m: MatchResultDto,
+    myClubName?: string | null,
+    myTeamIdNum?: number
+) {
     if (typeof myTeamIdNum === "number" && Number.isFinite(myTeamIdNum)) {
         if (m.clubADetails?.teamId === myTeamIdNum || m.clubADetails?.TeamId === myTeamIdNum)
             return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
@@ -127,6 +132,27 @@ function perspectiveFor(m: MatchResultDto, myClubName?: string | null, myTeamIdN
         if ((m.clubBName ?? "").toLowerCase() === name) return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
     }
     return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+}
+
+/** Nova perspectiva para multi seleção de clubes */
+function perspectiveForSelected(
+    m: MatchResultDto,
+    selectedClubIds: number[],
+    fallbackClubName?: string | null,
+    fallbackTeamId?: number
+) {
+    const aId = m.clubADetails?.clubId ?? null;
+    const bId = m.clubBDetails?.clubId ?? null;
+
+    if (aId && selectedClubIds.includes(Number(aId))) {
+        return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+    }
+    if (bId && selectedClubIds.includes(Number(bId))) {
+        return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
+    }
+
+    // fallback (ex.: dados sem clubId nas details)
+    return perspectiveForByNameOrTeam(m, fallbackClubName, fallbackTeamId);
 }
 
 /* ======================
@@ -382,7 +408,7 @@ function KitJersey({
 }
 
 /* ======================
-   Novo: Card de Resumo (ícones reais)
+   Novo: Card de Resumo
 ====================== */
 function Chip({
     children,
@@ -436,7 +462,7 @@ function SummaryItem({
                     <span className="tabular-nums">{reds}</span>
                 </Chip>
 
-                {/* Hat-tricks (vários) */}
+                {/* Hat-tricks */}
                 {hatList.length === 0 ? (
                     <Chip className="bg-gray-50 border-gray-200 text-gray-400" title="Sem hat-trick">
                         <Crown size={14} className="text-gray-400" />
@@ -507,14 +533,23 @@ function SummaryCard({ m }: { m: MatchResultDto }) {
 /* ======================
    Card de partida
 ====================== */
-function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFilter }) {
+function MatchCard({
+    m,
+    matchType,
+    selectedClubIds,
+    fallbackClubName,
+    fallbackTeamId,
+}: {
+    m: MatchResultDto;
+    matchType: MatchTypeFilter;
+    selectedClubIds: number[];
+    fallbackClubName?: string | null;
+    fallbackTeamId?: number;
+}) {
     const patternA = guessPattern(m.clubADetails);
     const patternB = guessPattern(m.clubBDetails);
 
-    const { club } = useClub();
-    const tRaw = (club as any)?.teamId;
-    const myTeamIdNum = typeof tRaw === "number" ? tRaw : Number(tRaw);
-    const p = perspectiveFor(m, club?.clubName, Number.isFinite(myTeamIdNum) ? myTeamIdNum : undefined);
+    const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
     const outcome = p.myGoals === p.oppGoals ? "draw" : p.myGoals > p.oppGoals ? "win" : "loss";
     const borderClass = outcome === "win" ? "border-green-200" : outcome === "loss" ? "border-red-200" : "border-gray-200";
 
@@ -709,9 +744,23 @@ function MatchCard({ m, matchType }: { m: MatchResultDto; matchType: MatchTypeFi
 ====================== */
 export default function Home() {
     const { club } = useClub();
-    const clubId = club?.clubId;
 
     const [searchParams, setSearchParams] = useSearchParams();
+
+    // Lê seleção múltipla da URL (?clubIds=1,2,3). Se não houver, usa o clubId único do contexto.
+    const selectedClubIds: number[] = useMemo(() => {
+        const raw = searchParams.get("clubIds");
+        if (raw && raw.trim().length) {
+            return raw.split(",").map(s => parseInt(s, 10)).filter(n => !Number.isNaN(n));
+        }
+        const single = searchParams.get("clubId");
+        if (single && !Number.isNaN(parseInt(single, 10))) return [parseInt(single, 10)];
+        if (club?.clubId) return [club.clubId];
+        return [];
+    }, [searchParams, club?.clubId]);
+
+    const fallbackClubName = club?.clubName ?? null;
+    const fallbackTeamId = (club as any)?.teamId as number | undefined;
 
     const [results, setResults] = useState<MatchResultDto[]>([]);
     const [loading, setLoading] = useState(false);
@@ -757,63 +806,115 @@ export default function Home() {
         return () => window.removeEventListener("keydown", onKey);
     }, []);
 
-    // Persistir filtros na URL
+    // Persistir filtros na URL (preservando clubIds/clubId)
     useEffect(() => {
-        const rcParam = redFilter === "all" ? undefined : redFilter === "none" ? "none" : redFilter === "1plus" ? "1" : "2";
-        const oppParam = opponentCount ? String(opponentCount) : undefined;
-        const payload = {
-            q: search || undefined,
-            type: matchType !== "All" ? matchType : undefined,
-            sort: sortKey !== "recent" ? sortKey : undefined,
-            rc: rcParam,
-            opp: oppParam,
-        } as Record<string, string | undefined>;
-        const next = new URLSearchParams();
-        Object.entries(payload).forEach(([k, v]) => v && next.set(k, v));
-        setSearchParams(next, { replace: true });
-    }, [search, matchType, sortKey, redFilter, opponentCount, setSearchParams]);
+        const rcParam =
+            redFilter === "all" ? undefined :
+                redFilter === "none" ? "none" :
+                    redFilter === "1plus" ? "1" : "2";
 
-    // Carregar resultados
-    useEffect(() => {
-        if (!clubId) {
-            setResults([]);
-            return;
+        const oppParam = opponentCount ? String(opponentCount) : undefined;
+
+        // clone seguro do estado atual da URL
+        const next = new URLSearchParams(searchParams.toString());
+
+        // atualiza apenas os filtros (preserva clubIds/clubId já presentes)
+        if (search) next.set("q", search); else next.delete("q");
+        if (matchType !== "All") next.set("type", matchType); else next.delete("type");
+        if (sortKey !== "recent") next.set("sort", sortKey); else next.delete("sort");
+        if (rcParam) next.set("rc", rcParam); else next.delete("rc");
+        if (oppParam) next.set("opp", oppParam); else next.delete("opp");
+
+        // evita setSearchParams desnecessário (e re-render em loop)
+        const prevStr = searchParams.toString();
+        const nextStr = next.toString();
+        if (nextStr !== prevStr) {
+            setSearchParams(next, { replace: true });
         }
+    }, [
+        search,
+        matchType,
+        sortKey,
+        redFilter,
+        opponentCount,
+        searchParams,     // OK ter como dependência, com o guard acima não entra em loop
+        setSearchParams
+    ]);
+
+
+    // Carregar resultados (multi seleção)
+    useEffect(() => {
         let mounted = true;
         const controller = new AbortController();
+
         (async () => {
             try {
                 setLoading(true);
                 setError(null);
+                setResults([]);
+
+                if (selectedClubIds.length === 0) {
+                    if (mounted) setLoading(false);
+                    return;
+                }
 
                 const params: any = {};
                 if (matchType !== "All") params.matchType = matchType;
 
-                const { data } = await api.get<MatchResultDto[]>(
-                    `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/${clubId}/matches/results`,
-                    { params, signal: (controller as any).signal }
-                );
-
-                if (mounted) {
+                if (selectedClubIds.length === 1) {
+                    // caso simples
+                    const id = selectedClubIds[0];
+                    const { data } = await api.get<MatchResultDto[]>(
+                        `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/${id}/matches/results`,
+                        { params, signal: (controller as any).signal }
+                    );
+                    if (!mounted) return;
                     setResults(Array.isArray(data) ? data : []);
                     setVisible(30);
+                    return;
                 }
+
+                // múltiplos clubes → busca em paralelo e agrega
+                const reqs = selectedClubIds.map((id) =>
+                    api.get<MatchResultDto[]>(
+                        `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/${id}/matches/results`,
+                        { params, signal: (controller as any).signal }
+                    ).then(r => r.data).catch(() => [])
+                );
+
+                const arrays = await Promise.all(reqs);
+                if (!mounted) return;
+
+                // merge + dedupe por matchId
+                const merged = ([] as MatchResultDto[]).concat(...arrays);
+                const byId = new Map<number, MatchResultDto>();
+                for (const m of merged) {
+                    if (!byId.has(m.matchId)) byId.set(m.matchId, m);
+                }
+                const unique = Array.from(byId.values());
+
+                setResults(unique);
+                setVisible(30);
             } catch (err: any) {
                 if (mounted) setError(err?.message ?? "Erro ao carregar resultados");
             } finally {
                 if (mounted) setLoading(false);
             }
         })();
+
         return () => {
             mounted = false;
             controller.abort();
         };
-    }, [clubId, matchType]);
+    }, [selectedClubIds.join(","), matchType]);
 
     // Filtros + ordenação em memória
     const filtered = useMemo(() => {
         const term = search.trim().toLowerCase();
-        const byText = (m: MatchResultDto) => (term ? `${m.clubAName} ${m.clubBName}`.toLowerCase().includes(term) : true);
+
+        const byText = (m: MatchResultDto) =>
+            term ? `${m.clubAName} ${m.clubBName}`.toLowerCase().includes(term) : true;
+
         const byReds = (m: MatchResultDto) => {
             const redsA = m.clubASummary?.redCards ?? (m.clubARedCards ?? 0);
             const redsB = m.clubBSummary?.redCards ?? (m.clubBRedCards ?? 0);
@@ -823,27 +924,23 @@ export default function Home() {
             if (redFilter === "2plus") return reds >= 2;
             return true;
         };
+
         const byOppCount = (m: MatchResultDto) => {
             if (!opponentCount) return true;
-            const tRaw = (club as any)?.teamId;
-            const myTeamIdNum = typeof tRaw === "number" ? tRaw : Number(tRaw);
-            const p = perspectiveFor(m, club?.clubName, Number.isFinite(myTeamIdNum) ? myTeamIdNum : undefined);
+            const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
             const opp = p.isMineA ? (m.clubBPlayerCount ?? null) : (m.clubAPlayerCount ?? null);
             return opp === opponentCount;
         };
 
         const base = results.filter((m) => byText(m) && byReds(m) && byOppCount(m));
 
-        const tRaw = (club as any)?.teamId;
-        const myTeamIdNum = typeof tRaw === "number" ? tRaw : Number(tRaw);
-
         const sorted = [...base].sort((a, b) => {
             if (sortKey === "recent") return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
             if (sortKey === "oldest") return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
 
             if (sortKey === "gf" || sortKey === "ga") {
-                const pa = perspectiveFor(a, club?.clubName, Number.isFinite(myTeamIdNum) ? myTeamIdNum : undefined);
-                const pb = perspectiveFor(b, club?.clubName, Number.isFinite(myTeamIdNum) ? myTeamIdNum : undefined);
+                const pa = perspectiveForSelected(a, selectedClubIds, fallbackClubName, fallbackTeamId);
+                const pb = perspectiveForSelected(b, selectedClubIds, fallbackClubName, fallbackTeamId);
                 const va = sortKey === "gf" ? pa.myGoals : pa.oppGoals;
                 const vb = sortKey === "gf" ? pb.myGoals : pb.oppGoals;
                 if (vb !== va) return vb - va;
@@ -854,14 +951,12 @@ export default function Home() {
         });
 
         return sorted;
-    }, [results, search, sortKey, redFilter, opponentCount, club?.clubName, (club as any)?.teamId]);
+    }, [results, search, sortKey, redFilter, opponentCount, selectedClubIds.join(","), fallbackClubName, fallbackTeamId]);
 
     const summary = useMemo(() => {
-        const tRaw = (club as any)?.teamId;
-        const myTeamIdNum = typeof tRaw === "number" ? tRaw : Number(tRaw);
         const s = filtered.reduce(
             (acc, m) => {
-                const p = perspectiveFor(m, club?.clubName, Number.isFinite(myTeamIdNum) ? myTeamIdNum : undefined);
+                const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
                 acc.jogos++;
                 acc.golsPro += p.myGoals;
                 acc.golsContra += p.oppGoals;
@@ -876,17 +971,24 @@ export default function Home() {
             { jogos: 0, v: 0, e: 0, d: 0, golsPro: 0, golsContra: 0, cartoes: 0 }
         );
         return { ...s, saldo: s.golsPro - s.golsContra };
-    }, [filtered, club?.clubName, (club as any)?.teamId]);
+    }, [filtered, selectedClubIds.join(","), fallbackClubName, fallbackTeamId]);
 
+    const hasSelection = selectedClubIds.length > 0;
     const hasResults = filtered.length > 0;
 
     const refresh = useCallback(() => {
-        if (clubId) {
+        if (hasSelection) {
             const ev = new Event("visibilitychange");
             document.dispatchEvent(ev);
         }
         setVisible((v) => v);
-    }, [clubId]);
+    }, [hasSelection]);
+
+    const headerRight = hasSelection
+        ? (selectedClubIds.length > 1
+            ? <>Clubes atuais: <span className="font-medium">{selectedClubIds.join(", ")}</span></>
+            : <>Clube atual: <span className="font-medium">{selectedClubIds[0]}</span></>)
+        : <>Selecione clubes no topo para carregar os resultados.</>;
 
     return (
         <div className="p-4 max-w-5xl mx-auto">
@@ -894,13 +996,7 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold">Resultados das Partidas</h1>
-                    <p className="text-sm text-gray-600">
-                        {clubId ? (
-                            <>Clube atual: <span className="font-medium">{club?.clubName ?? clubId}</span></>
-                        ) : (
-                            <>Selecione um clube no topo (botão “Alterar clube”) para carregar os resultados.</>
-                        )}
-                    </p>
+                    <p className="text-sm text-gray-600">{headerRight}</p>
                 </div>
 
                 {hasResults && (
@@ -1012,7 +1108,7 @@ export default function Home() {
                 </div>
             )}
 
-            {!loading && !error && clubId && filtered.length === 0 && (
+            {!loading && !error && hasSelection && filtered.length === 0 && (
                 <div className="mt-4 p-3 bg-gray-50 border rounded text-gray-700">
                     Nenhum resultado encontrado.
                     <ul className="list-disc ml-5 mt-2 text-sm text-gray-600">
@@ -1023,16 +1119,23 @@ export default function Home() {
                 </div>
             )}
 
-            {!clubId && (
+            {!hasSelection && (
                 <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
-                    Informe um clube no menu (botão “Alterar clube”) para começar.
+                    Selecione clubes no menu (botão “Clubes”) para começar.
                 </div>
             )}
 
             {/* Lista */}
             <div className="mt-4 grid gap-2">
                 {filtered.slice(0, visible).map((m) => (
-                    <MatchCard key={m.matchId} m={m} matchType={matchType} />
+                    <MatchCard
+                        key={m.matchId}
+                        m={m}
+                        matchType={matchType}
+                        selectedClubIds={selectedClubIds}
+                        fallbackClubName={fallbackClubName ?? undefined}
+                        fallbackTeamId={fallbackTeamId}
+                    />
                 ))}
             </div>
 
