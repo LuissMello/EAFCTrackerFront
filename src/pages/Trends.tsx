@@ -101,7 +101,7 @@ const COLORS = {
 const pillColor = (r: Result) =>
     r === "W" ? "bg-green-600" : r === "D" ? "bg-gray-500" : "bg-red-600";
 
-// simples média móvel (não recalcula percentuais a partir de tentativas; só suaviza a série recebida)
+// média móvel simples
 function movingAvg(arr: number[], win = 5) {
     if (!arr || arr.length === 0) return [];
     const out: number[] = [];
@@ -109,9 +109,30 @@ function movingAvg(arr: number[], win = 5) {
     for (let i = 0; i < arr.length; i++) {
         sum += arr[i] ?? 0;
         if (i >= win) sum -= arr[i - win] ?? 0;
-        out.push(i >= win - 1 ? sum / win : arr[i]); // antes da janela completa, mostra o próprio valor
+        out.push(i >= win - 1 ? sum / win : arr[i]);
     }
     return out;
+}
+
+// cor → rgba com alpha
+function withAlpha(hex: string, alpha: number) {
+    const h = hex.replace("#", "");
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// hash → cor estável
+function colorFromId(num: number) {
+    let x = Math.imul(num ^ 0x9e3779b9, 0x85ebca6b);
+    x ^= x >>> 13;
+    x = Math.imul(x, 0xc2b2ae35);
+    x ^= x >>> 16;
+    const r = (x & 0xff).toString(16).padStart(2, "0");
+    const g = ((x >>> 8) & 0xff).toString(16).padStart(2, "0");
+    const b = ((x >>> 16) & 0xff).toString(16).padStart(2, "0");
+    return `#${r}${g}${b}`.toUpperCase();
 }
 
 // =========================
@@ -119,24 +140,31 @@ function movingAvg(arr: number[], win = 5) {
 // =========================
 
 export default function TrendsPage() {
-    const { club } = useClub();
-    const activeClubId = club?.clubId;
+    const { club, selectedClubIds, selectedClubs } = useClub();
+
+    // ids efetivos (multi). Se nenhum selecionado, tenta o single legacy.
+    const idsToUse = useMemo<number[]>(
+        () => (selectedClubIds?.length ? selectedClubIds : club?.clubId ? [club.clubId] : []),
+        [selectedClubIds, club?.clubId]
+    );
 
     const [last, setLast] = useState(20);
-    const [loading, setLoading] = useState(true);
-    const [data, setData] = useState<ClubTrendsDto | null>(null);
-    const [tops, setTops] = useState<TopItemDto[]>([]);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [reloadNonce, setReloadNonce] = useState<number>(0);
 
-    // UI state novo
+    // mapas por clube
+    const [trendsByClub, setTrendsByClub] = useState<Record<number, ClubTrendsDto>>({});
+    const [topsByClub, setTopsByClub] = useState<Record<number, TopItemDto[]>>({});
+
+    // UI state
     type Metric = "pass" | "tackle" | "rating" | "gfga" | "gdiff";
     const [metric, setMetric] = useState<Metric>("pass");
     type ChartKind = "line" | "area" | "bar";
     const [chartKind, setChartKind] = useState<ChartKind>("line");
     const [smooth, setSmooth] = useState(true);
     type XMode = "index" | "date";
-    const [xMode, setXMode] = useState<XMode>("index");
+    const [xMode, setXMode] = useState<XMode>("index"); // se multi, força "index" abaixo
 
     const mountedRef = useRef(true);
     useEffect(() => {
@@ -146,9 +174,9 @@ export default function TrendsPage() {
         };
     }, []);
 
-    // -------- Fetch --------
+    // -------- Fetch (multi) --------
     useEffect(() => {
-        if (!activeClubId) return;
+        if (!idsToUse.length) return;
         const controller = new AbortController();
 
         (async () => {
@@ -156,20 +184,34 @@ export default function TrendsPage() {
                 setLoading(true);
                 setError(null);
 
-                const [t1, t2] = await Promise.all([
+                const trendPromises = idsToUse.map((id) =>
                     api.get<ClubTrendsDto>(
-                        `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Trends/club/${activeClubId}?last=${last}`,
+                        `https://localhost:5000/api/Trends/club/${id}?last=${last}`,
                         { signal: (controller as any).signal }
-                    ),
+                    )
+                );
+                const topsPromises = idsToUse.map((id) =>
                     api.get<TopItemDto[]>(
-                        `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Trends/top-scorers?clubId=${activeClubId}&limit=10`,
+                        `https://localhost:5000/api/Trends/top-scorers?clubId=${id}&limit=10`,
                         { signal: (controller as any).signal }
-                    ),
+                    )
+                );
+
+                const [trendResArr, topsResArr] = await Promise.all([
+                    Promise.all(trendPromises),
+                    Promise.all(topsPromises),
                 ]);
 
                 if (!mountedRef.current) return;
-                setData(t1.data);
-                setTops(t2.data);
+
+                const tMap: Record<number, ClubTrendsDto> = {};
+                const pMap: Record<number, TopItemDto[]> = {};
+
+                trendResArr.forEach((r) => (tMap[r.data.clubId] = r.data));
+                topsResArr.forEach((r, idx) => (pMap[idsToUse[idx]] = r.data));
+
+                setTrendsByClub(tMap);
+                setTopsByClub(pMap);
             } catch (e: any) {
                 if (!mountedRef.current) return;
                 if (e?.name === "CanceledError" || e?.name === "AbortError") return;
@@ -180,124 +222,157 @@ export default function TrendsPage() {
         })();
 
         return () => controller.abort();
-    }, [activeClubId, last, reloadNonce]);
+    }, [idsToUse.join(","), last, reloadNonce]); // join para mudar quando a lista mudar
 
-    // -------- Derived --------
-    const series = data?.series ?? [];
-    const n = series.length;
+    // -------- Derived (multi) --------
+    const clubsWithData = useMemo(
+        () =>
+            idsToUse
+                .map((id) => trendsByClub[id])
+                .filter((x): x is ClubTrendsDto => !!x),
+        [idsToUse, trendsByClub]
+    );
 
-    const xIndexLabels = useMemo(() => series.map((_, i) => `Jogo ${i + 1}`), [series]);
-    const xDateLabels = useMemo(() => series.map((p) => formatDate(p.timestamp)), [series]);
-    const xLabels = xMode === "index" ? xIndexLabels : xDateLabels;
+    const singleClub = clubsWithData.length === 1 ? clubsWithData[0] : null;
 
-    // valores base
-    const pass = series.map((s) => s.passAccuracyPercent ?? 0);
-    const tackle = series.map((s) => s.tackleSuccessPercent ?? 0);
-    const rating = series.map((s) => s.avgRating ?? 0);
-    const gf = series.map((s) => s.goalsFor ?? 0);
-    const ga = series.map((s) => s.goalsAgainst ?? 0);
-    const gdiff = series.map((_, i) => (gf[i] ?? 0) - (ga[i] ?? 0));
+    // rótulo do topo
+    const headerTitle = clubsWithData.length <= 1
+        ? (singleClub?.clubName ?? club?.clubName ?? "")
+        : "Vários clubes selecionados";
 
-    // aplica suavização, se marcado
-    const passPlot = smooth ? movingAvg(pass, 5) : pass;
-    const tacklePlot = smooth ? movingAvg(tackle, 5) : tackle;
-    const ratingPlot = smooth ? movingAvg(rating, 5) : rating;
-    const gfPlot = smooth ? movingAvg(gf, 5) : gf;
-    const gaPlot = smooth ? movingAvg(ga, 5) : ga;
-    const gdiffPlot = smooth ? movingAvg(gdiff, 5) : gdiff;
+    // X labels: se multi, força índice; se single, respeita xMode
+    const effectiveXMode: XMode = clubsWithData.length > 1 ? "index" : xMode;
 
-    // ponto pequeno/sem ponto quando há muitos jogos
-    const manyPoints = n > 25;
+    // comprimento máximo para label de índice
+    const maxLen = useMemo(() => {
+        let m = 0;
+        for (const c of clubsWithData) m = Math.max(m, c.series.length);
+        return m;
+    }, [clubsWithData]);
+
+    const xIndexLabels = useMemo(
+        () => Array.from({ length: maxLen }, (_, i) => `Jogo ${i + 1}`),
+        [maxLen]
+    );
+
+    const xDateLabels = useMemo(() => {
+        if (!singleClub) return xIndexLabels; // fallback em multi
+        return singleClub.series.map((p) => formatDate(p.timestamp));
+    }, [singleClub, xIndexLabels]);
+
+    const xLabels = effectiveXMode === "index" ? xIndexLabels : xDateLabels;
+
+    // ponto pequeno quando há muitos jogos (considera máximo)
+    const manyPoints = maxLen > 25;
     const pointRadius = manyPoints ? 0 : 2;
 
-    // Seleção dinâmica de datasets por métrica
+    // construir datasets por métrica
     const chartData = useMemo(() => {
-        if (metric === "gfga") {
-            return {
-                labels: xLabels,
-                datasets: [
-                    {
-                        type: chartKind === "bar" ? "bar" : "line",
-                        label: "Gols feitos",
-                        data: gfPlot,
-                        borderColor: COLORS.indigo.border,
-                        backgroundColor:
-                            chartKind === "bar" ? COLORS.indigo.fill : COLORS.indigo.fill,
-                        borderWidth: 2,
-                        tension: 0.3,
-                        pointRadius,
-                        fill: chartKind === "area",
-                    },
-                    {
-                        type: chartKind === "bar" ? "bar" : "line",
-                        label: "Gols levados",
-                        data: gaPlot,
-                        borderColor: COLORS.rose.border,
-                        backgroundColor:
-                            chartKind === "bar" ? COLORS.rose.fill : COLORS.rose.fill,
-                        borderWidth: 2,
-                        tension: 0.3,
-                        pointRadius,
-                        fill: chartKind === "area",
-                    },
-                ],
-            };
-        }
-
-        if (metric === "gdiff") {
-            // barras com cor por sinal do valor; para line/area, mantém linha única
-            const base = {
-                labels: xLabels,
-                datasets: [
-                    {
-                        label: "Dif. de gols (GF - GA)",
-                        data: gdiffPlot,
-                        borderColor: COLORS.emerald.border,
-                        backgroundColor:
-                            chartKind === "bar"
-                                ? (ctx: any) =>
-                                    (ctx.raw ?? 0) >= 0
-                                        ? "rgba(16,185,129,0.6)"
-                                        : "rgba(244,63,94,0.6)"
-                                : COLORS.emerald.fill,
-                        borderWidth: 2,
-                        tension: 0.3,
-                        pointRadius,
-                        fill: chartKind === "area",
-                    } as any,
-                ],
-            };
-            return base;
-        }
-
-        // métricas simples
-        const mapMetric: Record<
-            Exclude<Metric, "gfga" | "gdiff">,
-            { label: string; color: keyof typeof COLORS; values: number[] }
-        > = {
-            pass: { label: "Precisão de passe (%)", color: "blue", values: passPlot },
-            tackle: { label: "Êxito em desarmes (%)", color: "emerald", values: tacklePlot },
-            rating: { label: "Nota média", color: "amber", values: ratingPlot },
+        // helper para pegar valores + smoothing
+        const valuesFor = (series: MatchTrendPointDto[], kind: Metric) => {
+            if (kind === "pass") return series.map((s) => s.passAccuracyPercent ?? 0);
+            if (kind === "tackle") return series.map((s) => s.tackleSuccessPercent ?? 0);
+            if (kind === "rating") return series.map((s) => s.avgRating ?? 0);
+            if (kind === "gfga") return { gf: series.map((s) => s.goalsFor ?? 0), ga: series.map((s) => s.goalsAgainst ?? 0) };
+            if (kind === "gdiff") return series.map((s) => (s.goalsFor ?? 0) - (s.goalsAgainst ?? 0));
+            return [];
         };
-        const { label, color, values } = mapMetric[metric];
 
-        return {
-            labels: xLabels,
-            datasets: [
-                {
-                    label,
-                    data: values,
-                    borderColor: COLORS[color].border,
+        // métricas simples (uma linha por clube)
+        if (metric === "pass" || metric === "tackle" || metric === "rating") {
+            const datasets = clubsWithData.map((c) => {
+                const baseVals = valuesFor(c.series, metric) as number[];
+                const vals = smooth ? movingAvg(baseVals, 5) : baseVals;
+                const hex = colorFromId(c.clubId);
+                return {
+                    type: chartKind === "bar" ? "bar" : "line",
+                    label: c.clubName,
+                    data: vals,
+                    borderColor: hex,
                     backgroundColor:
-                        chartKind === "bar" ? COLORS[color].fill : COLORS[color].fill,
+                        chartKind === "bar" ? withAlpha(hex, 0.25) : withAlpha(hex, 0.15),
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius,
                     fill: chartKind === "area",
-                },
-            ],
-        };
-    }, [metric, chartKind, xLabels, passPlot, tacklePlot, ratingPlot, gfPlot, gaPlot, gdiffPlot, pointRadius]);
+                } as const;
+            });
+
+            // pad datasets para mesmo length (Chart.js aceita; valores faltantes como null)
+            const padded = datasets.map((ds) => ({
+                ...ds,
+                data: [...ds.data, ...Array(Math.max(0, maxLen - ds.data.length)).fill(null)],
+            }));
+
+            return { labels: xLabels, datasets: padded as any[] };
+        }
+
+        // gfga: duas séries por clube (GF e GA)
+        if (metric === "gfga") {
+            const datasets: any[] = [];
+            for (const c of clubsWithData) {
+                const base = valuesFor(c.series, "gfga") as { gf: number[]; ga: number[] };
+                const gfVals = smooth ? movingAvg(base.gf, 5) : base.gf;
+                const gaVals = smooth ? movingAvg(base.ga, 5) : base.ga;
+                const hex = colorFromId(c.clubId);
+
+                datasets.push({
+                    type: chartKind === "bar" ? "bar" : "line",
+                    label: `${c.clubName} — Gols feitos`,
+                    data: [...gfVals, ...Array(Math.max(0, maxLen - gfVals.length)).fill(null)],
+                    borderColor: hex,
+                    backgroundColor:
+                        chartKind === "bar" ? withAlpha(hex, 0.35) : withAlpha(hex, 0.18),
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius,
+                    fill: chartKind === "area",
+                });
+                datasets.push({
+                    type: chartKind === "bar" ? "bar" : "line",
+                    label: `${c.clubName} — Gols levados`,
+                    data: [...gaVals, ...Array(Math.max(0, maxLen - gaVals.length)).fill(null)],
+                    borderColor: withAlpha(hex, 0.7),
+                    backgroundColor:
+                        chartKind === "bar" ? withAlpha(hex, 0.22) : withAlpha(hex, 0.12),
+                    borderDash: [6, 3],
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius,
+                    fill: chartKind === "area",
+                });
+            }
+            return { labels: xLabels, datasets };
+        }
+
+        // gdiff: uma série por clube (barras positivas/negativas ficam com cor via callback)
+        if (metric === "gdiff") {
+            const datasets = clubsWithData.map((c) => {
+                const base = valuesFor(c.series, "gdiff") as number[];
+                const vals = smooth ? movingAvg(base, 5) : base;
+                const hex = colorFromId(c.clubId);
+                const fillColor =
+                    chartKind === "bar"
+                        ? (ctx: any) => ((ctx.raw ?? 0) >= 0 ? withAlpha(hex, 0.45) : "rgba(244,63,94,0.45)")
+                        : withAlpha(hex, 0.2);
+
+                return {
+                    type: chartKind === "bar" ? "bar" : "line",
+                    label: `${c.clubName} — Dif. de gols`,
+                    data: [...vals, ...Array(Math.max(0, maxLen - vals.length)).fill(null)],
+                    borderColor: hex,
+                    backgroundColor: fillColor as any,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius,
+                    fill: chartKind === "area",
+                } as any;
+            });
+            return { labels: xLabels, datasets };
+        }
+
+        return { labels: xLabels, datasets: [] };
+    }, [clubsWithData, metric, chartKind, smooth, xLabels, maxLen, pointRadius]);
 
     // opções de eixo/tooltip mais limpas
     const baseOptions: any = useMemo(
@@ -311,19 +386,25 @@ export default function TrendsPage() {
                 tooltip: {
                     callbacks: {
                         title: (items: any[]) => {
-                            const i = items?.[0]?.dataIndex ?? 0;
-                            const s = series[i];
+                            if (!items?.length) return "";
+                            const i = items[0].dataIndex ?? 0;
+
+                            if (effectiveXMode === "index") {
+                                return `Jogo ${i + 1}`;
+                            }
+
+                            // single-club + por data
+                            const s = singleClub?.series?.[i];
                             if (!s) return items?.[0]?.label ?? "";
-                            const title = xMode === "index" ? `Jogo ${i + 1}` : items?.[0]?.label;
                             const date = formatDate(s.timestamp);
                             const vs = s.opponentName ? ` vs ${s.opponentName}` : "";
                             const placar = ` • ${s.goalsFor}-${s.goalsAgainst}`;
-                            return `${title} — ${date}${vs}${placar}`;
+                            return `${date}${vs}${placar}`;
                         },
                         label: (ctx: any) => {
                             const v = ctx.raw as number;
-                            return `${ctx.dataset.label}: ${Number.isFinite(v) ? v.toFixed(metric === "rating" ? 2 : 1) : "-"
-                                }`;
+                            const isRating = metric === "rating";
+                            return `${ctx.dataset.label}: ${Number.isFinite(v) ? v.toFixed(isRating ? 2 : 1) : "-"}`;
                         },
                     },
                 },
@@ -331,18 +412,12 @@ export default function TrendsPage() {
             scales: {
                 x: {
                     grid: { display: false },
-                    ticks: {
-                        autoSkip: true,
-                        maxTicksLimit: 8,
-                    },
+                    ticks: { autoSkip: true, maxTicksLimit: 8 },
                 },
                 y: {
                     beginAtZero: true,
                     grid: { color: "rgba(0,0,0,0.05)" },
-                    ticks: {
-                        // rating costuma variar pouco; força uma escala mais útil
-                        callback: (v: any) => `${v}`,
-                    },
+                    ticks: { callback: (v: any) => `${v}` },
                 },
             },
             elements: {
@@ -350,7 +425,7 @@ export default function TrendsPage() {
                 line: { borderJoinStyle: "round", borderCapStyle: "round" },
             },
         }),
-        [series, xMode, pointRadius, metric]
+        [effectiveXMode, singleClub?.series, pointRadius, metric]
     );
 
     const ChartComponent =
@@ -362,7 +437,6 @@ export default function TrendsPage() {
                 ? Bar
                 : Line;
 
-    const lastResults = series.map((s) => s.result as Result);
     const quickLasts = [5, 10, 20, 50];
     const forceReload = () => setReloadNonce(Date.now());
 
@@ -375,11 +449,14 @@ export default function TrendsPage() {
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold">
-                        Tendências &amp; Streaks — {data?.clubName ?? club?.clubName ?? ""}
+                        Tendências &amp; Streaks — {headerTitle}
                     </h1>
-                    {activeClubId && (
+                    {idsToUse.length > 0 && (
                         <div className="text-xs text-gray-600 mt-1">
-                            Clube ativo: <span className="font-mono">{activeClubId}</span>
+                            Clubes ativos:{" "}
+                            <span className="font-mono">
+                                {idsToUse.join(", ")}
+                            </span>
                         </div>
                     )}
                 </div>
@@ -419,13 +496,13 @@ export default function TrendsPage() {
                 </div>
             </div>
 
-            {!activeClubId && (
+            {idsToUse.length === 0 && (
                 <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded">
                     Selecione um clube no menu para ver as tendências.
                 </div>
             )}
 
-            {activeClubId && loading && (
+            {idsToUse.length > 0 && loading && (
                 <div className="grid gap-3">
                     <div className="animate-pulse bg-white border rounded-xl p-4 h-20" />
                     <div className="animate-pulse bg-white border rounded-xl p-4 h-24" />
@@ -434,7 +511,7 @@ export default function TrendsPage() {
                 </div>
             )}
 
-            {activeClubId && error && (
+            {idsToUse.length > 0 && error && (
                 <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center justify-between">
                     <span>{error}</span>
                     <button
@@ -446,34 +523,42 @@ export default function TrendsPage() {
                 </div>
             )}
 
-            {activeClubId && !loading && !error && data && (
+            {idsToUse.length > 0 && !loading && !error && clubsWithData.length > 0 && (
                 <>
-                    {/* Cards - forma e streaks */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="bg-white border rounded-xl p-4">
-                            <div className="text-xs text-gray-500 mb-1">Forma (Últimos 5)</div>
-                            <div className="font-mono tracking-wide">{data.formLast5 || "-"}</div>
-                        </div>
-                        <div className="bg-white border rounded-xl p-4">
-                            <div className="text-xs text-gray-500 mb-1">Forma (Últimos 10)</div>
-                            <div className="font-mono tracking-wide">{data.formLast10 || "-"}</div>
-                        </div>
-                        <div className="bg-white border rounded-xl p-4">
-                            <div className="grid grid-cols-3 text-center">
-                                <div>
-                                    <div className="text-xs text-gray-500">Sem perder</div>
-                                    <div className="text-xl font-bold">{data.currentUnbeaten}</div>
+                    {/* Cards - forma e streaks por clube */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {clubsWithData.map((c) => (
+                            <div key={c.clubId} className="bg-white border rounded-xl p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="text-base font-semibold">{c.clubName}</div>
+                                    <div className="text-xs text-gray-500">ID {c.clubId}</div>
                                 </div>
-                                <div>
-                                    <div className="text-xs text-gray-500">Vitórias seguidas</div>
-                                    <div className="text-xl font-bold">{data.currentWins}</div>
-                                </div>
-                                <div>
-                                    <div className="text-xs text-gray-500">Clean sheets</div>
-                                    <div className="text-xl font-bold">{data.currentCleanSheets}</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <div className="text-xs text-gray-500 mb-1">Forma (Últimos 5)</div>
+                                        <div className="font-mono tracking-wide">{c.formLast5 || "-"}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-gray-500 mb-1">Forma (Últimos 10)</div>
+                                        <div className="font-mono tracking-wide">{c.formLast10 || "-"}</div>
+                                    </div>
+                                    <div className="grid grid-cols-3 text-center gap-2">
+                                        <div>
+                                            <div className="text-[11px] text-gray-500">Sem perder</div>
+                                            <div className="text-lg font-bold">{c.currentUnbeaten}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-[11px] text-gray-500">Vitórias seguidas</div>
+                                            <div className="text-lg font-bold">{c.currentWins}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-[11px] text-gray-500">Clean sheets</div>
+                                            <div className="text-lg font-bold">{c.currentCleanSheets}</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        ))}
                     </div>
 
                     {/* CONTROLES DO GRÁFICO */}
@@ -511,8 +596,10 @@ export default function TrendsPage() {
                                 Eixo X
                                 <select
                                     className="ml-2 border rounded px-2 py-1 text-sm"
-                                    value={xMode}
+                                    value={effectiveXMode}
                                     onChange={(e) => setXMode(e.target.value as any)}
+                                    disabled={clubsWithData.length > 1}
+                                    title={clubsWithData.length > 1 ? "Com múltiplos clubes, o eixo por Data é desativado." : ""}
                                 >
                                     <option value="index">Jogo #</option>
                                     <option value="date">Data</option>
@@ -521,32 +608,37 @@ export default function TrendsPage() {
                         </div>
 
                         {/* GRÁFICO PRINCIPAL */}
-                        <div className="mt-4 h-[340px]">
+                        <div className="mt-4 h-[360px]">
                             <ChartComponent data={chartData as any} options={baseOptions} />
                         </div>
 
-                        {/* FAIXA DE RESULTADOS COMPACTA */}
-                        <div className="mt-4">
+                        {/* FAIXA DE RESULTADOS POR CLUBE */}
+                        <div className="mt-5">
                             <div className="text-xs text-gray-500 mb-2">Resultados no período</div>
-                            {series.length === 0 ? (
-                                <div className="text-sm text-gray-600">Sem partidas no período selecionado.</div>
-                            ) : (
-                                <div className="flex gap-1 overflow-x-auto no-scrollbar py-1">
-                                    {series.map((s, i) => (
-                                        <span
-                                            key={s.matchId}
-                                            title={`${formatDate(s.timestamp)} • vs ${s.opponentName} • ${s.goalsFor}-${s.goalsAgainst}`}
-                                            className={`inline-block w-5 h-5 rounded ${pillColor(
-                                                s.result as Result
-                                            )}`}
-                                        />
-                                    ))}
-                                </div>
-                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                {clubsWithData.map((c) => (
+                                    <div key={c.clubId} className="border rounded-lg p-2">
+                                        <div className="text-xs font-medium mb-2">{c.clubName}</div>
+                                        {c.series.length === 0 ? (
+                                            <div className="text-sm text-gray-600">Sem partidas.</div>
+                                        ) : (
+                                            <div className="flex gap-1 overflow-x-auto no-scrollbar py-1">
+                                                {c.series.map((s) => (
+                                                    <span
+                                                        key={`${c.clubId}-${s.matchId}`}
+                                                        title={`${formatDate(s.timestamp)} • vs ${s.opponentName} • ${s.goalsFor}-${s.goalsAgainst}`}
+                                                        className={`inline-block w-5 h-5 rounded ${pillColor(s.result as Result)}`}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
-                    {/* Top performers */}
+                    {/* Top performers (agregado) */}
                     <div className="bg-white border rounded-xl p-4">
                         <div className="flex items-center justify-between mb-2">
                             <h2 className="text-lg font-semibold">Top Performers (período)</h2>
@@ -557,6 +649,7 @@ export default function TrendsPage() {
                                 <thead className="bg-gray-50">
                                     <tr>
                                         <th className="p-2 text-left">Jogador</th>
+                                        <th className="p-2 text-left">Clube</th>
                                         <th className="p-2">Partidas</th>
                                         <th className="p-2">Gols</th>
                                         <th className="p-2">Assistências</th>
@@ -565,16 +658,28 @@ export default function TrendsPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {[...tops]
+                                    {Object.entries(topsByClub)
+                                        .flatMap(([cid, arr]) =>
+                                            (arr ?? []).map((t) => ({
+                                                ...t,
+                                                _clubId: Number(cid),
+                                                _clubName:
+                                                    trendsByClub[Number(cid)]?.clubName ??
+                                                    selectedClubs.find((c) => c.clubId === Number(cid))?.clubName ??
+                                                    `Clube ${cid}`,
+                                            }))
+                                        )
                                         .sort(
                                             (a, b) =>
                                                 b.goals - a.goals ||
                                                 b.assists - a.assists ||
                                                 b.avgRating - a.avgRating
                                         )
+                                        .slice(0, 30)
                                         .map((t) => (
-                                            <tr key={t.playerEntityId} className="border-t">
+                                            <tr key={`${t._clubId}-${t.playerEntityId}`} className="border-t">
                                                 <td className="p-2 text-left whitespace-nowrap">{t.playerName}</td>
+                                                <td className="p-2 text-left whitespace-nowrap">{t._clubName}</td>
                                                 <td className="p-2">{t.matches}</td>
                                                 <td className="p-2">{t.goals}</td>
                                                 <td className="p-2">{t.assists}</td>
