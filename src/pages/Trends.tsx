@@ -186,13 +186,13 @@ export default function TrendsPage() {
 
                 const trendPromises = idsToUse.map((id) =>
                     api.get<ClubTrendsDto>(
-                        `https://localhost:5000/api/Trends/club/${id}?last=${last}`,
+                        `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Trends/club/${id}?last=${last}`,
                         { signal: (controller as any).signal }
                     )
                 );
                 const topsPromises = idsToUse.map((id) =>
                     api.get<TopItemDto[]>(
-                        `https://localhost:5000/api/Trends/top-scorers?clubId=${id}&limit=10`,
+                        `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Trends/top-scorers?clubId=${id}&limit=10`,
                         { signal: (controller as any).signal }
                     )
                 );
