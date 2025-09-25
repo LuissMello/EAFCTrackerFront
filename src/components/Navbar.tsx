@@ -5,6 +5,39 @@ import { useClub } from "../hooks/useClub.tsx";
 import api from "../services/api.ts";
 
 type LastRunResponse = { lastFetchedAtUtc?: string | null };
+type Unit = "year" | "month" | "week" | "day" | "hour" | "minute" | "second";
+
+const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
+const UNITS: [Unit, number][] = [
+    ["year", 60 * 60 * 24 * 365],
+    ["month", 60 * 60 * 24 * 30],
+    ["week", 60 * 60 * 24 * 7],
+    ["day", 60 * 60 * 24],
+    ["hour", 60 * 60],
+    ["minute", 60],
+    ["second", 1],
+];
+
+function formatTimeAgo(iso?: string | null): string {
+    if (!iso) return "Nunca";
+    const then = new Date(iso).getTime();
+    const now = Date.now();
+
+    // se o backend devolver levemente no futuro por fuso, trata como agora
+    const diffSec = Math.floor((now - then) / 1000);
+
+    if (diffSec < 5 && diffSec > -5) return "agora";
+    const abs = Math.abs(diffSec);
+
+    for (const [unit, inSec] of UNITS) {
+        const value = Math.floor(abs / inSec);
+        if (value >= 1) {
+            // passado => número negativo para "há X"
+            return rtf.format(-value, unit);
+        }
+    }
+    return rtf.format(-abs, "second");
+}
 
 export default function Navbar() {
     const { setClub } = useClub();
@@ -67,6 +100,12 @@ export default function Navbar() {
 
     React.useEffect(() => { fetchLastRun(); }, [fetchLastRun]);
 
+    const [, forceTick] = React.useState(0);
+    React.useEffect(() => {
+        const id = setInterval(() => forceTick(t => t + 1), 30_000);
+        return () => clearInterval(id);
+    }, []);
+
     const handleRunFetch = React.useCallback(async () => {
         try {
             setRunning(true);
@@ -82,20 +121,11 @@ export default function Navbar() {
         }
     }, [fetchLastRun]);
 
-    const formatLastRun = (iso?: string | null) => {
-        if (!iso) return "Nunca";
-        const d = new Date(iso);
-        return d.toLocaleString("pt-BR", {
-            timeZone: "America/Sao_Paulo",
-            day: "2-digit", month: "2-digit",
-            hour: "2-digit", minute: "2-digit", second: "2-digit",
-        });
-    };
-    const lastRunLabel = loadingLastRun ? "Carregando…" : formatLastRun(lastRunUtc);
+    const lastRunLabel = loadingLastRun ? "Carregando…" : formatTimeAgo(lastRunUtc);
 
     return (
         <nav className="bg-black text-white p-4">
-            {/* Linha 1: links (sempre) */}
+            {/* Linha 1: links */}
             <div className="flex items-center gap-3 flex-wrap">
                 <Link className="font-bold" to="/">Partidas</Link>
                 <Link className="font-bold" to="/stats">Estatísticas</Link>
@@ -103,7 +133,7 @@ export default function Navbar() {
                 <Link className="font-bold" to="/trends">Trends</Link>
                 <Link className="font-bold" to="/attributes">Atributos</Link>
 
-                {/* Desktop (>=sm): controles na mesma linha, à direita */}
+                {/* Desktop (>=sm) */}
                 <div className="ml-auto hidden sm:flex items-center gap-3">
                     <div className="relative w-80">
                         <MultiClubPicker value={groupIds} onChange={handleChange} />
@@ -112,8 +142,7 @@ export default function Navbar() {
                     <button
                         onClick={handleRunFetch}
                         disabled={running}
-                        className={`px-3 py-2 rounded-lg border border-white/20 hover:bg-white/10 transition ${running ? "opacity-70 cursor-not-allowed" : ""
-                            }`}
+                        className={`px-3 py-2 rounded-lg border border-white/20 hover:bg-white/10 transition ${running ? "opacity-70 cursor-not-allowed" : ""}`}
                         title="Disparar coleta agora"
                     >
                         {running ? "Buscando…" : "Buscar novas partidas"}
@@ -125,7 +154,7 @@ export default function Navbar() {
                 </div>
             </div>
 
-            {/* Mobile (<sm): controles em nova linha, full width */}
+            {/* Mobile (<sm) */}
             <div className="mt-2 flex sm:hidden flex-col gap-2">
                 <div className="relative w-full">
                     <MultiClubPicker value={groupIds} onChange={handleChange} />
@@ -135,8 +164,7 @@ export default function Navbar() {
                     <button
                         onClick={handleRunFetch}
                         disabled={running}
-                        className={`flex-1 px-3 py-2 rounded-lg border border-white/20 hover:bg-white/10 transition ${running ? "opacity-70 cursor-not-allowed" : ""
-                            }`}
+                        className={`flex-1 px-3 py-2 rounded-lg border border-white/20 hover:bg-white/10 transition ${running ? "opacity-70 cursor-not-allowed" : ""}`}
                     >
                         {running ? "Buscando…" : "Buscar novas partidas"}
                     </button>
