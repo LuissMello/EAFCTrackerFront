@@ -34,6 +34,7 @@ interface ClubDetailsDto {
     crestColor?: string | null;
     crestAssetId?: string | null;
     selectedKitType?: string | null;
+    team?: string | null;
     // PascalCase aliases
     Name?: string | null;
     StadName?: string | null;
@@ -577,7 +578,7 @@ function MatchCard({
                 <div className="flex items-center gap-2 min-w-0">
                     <div className="w-10 shrink-0">
                         <img
-                            src={crestUrl(m.clubADetails?.crestAssetId ?? m.clubADetails?.CrestAssetId ?? null)}
+                            src={crestUrl(m.clubADetails?.team ?? m.clubADetails?.team ?? null)}
                             onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
                             alt={`Escudo ${m.clubAName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
@@ -615,7 +616,7 @@ function MatchCard({
                 <div className="flex items-center gap-2 min-w-0 justify-end">
                     <div className="w-10 shrink-0">
                         <img
-                            src={crestUrl(m.clubBDetails?.crestAssetId ?? m.clubBDetails?.CrestAssetId ?? null)}
+                            src={crestUrl(m.clubBDetails?.team ?? m.clubBDetails?.team ?? null)}
                             onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
                             alt={`Escudo ${m.clubBName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
@@ -650,7 +651,7 @@ function MatchCard({
                     {/* A */}
                     <div className="flex items-center gap-2 min-w-0">
                         <img
-                            src={crestUrl(m.clubADetails?.crestAssetId ?? m.clubADetails?.CrestAssetId ?? null)}
+                            src={crestUrl(m.clubADetails?.team ?? m.clubADetails?.team  ?? null)}
                             onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
                             alt={`Escudo ${m.clubAName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
@@ -668,7 +669,7 @@ function MatchCard({
                             <div className="font-medium leading-snug whitespace-normal break-words">{m.clubBName}</div>
                         </div>
                         <img
-                            src={crestUrl(m.clubBDetails?.crestAssetId ?? m.clubBDetails?.CrestAssetId ?? null)}
+                            src={crestUrl(m.clubBDetails?.team ?? m.clubBDetails?.team ?? null)}
                             onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
                             alt={`Escudo ${m.clubBName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
