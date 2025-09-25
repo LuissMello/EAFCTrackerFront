@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { PlayerStats, ClubStats } from "../types/stats";
+import { PlayerStats, ClubStats } from "../types/stats.ts";
 import { classifyStat, getStatQualityDetails } from "../utils/statClassifier.ts";
 import { Tooltip } from "./Tooltip.tsx";
 
@@ -14,6 +14,11 @@ interface PlayerStatsTableProps {
   initialSortKey?: keyof PlayerStats;
   initialSortOrder?: "asc" | "desc";
   pageSize?: number;
+  // Display options
+  showPagination?: boolean;
+  showSearch?: boolean;
+  showTitle?: boolean;
+  hiddenColumns?: string[];
   // Callbacks
   onSortChange?: (key: keyof PlayerStats, order: "asc" | "desc") => void;
 }
@@ -100,6 +105,10 @@ export function PlayerStatsTable({
   initialSortKey = "totalGoals",
   initialSortOrder = "desc",
   pageSize = 20,
+  showPagination = true,
+  showSearch = true,
+  showTitle = true,
+  hiddenColumns = [],
   onSortChange,
 }: PlayerStatsTableProps) {
   const [sortKey, setSortKey] = useState<keyof PlayerStats>(initialSortKey);
@@ -175,7 +184,7 @@ export function PlayerStatsTable({
 
   const clubGoalsAgainst = Number(clubStats?.totalGoalsConceded || 0);
 
-  const columns = [
+  const allColumns = [
     { key: "playerName", label: "Jogador", tooltip: "Nome do jogador" },
     { key: "matchesPlayed", label: "Partidas" },
     { key: "totalGoals", label: "Gols" },
@@ -196,10 +205,12 @@ export function PlayerStatsTable({
     { key: "totalMom", label: "MOM" },
     { key: "avgRating", label: "Nota" },
   ];
+  
+  const columns = allColumns.filter(col => !hiddenColumns.includes(col.key));
 
   return (
     <section>
-      <h2 className="text-xl font-bold mb-2 text-center">Estatísticas dos Jogadores</h2>
+      {showTitle && <h2 className="text-xl font-bold mb-2 text-center">Estatísticas dos Jogadores</h2>}
 
       <div className="overflow-x-auto rounded-lg border bg-white shadow">
         <table className="table-auto w-full text-sm text-center">
@@ -259,94 +270,134 @@ export function PlayerStatsTable({
                 const saves = Number(p.totalSaves || 0);
                 const conceded = clubGoalsAgainst;
                 const savePct = pct(saves, saves + conceded);
+                
+                const renderCell = (col: { key: string }) => {
+                  switch (col.key) {
+                    case "playerName":
+                      return (
+                        <td key={col.key} className="px-3 py-2 font-medium text-left sticky left-0 bg-white/95 backdrop-blur">
+                          {p.playerName}
+                        </td>
+                      );
+                    case "matchesPlayed":
+                      return <td key={col.key} className="px-3 py-2">{int.format(p.matchesPlayed)}</td>;
+                    case "totalGoals":
+                      return (
+                        <td key={col.key} className="px-3 py-2">
+                          <CellBar
+                            value={p.totalGoals}
+                            max={maxByKey.get("totalGoals") || 1}
+                            format={(v) => int.format(v)}
+                          />
+                        </td>
+                      );
+                    case "totalAssists":
+                      return (
+                        <td key={col.key} className="px-3 py-2">
+                          <CellBar
+                            value={p.totalAssists}
+                            max={maxByKey.get("totalAssists") || 1}
+                            format={(v) => int.format(v)}
+                          />
+                        </td>
+                      );
+                    case "totalShots":
+                      return (
+                        <td key={col.key} className="px-3 py-2">
+                          {int.format(p.totalGoals)} / {int.format(p.totalShots)}
+                          <div className="mt-1">
+                            <CellBar
+                              value={p.goalAccuracyPercent}
+                              max={100}
+                              suffix="%"
+                              positive
+                              format={(v) => p1.format(v)}
+                              statType="shotToGoalConversion"
+                            />
+                          </div>
+                        </td>
+                      );
+                    case "totalSaves":
+                      return (
+                        <td key={col.key} className="px-3 py-2">
+                          {int.format(saves)} / {int.format(conceded)}
+                          <div className="mt-1">
+                            <CellBar
+                              value={savePct}
+                              max={100}
+                              suffix="%"
+                              positive
+                              format={(v) => p1.format(v)}
+                              statType="savePercentage"
+                            />
+                          </div>
+                        </td>
+                      );
+                    case "totalPassesMade":
+                      return (
+                        <td key={col.key} className="px-3 py-2">
+                          {int.format(p.totalPassesMade)} / {int.format(p.totalPassAttempts)}
+                          <div className="mt-1">
+                            <CellBar
+                              value={pct(p.totalPassesMade, p.totalPassAttempts)}
+                              max={100}
+                              suffix="%"
+                              positive
+                              format={(v) => p1.format(v)}
+                              statType="passCompletion"
+                            />
+                          </div>
+                        </td>
+                      );
+                    case "totalTacklesMade":
+                      return (
+                        <td key={col.key} className="px-3 py-2">
+                          {int.format(p.totalTacklesMade)} / {int.format(p.totalTackleAttempts)}
+                          <div className="mt-1">
+                            <CellBar
+                              value={pct(p.totalTacklesMade, p.totalTackleAttempts)}
+                              max={100}
+                              suffix="%"
+                              positive
+                              format={(v) => p1.format(v)}
+                              statType="tackleDuelWin"
+                            />
+                          </div>
+                        </td>
+                      );
+                    case "totalWins":
+                      return <td key={col.key} className="px-3 py-2">{int.format(p.totalWins)}</td>;
+                    case "totalLosses":
+                      return <td key={col.key} className="px-3 py-2">{int.format(p.totalLosses)}</td>;
+                    case "totalDraws":
+                      return <td key={col.key} className="px-3 py-2">{int.format(p.totalDraws)}</td>;
+                    case "winPercent":
+                      return (
+                        <td key={col.key} className="px-3 py-2">
+                          <CellBar
+                            value={p.winPercent}
+                            max={100}
+                            suffix="%"
+                            positive
+                            format={(v) => p1.format(v)}
+                            statType="winRate"
+                          />
+                        </td>
+                      );
+                    case "totalRedCards":
+                      return <td key={col.key} className="px-3 py-2">{int.format(p.totalRedCards)}</td>;
+                    case "totalMom":
+                      return <td key={col.key} className="px-3 py-2">{int.format(p.totalMom)}</td>;
+                    case "avgRating":
+                      return <td key={col.key} className="px-3 py-2">{p2.format(Number(p.avgRating || 0))}</td>;
+                    default:
+                      return null;
+                  }
+                };
+                
                 return (
                   <tr key={p.playerId} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 font-medium text-left sticky left-0 bg-white/95 backdrop-blur">
-                      {p.playerName}
-                    </td>
-                    <td className="px-3 py-2">{int.format(p.matchesPlayed)}</td>
-                    <td className="px-3 py-2">
-                      <CellBar
-                        value={p.totalGoals}
-                        max={maxByKey.get("totalGoals") || 1}
-                        format={(v) => int.format(v)}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <CellBar
-                        value={p.totalAssists}
-                        max={maxByKey.get("totalAssists") || 1}
-                        format={(v) => int.format(v)}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      {int.format(p.totalGoals)} / {int.format(p.totalShots)}
-                      <div className="mt-1">
-                        <CellBar
-                          value={p.goalAccuracyPercent}
-                          max={100}
-                          suffix="%"
-                          positive
-                          format={(v) => p1.format(v)}
-                          statType="shotToGoalConversion"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      {int.format(saves)} / {int.format(conceded)}
-                      <div className="mt-1">
-                        <CellBar
-                          value={savePct}
-                          max={100}
-                          suffix="%"
-                          positive
-                          format={(v) => p1.format(v)}
-                          statType="savePercentage"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      {int.format(p.totalPassesMade)} / {int.format(p.totalPassAttempts)}
-                      <div className="mt-1">
-                        <CellBar
-                          value={pct(p.totalPassesMade, p.totalPassAttempts)}
-                          max={100}
-                          suffix="%"
-                          positive
-                          format={(v) => p1.format(v)}
-                          statType="passCompletion"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      {int.format(p.totalTacklesMade)} / {int.format(p.totalTackleAttempts)}
-                      <div className="mt-1">
-                        <CellBar
-                          value={pct(p.totalTacklesMade, p.totalTackleAttempts)}
-                          max={100}
-                          suffix="%"
-                          positive
-                          format={(v) => p1.format(v)}
-                          statType="tackleDuelWin"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">{int.format(p.totalWins)}</td>
-                    <td className="px-3 py-2">{int.format(p.totalLosses)}</td>
-                    <td className="px-3 py-2">{int.format(p.totalDraws)}</td>
-                    <td className="px-3 py-2">
-                      <CellBar
-                        value={p.winPercent}
-                        max={100}
-                        suffix="%"
-                        positive
-                        format={(v) => p1.format(v)}
-                        statType="winRate"
-                      />
-                    </td>
-                    <td className="px-3 py-2">{int.format(p.totalRedCards)}</td>
-                    <td className="px-3 py-2">{int.format(p.totalMom)}</td>
-                    <td className="px-3 py-2">{p2.format(Number(p.avgRating || 0))}</td>
+                    {columns.map(col => renderCell(col))}
                   </tr>
                 );
               })}
@@ -355,27 +406,29 @@ export function PlayerStatsTable({
       </div>
 
       {/* Pagination */}
-      <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-        <div className="text-sm text-gray-600">
-          Mostrando {pageItems.length} de {sorted.length} jogadores (pág. {page}/{totalPages})
+      {showPagination && (
+        <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+          <div className="text-sm text-gray-600">
+            Mostrando {pageItems.length} de {sorted.length} jogadores (pág. {page}/{totalPages})
+          </div>
+          <div className="flex gap-2">
+            <button
+              className="px-3 py-1 rounded border bg-white disabled:opacity-50"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              Anterior
+            </button>
+            <button
+              className="px-3 py-1 rounded border bg-white disabled:opacity-50"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            className="px-3 py-1 rounded border bg-white disabled:opacity-50"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-          >
-            Anterior
-          </button>
-          <button
-            className="px-3 py-1 rounded border bg-white disabled:opacity-50"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-          >
-            Próxima
-          </button>
-        </div>
-      </div>
+      )}
     </section>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { ClubStats } from "../types/stats";
+import { ClubStats } from "../types/stats.ts";
 import { classifyStat } from "../utils/statClassifier.ts";
 import { StatQualityIndicator } from "./StatQualityIndicator.tsx";
 
@@ -7,6 +7,7 @@ interface TeamStatsSectionProps {
   clubStats: ClubStats | null;
   loading: boolean;
   error: string | null;
+  hiddenStats?: string[];
 }
 
 const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);
@@ -49,7 +50,7 @@ function StatCard({
   );
 }
 
-export function TeamStatsSection({ clubStats, loading, error }: TeamStatsSectionProps) {
+export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }: TeamStatsSectionProps) {
   const { int, p1, p2 } = useNumberFormats();
 
   if (loading && !clubStats) {
@@ -82,49 +83,78 @@ export function TeamStatsSection({ clubStats, loading, error }: TeamStatsSection
 
   if (!clubStats) return null;
 
+  const statCards = [
+    {
+      id: "matches",
+      label: "Partidas",
+      value: int.format(clubStats.matchesPlayed),
+    },
+    {
+      id: "goals",
+      label: "Gols / Assist.",
+      value: `${int.format(clubStats.totalGoals)} / ${int.format(clubStats.totalAssists)}`,
+    },
+    {
+      id: "shots",
+      label: "Chutes (G/T)",
+      value: `${int.format(clubStats.totalGoals)} / ${int.format(clubStats.totalShots)}`,
+      sub: `${p1.format(clubStats.goalAccuracyPercent)}% de conversão`,
+      statType: "shotToGoalConversion",
+      rawValue: clubStats.goalAccuracyPercent,
+    },
+    {
+      id: "passes",
+      label: "Passes (C/T)",
+      value: `${int.format(clubStats.totalPassesMade)} / ${int.format(clubStats.totalPassAttempts)}`,
+      sub: `${p1.format(pct(clubStats.totalPassesMade, clubStats.totalPassAttempts))}% de acerto`,
+      statType: "passCompletion",
+      rawValue: pct(clubStats.totalPassesMade, clubStats.totalPassAttempts),
+    },
+    {
+      id: "tackles",
+      label: "Desarmes (C/T)",
+      value: `${int.format(clubStats.totalTacklesMade)} / ${int.format(clubStats.totalTackleAttempts)}`,
+      sub: `${p1.format(pct(clubStats.totalTacklesMade, clubStats.totalTackleAttempts))}% de sucesso`,
+      statType: "tackleDuelWin",
+      rawValue: pct(clubStats.totalTacklesMade, clubStats.totalTackleAttempts),
+    },
+    {
+      id: "results",
+      label: "Resultados",
+      value: `${int.format(clubStats.totalWins)}V / ${int.format(clubStats.totalDraws)}E / ${int.format(
+        clubStats.totalLosses
+      )}D`,
+      sub: `${p1.format(clubStats.winPercent)}% vitórias`,
+      statType: "winRate",
+      rawValue: clubStats.winPercent,
+    },
+    {
+      id: "cards",
+      label: "Vermelhos / MOM",
+      value: `${int.format(clubStats.totalRedCards)} / ${int.format(clubStats.totalMom)}`,
+    },
+    {
+      id: "rating",
+      label: "Nota média",
+      value: p2.format(Number(clubStats.avgRating || 0)),
+    },
+  ];
+
+  const visibleStats = statCards.filter((stat) => !hiddenStats.includes(stat.id));
+
   return (
     <section className="mb-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Partidas" value={int.format(clubStats.matchesPlayed)} />
-        <StatCard
-          label="Gols / Assist."
-          value={`${int.format(clubStats.totalGoals)} / ${int.format(clubStats.totalAssists)}`}
-        />
-        <StatCard
-          label="Chutes (G/T)"
-          value={`${int.format(clubStats.totalGoals)} / ${int.format(clubStats.totalShots)}`}
-          sub={`${p1.format(clubStats.goalAccuracyPercent)}% de conversão`}
-          statType="shotToGoalConversion"
-          rawValue={clubStats.goalAccuracyPercent}
-        />
-        <StatCard
-          label="Passes (C/T)"
-          value={`${int.format(clubStats.totalPassesMade)} / ${int.format(clubStats.totalPassAttempts)}`}
-          sub={`${p1.format(pct(clubStats.totalPassesMade, clubStats.totalPassAttempts))}% de acerto`}
-          statType="passCompletion"
-          rawValue={pct(clubStats.totalPassesMade, clubStats.totalPassAttempts)}
-        />
-        <StatCard
-          label="Desarmes (C/T)"
-          value={`${int.format(clubStats.totalTacklesMade)} / ${int.format(clubStats.totalTackleAttempts)}`}
-          sub={`${p1.format(pct(clubStats.totalTacklesMade, clubStats.totalTackleAttempts))}% de sucesso`}
-          statType="tackleDuelWin"
-          rawValue={pct(clubStats.totalTacklesMade, clubStats.totalTackleAttempts)}
-        />
-        <StatCard
-          label="Resultados"
-          value={`${int.format(clubStats.totalWins)}V / ${int.format(clubStats.totalDraws)}E / ${int.format(
-            clubStats.totalLosses
-          )}D`}
-          sub={`${p1.format(clubStats.winPercent)}% vitórias`}
-          statType="winRate"
-          rawValue={clubStats.winPercent}
-        />
-        <StatCard
-          label="Vermelhos / MOM"
-          value={`${int.format(clubStats.totalRedCards)} / ${int.format(clubStats.totalMom)}`}
-        />
-        <StatCard label="Nota média" value={p2.format(Number(clubStats.avgRating || 0))} />
+        {visibleStats.map((stat) => (
+          <StatCard
+            key={stat.id}
+            label={stat.label}
+            value={stat.value}
+            sub={stat.sub}
+            statType={stat.statType}
+            rawValue={stat.rawValue}
+          />
+        ))}
       </div>
     </section>
   );

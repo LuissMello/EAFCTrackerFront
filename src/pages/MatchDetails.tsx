@@ -11,6 +11,9 @@ import OverallSummaryCard, {
     ClubOverallRow,
     PlayoffAchievementDto,
 } from "../components/OverallSummaryCard.tsx";
+import { TeamStatsSection } from "../components/TeamStatsSection.tsx";
+import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
+import { ClubStats, PlayerStats } from "../types/stats.ts";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -47,34 +50,8 @@ interface PlayerRow {
     winPercent: number;
 }
 
-interface ClubRow {
-    clubId: number;
-    clubName: string;
+interface ClubRow extends ClubStats {
     clubCrestAssetId?: string | null;
-
-    matchesPlayed: number;
-    totalGoals: number;
-    totalAssists: number;
-    totalShots: number;
-    totalPassesMade: number;
-    totalPassAttempts: number;
-    totalTacklesMade: number;
-    totalTackleAttempts: number;
-
-    totalWins: number;
-    totalLosses: number;
-    totalDraws: number;
-    totalCleanSheets: number;
-    totalRedCards: number;
-    totalSaves: number;
-    totalMom: number;
-
-    avgRating: number;
-
-    winPercent: number;
-    passAccuracyPercent: number;
-    tackleSuccessPercent: number;
-    goalAccuracyPercent: number;
 }
 
 interface OverallRow {
@@ -217,8 +194,8 @@ export default function MatchDetails() {
     const [selectedStat, setSelectedStat] = useState<(typeof comparisonStats)[number]["key"]>(initialStat);
     const [onlySelectedClubPlayers, setOnlySelectedClubPlayers] = useState<boolean>(initialOnlySel);
     const [playerQuery, setPlayerQuery] = useState("");
-    const [sortKey, setSortKey] = useState<keyof PlayerRow | "playerName">("totalGoals");
-    const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+    const [sortKey, setSortKey] = useState<keyof PlayerRow>("totalGoals");
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
     const [showOverallPanel, setShowOverallPanel] = useState<boolean>(false);
 
     const persistParams = useCallback(
@@ -288,6 +265,22 @@ export default function MatchDetails() {
         clone.unshift(sel);
         return clone;
     }, [clubs, selectedClubId]);
+
+    // Transform clubs to include totalGoalsConceded
+    const clubsWithGoalsConceded = useMemo(() => {
+        if (orderedClubs.length < 2) return orderedClubs;
+        
+        return orderedClubs.map((club, index) => {
+            // In a match, goals conceded by one team = goals scored by the other team
+            const opponentIndex = index === 0 ? 1 : 0;
+            const goalsConceeded = orderedClubs[opponentIndex]?.totalGoals || 0;
+            
+            return {
+                ...club,
+                totalGoalsConceded: goalsConceeded
+            };
+        });
+    }, [orderedClubs]);
 
     // ====== Reset de marcações se trocar partida ou par de clubes ======
     useEffect(() => {
@@ -500,15 +493,15 @@ export default function MatchDetails() {
                 const va = (a as any)[sortKey] ?? (sortKey === "playerName" ? a.playerName : 0);
                 const vb = (b as any)[sortKey] ?? (sortKey === "playerName" ? b.playerName : 0);
                 if (typeof va === "string" && typeof vb === "string") {
-                    return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+                    return sortOrder === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
                 }
                 const numA = Number(va) || 0;
                 const numB = Number(vb) || 0;
-                return sortDir === "asc" ? numA - numB : numB - numA;
+                return sortOrder === "asc" ? numA - numB : numB - numA;
             });
             return copy;
         },
-        [sortKey, sortDir]
+        [sortKey, sortOrder]
     );
 
     const playersByClub = useMemo(() => {
@@ -620,6 +613,49 @@ export default function MatchDetails() {
                     </>
                 )}
             </div>
+
+            {/* Team Stats Section */}
+            {clubsWithGoalsConceded.length >= 2 && (
+                <div className="bg-white shadow-sm rounded-xl p-4 border">
+                    <h2 className="text-lg font-semibold mb-4">Estatísticas da Partida</h2>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div>
+                            <h3 className="text-base font-medium mb-2 flex items-center gap-2">
+                                <img
+                                    src={crestUrl(clubsWithGoalsConceded[0]?.clubCrestAssetId)}
+                                    onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                                    alt={`Escudo ${clubsWithGoalsConceded[0].clubName}`}
+                                    className="w-6 h-6 rounded-full bg-white border"
+                                />
+                                {clubsWithGoalsConceded[0].clubName}
+                            </h3>
+                            <TeamStatsSection 
+                                clubStats={clubsWithGoalsConceded[0]} 
+                                loading={false} 
+                                error={null}
+                                hiddenStats={["matches", "results"]}
+                            />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-medium mb-2 flex items-center gap-2">
+                                <img
+                                    src={crestUrl(clubsWithGoalsConceded[1]?.clubCrestAssetId)}
+                                    onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                                    alt={`Escudo ${clubsWithGoalsConceded[1].clubName}`}
+                                    className="w-6 h-6 rounded-full bg-white border"
+                                />
+                                {clubsWithGoalsConceded[1].clubName}
+                            </h3>
+                            <TeamStatsSection 
+                                clubStats={clubsWithGoalsConceded[1]} 
+                                loading={false} 
+                                error={null}
+                                hiddenStats={["matches", "results"]}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Cabeçalho dos clubes + placar e highlights */}
             <div className="bg-white shadow-sm rounded-xl p-4 border">
@@ -798,234 +834,41 @@ export default function MatchDetails() {
                 </div>
             </div>
 
-            {/* Tabelas de jogadores por clube */}
+            {/* Player Stats Tables by Club */}
             {orderedClubs.map((clubRow) => {
-                const gk = gkByClub.get(clubRow.clubId);
-                const clubPlayers = playersByClub.get(clubRow.clubId) ?? [];
+                const clubPlayers = players.filter(p => p.clubId === clubRow.clubId);
+                
                 return (
                     <div key={clubRow.clubId} className="bg-white shadow-sm rounded-xl p-4 border">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-lg font-semibold">{clubRow.clubName} - Jogadores</h3>
-                            <div className="flex items-center gap-2 text-sm">
-                                <label className="text-gray-700">Ordenar por:</label>
-                                <select
-                                    value={sortKey}
-                                    onChange={(e) => setSortKey(e.target.value as keyof PlayerRow | "playerName")}
-                                    className="border rounded px-2 py-1 text-sm w-full md:w-auto"
-                                >
-                                    <option value="playerName">Nome</option>
-                                    <option value="totalGoals">Gols</option>
-                                    <option value="totalAssists">Assistências</option>
-                                    <option value="totalShots">Chutes</option>
-                                    <option value="goalAccuracyPercent">Chutes %</option>
-                                    <option value="totalPassesMade">Passes</option>
-                                    <option value="totalPassAttempts">Tentativas de Passe</option>
-                                    <option value="passAccuracyPercent">Passes %</option>
-                                    <option value="totalTacklesMade">Desarmes</option>
-                                    <option value="totalTackleAttempts">Tentativas de Desarme</option>
-                                    <option value="tackleSuccessPercent">Desarmes %</option>
-                                    <option value="totalRedCards">Vermelhos</option>
-                                    <option value="totalSaves">Defesas (GK)</option>
-                                    <option value="totalCleanSheets">Clean Sheets</option>
-                                    <option value="avgRating">Nota</option>
-                                </select>
-                                <select
-                                    value={sortDir}
-                                    onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
-                                    className="border rounded px-2 py-1 text-sm w-full md:w-auto"
-                                >
-                                    <option value="desc">Desc</option>
-                                    <option value="asc">Asc</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* Lista mobile */}
-                        <div className="md:hidden grid gap-3">
-                            {clubPlayers.map((p) => {
-                                const isGK = gk?.playerId === p.playerId;
-                                return (
-                                    <div key={p.playerId} className="rounded-lg border p-3 bg-white">
-                                        <div className="flex items-center justify-between">
-                                            <Link className="text-blue-700 underline font-medium" to={`/statistics/player/${matchId}/${p.playerId}`}>
-                                                {p.playerName}
-                                            </Link>
-                                            <div className="flex items-center gap-2">
-                                                {isGK && (
-                                                    <CustomTooltip content="Goleiro">
-                                                        <span>🧤</span>
-                                                    </CustomTooltip>
-                                                )}
-                                                {p.totalMom > 0 && (
-                                                    <CustomTooltip content="Homem da Partida">
-                                                        <span>⭐</span>
-                                                    </CustomTooltip>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="mt-2 grid grid-cols-2 gap-2">
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Gols</span>
-                                                <span className="tabular-nums font-medium">{p.totalGoals}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Assist.</span>
-                                                <span className="tabular-nums font-medium">{p.totalAssists}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Chutes</span>
-                                                <span className="tabular-nums font-medium">{p.totalShots}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Chutes %</span>
-                                                <span className="tabular-nums font-medium">
-                                                    <StatWithQuality
-                                                        value={fmt(p.goalAccuracyPercent)}
-                                                        quality={classifyStat("shotToGoalConversion", p.goalAccuracyPercent)}
-                                                        statType="shotToGoalConversion"
-                                                        rawValue={p.goalAccuracyPercent}
-                                                    />
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Passes</span>
-                                                <span className="tabular-nums font-medium">{p.totalPassesMade}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Passes %</span>
-                                                <span className="tabular-nums font-medium">
-                                                    <StatWithQuality
-                                                        value={fmt(p.passAccuracyPercent)}
-                                                        quality={classifyStat("passCompletion", p.passAccuracyPercent)}
-                                                        statType="passCompletion"
-                                                        rawValue={p.passAccuracyPercent}
-                                                    />
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Desarmes</span>
-                                                <span className="tabular-nums font-medium">{p.totalTacklesMade}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Desarmes %</span>
-                                                <span className="tabular-nums font-medium">
-                                                    <StatWithQuality
-                                                        value={fmt(p.tackleSuccessPercent)}
-                                                        quality={classifyStat("tackleDuelWin", p.tackleSuccessPercent)}
-                                                        statType="tackleDuelWin"
-                                                        rawValue={p.tackleSuccessPercent}
-                                                    />
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Clean Sheets</span>
-                                                <span className="tabular-nums font-medium">{p.totalCleanSheets ?? 0}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Defesas (GK)</span>
-                                                <span className="tabular-nums font-medium">{p.totalSaves ?? 0}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Vermelhos</span>
-                                                <span className="tabular-nums font-medium">{p.totalRedCards ?? 0}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-500">Nota</span>
-                                                <span className="tabular-nums font-medium">{(p.avgRating ?? 0).toFixed(2)}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* Tabela desktop */}
-                        <div className="hidden md:block overflow-x-auto">
-                            <table className="w-full table-auto text-xs sm:text-sm border text-center">
-                                <thead>
-                                    <tr className="bg-gray-50">
-                                        <th className="p-2 text-left">Jogador</th>
-                                        <th className="p-1.5 sm:p-2">Gols</th>
-                                        <th className="p-1.5 sm:p-2">Assistências</th>
-                                        <th className="p-1.5 sm:p-2">Chutes</th>
-                                        <th className="p-1.5 sm:p-2">Chutes %</th>
-                                        <th className="p-1.5 sm:p-2">Passes</th>
-                                        <th className="p-1.5 sm:p-2">Tentativas</th>
-                                        <th className="p-1.5 sm:p-2">Passes %</th>
-                                        <th className="p-1.5 sm:p-2">Desarmes</th>
-                                        <th className="p-1.5 sm:p-2">Tentativas</th>
-                                        <th className="p-1.5 sm:p-2">Desarmes %</th>
-                                        <th className="p-1.5 sm:p-2">Clean Sheets</th>
-                                        <th className="p-1.5 sm:p-2">Defesas (GK)</th>
-                                        <th className="p-1.5 sm:p-2">Vermelhos</th>
-                                        <th className="p-1.5 sm:p-2">Nota</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {clubPlayers.map((p) => {
-                                        const isGK = gk?.playerId === p.playerId;
-                                        return (
-                                            <tr key={p.playerId} className={`border-t ${p.totalMom > 0 ? "bg-amber-50" : ""}`}>
-                                                <td className="p-2 text-left">
-                                                    <div className="flex items-center justify-between">
-                                                        <Link className="text-blue-700 underline" to={`/statistics/player/${matchId}/${p.playerId}`}>
-                                                            {p.playerName}
-                                                        </Link>
-                                                        <span className="inline-flex items-center gap-1">
-                                                            {isGK && (
-                                                                <CustomTooltip content="Goleiro">
-                                                                    <span>🧤</span>
-                                                                </CustomTooltip>
-                                                            )}
-                                                            {p.totalMom > 0 && (
-                                                                <CustomTooltip content="Homem da Partida">
-                                                                    <span>⭐</span>
-                                                                </CustomTooltip>
-                                                            )}
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="p-2 tabular-nums">{p.totalGoals}</td>
-                                                <td className="p-2 tabular-nums">{p.totalAssists}</td>
-                                                <td className="p-2 tabular-nums">{p.totalShots}</td>
-                                                <td className="p-2 tabular-nums">
-                                                    <StatWithQuality
-                                                        value={fmt(p.goalAccuracyPercent)}
-                                                        quality={classifyStat("shotToGoalConversion", p.goalAccuracyPercent)}
-                                                        statType="shotToGoalConversion"
-                                                        rawValue={p.goalAccuracyPercent}
-                                                    />
-                                                </td>
-                                                <td className="p-2 tabular-nums">{p.totalPassesMade}</td>
-                                                <td className="p-2 tabular-nums">{p.totalPassAttempts}</td>
-                                                <td className="p-2 tabular-nums">
-                                                    <StatWithQuality
-                                                        value={fmt(p.passAccuracyPercent)}
-                                                        quality={classifyStat("passCompletion", p.passAccuracyPercent)}
-                                                        statType="passCompletion"
-                                                        rawValue={p.passAccuracyPercent}
-                                                    />
-                                                </td>
-                                                <td className="p-2 tabular-nums">{p.totalTacklesMade}</td>
-                                                <td className="p-2 tabular-nums">{p.totalTackleAttempts}</td>
-                                                <td className="p-2 tabular-nums">
-                                                    <StatWithQuality
-                                                        value={fmt(p.tackleSuccessPercent)}
-                                                        quality={classifyStat("tackleDuelWin", p.tackleSuccessPercent)}
-                                                        statType="tackleDuelWin"
-                                                        rawValue={p.tackleSuccessPercent}
-                                                    />
-                                                </td>
-                                                <td className="p-2 tabular-nums">{p.totalCleanSheets ?? 0}</td>
-                                                <td className="p-2 tabular-nums">{p.totalSaves ?? 0}</td>
-                                                <td className="p-2 tabular-nums">{p.totalRedCards ?? 0}</td>
-                                                <td className="p-2 tabular-nums">{(p.avgRating ?? 0).toFixed(2)}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <img
+                                src={crestUrl(clubRow.clubCrestAssetId)}
+                                onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                                alt={`Escudo ${clubRow.clubName}`}
+                                className="w-6 h-6 rounded-full bg-white border"
+                            />
+                            {clubRow.clubName} - Jogadores
+                        </h3>
+                        
+                        <PlayerStatsTable
+                            players={clubPlayers}
+                            loading={false}
+                            error={null}
+                            clubStats={clubsWithGoalsConceded.find(c => c.clubId === clubRow.clubId) || null}
+                            minMatches={0}
+                            searchTerm={playerQuery}
+                            initialSortKey={sortKey as keyof PlayerStats}
+                            initialSortOrder={sortOrder}
+                            pageSize={50}
+                            showPagination={false}
+                            showSearch={false}
+                            showTitle={false}
+                            hiddenColumns={["matchesPlayed", "totalWins", "totalLosses", "totalDraws", "winPercent"]}
+                            onSortChange={(key, order) => {
+                                setSortKey(key);
+                                setSortOrder(order);
+                            }}
+                        />
                     </div>
                 );
             })}
