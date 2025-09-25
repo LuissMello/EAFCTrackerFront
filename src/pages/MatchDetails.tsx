@@ -15,7 +15,7 @@ import OverallSummaryCard, {
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 // ======================
-// Tipos (espelham /api/matches/{matchId}/statistics)
+// Tipos (espelham /api/Matches/{matchId}/statistics)
 // ======================
 interface PlayerRow {
     playerId: number;
@@ -149,7 +149,6 @@ function fmt(value: number | undefined | null) {
     return Number.isInteger(value) ? String(value) : (Math.round((value as number) * 100) / 100).toFixed(2);
 }
 
-// meta de estatísticas disponíveis na UI
 const comparisonStats: Array<{
     label: string;
     key: keyof (ClubRow & PlayerRow);
@@ -173,7 +172,6 @@ const comparisonStats: Array<{
         { label: "Vitórias (%)", key: "winPercent", scope: "both" },
     ];
 
-// Aux: badge simples
 const Badge: React.FC<{ className?: string; children: React.ReactNode; title?: string }> = ({
     className = "",
     children,
@@ -184,12 +182,10 @@ const Badge: React.FC<{ className?: string; children: React.ReactNode; title?: s
     </span>
 );
 
-// Aux: Skeleton
 const Skeleton: React.FC<{ className?: string }> = ({ className = "h-5 w-full" }) => (
     <div className={`animate-pulse rounded bg-gray-200 ${className}`} />
 );
 
-// Aux: botão
 const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className = "", ...props }) => (
     <button
         {...props}
@@ -207,9 +203,11 @@ export default function MatchDetails() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // cache para overall/playoffs por clube (busca-once ao expandir)
+    // caches para overall/playoffs
     const [overallCache, setOverallCache] = useState<Map<number, ClubOverallRow>>(new Map());
     const [playoffsCache, setPlayoffsCache] = useState<Map<number, PlayoffAchievementDto[]>>(new Map());
+    // marca clubes já buscados com sucesso (evita re-fetch)
+    const [fetchedOverall, setFetchedOverall] = useState<Set<number>>(new Set());
     const [overallBusy, setOverallBusy] = useState(false);
     const [overallErr, setOverallErr] = useState<string | null>(null);
 
@@ -221,7 +219,7 @@ export default function MatchDetails() {
     const [playerQuery, setPlayerQuery] = useState("");
     const [sortKey, setSortKey] = useState<keyof PlayerRow | "playerName">("totalGoals");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-    const [showOverallPanel, setShowOverallPanel] = useState<boolean>(false); // começa minimizado
+    const [showOverallPanel, setShowOverallPanel] = useState<boolean>(false);
 
     const persistParams = useCallback(
         (key: string, val: string | null) => {
@@ -240,13 +238,14 @@ export default function MatchDetails() {
         persistParams("onlyClub", onlySelectedClubPlayers ? "1" : null);
     }, [onlySelectedClubPlayers]);
 
+    // ====== Buscar estatísticas da partida ======
     const fetchData = useCallback(async () => {
         if (!matchId) return;
         let cancel = false;
         try {
             setLoading(true);
             setError(null);
-            const { data } = await api.get<FullMatchStatisticsDto>(`/api/matches/${matchId}/statistics`);
+            const { data } = await api.get<FullMatchStatisticsDto>(`/api/Matches/${matchId}/statistics`);
             if (!cancel) setStats(data);
         } catch (err: any) {
             if (!cancel) setError(err?.message ?? "Erro ao buscar estatísticas");
@@ -268,7 +267,6 @@ export default function MatchDetails() {
     // >>> DEDUZIR O CLUB SELECIONADO DENTRO DESTE JOGO <<<
     const selectedClubId = useMemo<number | null>(() => {
         if (!stats?.clubs?.length) return club?.clubId ?? null;
-
         for (const id of selectedClubIds) {
             if (stats.clubs.some((c) => c.clubId === id)) return id;
         }
@@ -291,16 +289,24 @@ export default function MatchDetails() {
         return clone;
     }, [clubs, selectedClubId]);
 
-    // ========= Fetch-once dos Overalls/Playoffs (somente ao expandir) =========
+    // ====== Reset de marcações se trocar partida ou par de clubes ======
+    useEffect(() => {
+        setFetchedOverall(new Set());
+        // se quiser também limpar cache visualmente:
+        // setOverallCache(new Map());
+        // setPlayoffsCache(new Map());
+    }, [matchId, orderedClubs.map((c) => c.clubId).join(",")]);
+
+    // ====== Fetch-once de Overalls/Playoffs (somente ao abrir o painel) ======
     const fetchOverallIfNeeded = useCallback(async () => {
         if (!showOverallPanel) return;
 
         const targets = orderedClubs
             .slice(0, 2)
             .filter(Boolean)
-            .filter((c) => !overallCache.has(c.clubId) || !playoffsCache.has(c.clubId));
+            .filter((c) => !fetchedOverall.has(c.clubId));
 
-        if (targets.length === 0) return; // já temos cache, não buscar de novo
+        if (targets.length === 0) return;
 
         try {
             setOverallBusy(true);
@@ -313,11 +319,12 @@ export default function MatchDetails() {
                         PlayoffAchievements?: PlayoffAchievementDto[];
                         clubOverall?: ClubOverallRow;
                         playoffAchievements?: PlayoffAchievementDto[];
-                    }>(`/api/clubs/${c.clubId}/overall-and-playoffs`);
+                    }>(`/api/Clubs/${c.clubId}/overall-and-playoffs`);
                     return { clubId: c.clubId, data };
                 })
             );
 
+            // atualiza caches de uma vez
             setOverallCache((prev) => {
                 const next = new Map(prev);
                 for (const r of results) {
@@ -335,12 +342,18 @@ export default function MatchDetails() {
                 }
                 return next;
             });
+
+            setFetchedOverall((prev) => {
+                const next = new Set(prev);
+                for (const t of targets) next.add(t.clubId);
+                return next;
+            });
         } catch (e: any) {
             setOverallErr(e?.message ?? "Erro ao buscar histórico do clube.");
         } finally {
             setOverallBusy(false);
         }
-    }, [showOverallPanel, orderedClubs, overallCache, playoffsCache]);
+    }, [showOverallPanel, orderedClubs, fetchedOverall]);
 
     useEffect(() => {
         fetchOverallIfNeeded();
@@ -514,9 +527,7 @@ export default function MatchDetails() {
         const a = Number(va ?? 0);
         const b = Number(vb ?? 0);
         if (a === b) return { a: "", b: "" };
-        return a > b
-            ? { a: "bg-emerald-50 font-semibold", b: "bg-red-50" }
-            : { a: "bg-red-50", b: "bg-emerald-50 font-semibold" };
+        return a > b ? { a: "bg-emerald-50 font-semibold", b: "bg-red-50" } : { a: "bg-red-50", b: "bg-emerald-50 font-semibold" };
     };
 
     const mom = (stats?.players ?? []).find((p) => (p.totalMom ?? 0) > 0);
@@ -581,10 +592,7 @@ export default function MatchDetails() {
                         onClick={() => {
                             const next = !showOverallPanel;
                             setShowOverallPanel(next);
-                            // se for abrir, dispara fetch-once (se precisar)
-                            if (!next) return;
-                            // o efeito já cuida, mas chamar explicitamente ajuda em UX
-                            setTimeout(() => fetchOverallIfNeeded(), 0);
+                            // não chamamos fetch aqui; o useEffect dispara quando abrir
                         }}
                     >
                         {showOverallPanel ? "Minimizar" : "Maximizar"}
@@ -603,14 +611,12 @@ export default function MatchDetails() {
                                     clubId={c.clubId}
                                     clubName={c.clubName}
                                     crestAssetId={c.clubCrestAssetId}
-                                    overall={overallCache.get(c.clubId) /* cache -> evita refetch */}
-                                    playoffs={playoffsCache.get(c.clubId) /* cache -> evita refetch */}
+                                    overall={overallCache.get(c.clubId)}
+                                    playoffs={playoffsCache.get(c.clubId)}
                                 />
                             ))}
                         </div>
-                        {overallBusy && (
-                            <div className="mt-3 text-sm text-gray-600">Carregando histórico do(s) clube(s)…</div>
-                        )}
+                        {overallBusy && <div className="mt-3 text-sm text-gray-600">Carregando histórico do(s) clube(s)…</div>}
                     </>
                 )}
             </div>
@@ -619,9 +625,7 @@ export default function MatchDetails() {
             <div className="bg-white shadow-sm rounded-xl p-4 border">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     {/* Esquerda */}
-                    <div
-                        className={`flex items-center gap-2 px-2 py-1 rounded ${leftIsSelected ? "border-2 border-blue-600" : ""}`}
-                    >
+                    <div className={`flex items-center gap-2 px-2 py-1 rounded ${leftIsSelected ? "border-2 border-blue-600" : ""}`}>
                         <img
                             src={crestUrl(orderedClubs[0]?.clubCrestAssetId)}
                             onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
@@ -640,9 +644,7 @@ export default function MatchDetails() {
                     <div className="text-lg sm:text-xl font-bold text-gray-900">{scoreLabel}</div>
 
                     {/* Direita */}
-                    <div
-                        className={`flex items-center gap-2 px-2 py-1 rounded ${rightIsSelected ? "border-2 border-blue-600" : ""}`}
-                    >
+                    <div className={`flex items-center gap-2 px-2 py-1 rounded ${rightIsSelected ? "border-2 border-blue-600" : ""}`}>
                         <div className="font-semibold flex items-center gap-2">
                             {orderedClubs[1].clubName}
                             {rightIsSelected && (
@@ -723,10 +725,7 @@ export default function MatchDetails() {
                             {sentOff.map((p) => (
                                 <li key={p.playerId}>
                                     <span className="font-medium">{p.playerName}</span>
-                                    <span className="text-gray-500">
-                                        {" "}
-                                        - {orderedClubs.find((c) => c.clubId === p.clubId)?.clubName ?? "Clube"}
-                                    </span>
+                                    <span className="text-gray-500"> - {orderedClubs.find((c) => c.clubId === p.clubId)?.clubName ?? "Clube"}</span>
                                 </li>
                             ))}
                         </ul>
