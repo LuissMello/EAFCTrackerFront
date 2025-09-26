@@ -34,6 +34,7 @@ export type ClubOverallRow = {
     skillRating?: string | null;
     reputationtier?: string | null;
     leagueAppearances?: string | null;
+    currentDivision?: string | null; // <- usado no novo bloco
     updatedAtUtc?: string | null;
 };
 
@@ -69,8 +70,8 @@ const asPositiveIntString = (s?: string | null) => {
     const n = Number(String(s).trim());
     return Number.isFinite(n) && n > 0 ? String(Math.trunc(n)) : null;
 };
-const divisionCrestUrl = (bestDivision?: string | null) => {
-    const n = asPositiveIntString(bestDivision);
+const divisionCrestUrl = (division?: string | null) => {
+    const n = asPositiveIntString(division);
     return n ? `https://media.contentapi.ea.com/content/dam/eacom/fc/pro-clubs/divisioncrest${n}.png` : null;
 };
 const reputationTierUrl = (tier?: string | null) => {
@@ -137,9 +138,7 @@ const OverallSummaryCard: React.FC<Props> = ({
                 setLoading(true);
                 setError(null);
 
-                const { data } = await api.get(
-                    `/api/clubs/${clubId}/overall-and-playoffs`
-                );
+                const { data } = await api.get(`/api/clubs/${clubId}/overall-and-playoffs`);
 
                 // Aceita ambos formatos:
                 // 1) { clubsOverall: ClubOverallRow[], clubsPlayoffAchievements: { clubId, achievements[] }[] }
@@ -189,17 +188,20 @@ const OverallSummaryCard: React.FC<Props> = ({
     const goalsAgainst = toNum(o?.goalsAgainst);
     const winPct = games > 0 ? (wins * 100) / games : 0;
 
-    const divUrl = divisionCrestUrl(o?.bestDivision);
     const repUrl = reputationTierUrl(o?.reputationtier);
-
     const repKey = asNonNegativeIntString(o?.reputationtier) ?? "0";
     const repLabel = REPUTATION_LABELS[repKey] ?? o?.reputationtier ?? "–";
+
     const highestKey = asNonNegativeIntString(o?.bestFinishGroup) ?? "6";
     const highestLabel = HIGHEST_PLACEMENT_LABELS[highestKey] ?? o?.bestFinishGroup ?? "–";
 
+    // imagens das divisões
+    const currDivUrl = divisionCrestUrl(o?.currentDivision);
+    const bestDivUrl = divisionCrestUrl(o?.bestDivision);
+
+    // barras
     const repNum = Number(repKey);
     const repPct = Number.isFinite(repNum) ? (repNum / 3) * 100 : 0;
-
     const hpNum = Number(highestKey);
     const hpPct = Number.isFinite(hpNum) ? ((6 - hpNum) / 5) * 100 : 0;
 
@@ -248,6 +250,25 @@ const OverallSummaryCard: React.FC<Props> = ({
                             </div>
                         </div>
 
+                        {/* NOVO BLOCO: Divisão Atual */}
+                        <div className="p-2 rounded border">
+                            <div className="text-gray-500">Divisão Atual</div>
+                            <div className="mt-1 flex items-start justify-between gap-3">
+                                <div>
+                                </div>
+                                <div className="flex flex-col items-center min-w-[48px]">
+                                    {currDivUrl && (
+                                        <img
+                                            src={currDivUrl}
+                                            alt={`Divisão Atual ${o?.currentDivision ?? ""}`}
+                                            className="w-10 h-10 object-contain"
+                                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Melhor divisão */}
                         <div className="p-2 rounded border">
                             <div className="text-gray-500">Melhor Divisão</div>
@@ -257,7 +278,14 @@ const OverallSummaryCard: React.FC<Props> = ({
                                     <div className="font-semibold">{highestLabel}</div>
                                 </div>
                                 <div className="flex flex-col items-center min-w-[48px]">
-                                    {divUrl && <img src={divUrl} alt={`Divisão ${o?.bestDivision ?? ""}`} className="w-10 h-10 object-contain" />}
+                                    {bestDivUrl && (
+                                        <img
+                                            src={bestDivUrl}
+                                            alt={`Divisão ${o?.bestDivision ?? ""}`}
+                                            className="w-10 h-10 object-contain"
+                                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                                        />
+                                    )}
                                     <div className="mt-1 text-[11px] leading-tight text-gray-600 text-center">{highestLabel}</div>
                                 </div>
                             </div>
