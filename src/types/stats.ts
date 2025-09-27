@@ -23,6 +23,9 @@ export interface PlayerStats {
   tackleSuccessPercent: number;
   goalAccuracyPercent: number;
   winPercent: number;
+  proHeight: number;
+  proName: string;
+  proOverallStr: string;
 }
 
 export interface ClubStats {

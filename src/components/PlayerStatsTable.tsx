@@ -185,18 +185,20 @@ export function PlayerStatsTable({
   const clubGoalsAgainst = Number(clubStats?.totalGoalsConceded || 0);
 
   const allColumns = [
-    { key: "playerName", label: "Jogador", tooltip: "Nome do jogador" },
+    { key: "proName", label: "Jogador", tooltip: "Nome do jogador" },
+    { key: "overallStr", label: "Overall", tooltip: "Overall" },
+    { key: "proHeight", label: "Altura", tooltip: "Altura" },
     { key: "matchesPlayed", label: "Partidas" },
     { key: "totalGoals", label: "Gols" },
     { key: "totalAssists", label: "Assistências" },
-    { key: "totalShots", label: "Chutes (G/T)", tooltip: "Gols / Tentativas totais e % de conversão" },
+    { key: "totalShots", label: "Chutes", tooltip: "Gols / Tentativas totais e % de conversão" },
     {
       key: "totalSaves",
-      label: "Defesas (S/Gc)",
+      label: "Defesas",
       tooltip: "Defesas e Gols Sofridos do CLUBE no período: % = S / (S + Gc)",
     },
-    { key: "totalPassesMade", label: "Passes (C/T)", tooltip: "Completos / Tentados e %" },
-    { key: "totalTacklesMade", label: "Desarmes (C/T)", tooltip: "Completos / Tentados e %" },
+    { key: "totalPassesMade", label: "Passes", tooltip: "Completos / Tentados e %" },
+    { key: "totalTacklesMade", label: "Desarmes", tooltip: "Completos / Tentados e %" },
     { key: "totalWins", label: "Vitórias" },
     { key: "totalLosses", label: "Derrotas" },
     { key: "totalDraws", label: "Empates" },
@@ -273,12 +275,24 @@ export function PlayerStatsTable({
                 
                 const renderCell = (col: { key: string }) => {
                   switch (col.key) {
-                    case "playerName":
-                      return (
-                        <td key={col.key} className="px-3 py-2 font-medium text-left sticky left-0 bg-white/95 backdrop-blur">
-                          {p.playerName}
-                        </td>
-                      );
+                    case "proName":
+                        return (
+                            <td key={col.key} className="px-3 py-2 font-medium text-left sticky left-0 bg-white/95 backdrop-blur">
+                                {p.proName}
+                            </td>
+                        );
+                    case "overallStr":
+                        return (
+                            <td key={col.key} className="px-3 py-2 font-medium text-left sticky left-0 bg-white/95 backdrop-blur">
+                                {p.proOverallStr}
+                            </td>
+                        );
+                    case "proHeight":
+                        return (
+                            <td key={col.key} className="px-3 py-2 font-medium text-left sticky left-0 bg-white/95 backdrop-blur">
+                                {p.proHeight}
+                            </td>
+                        );
                     case "matchesPlayed":
                       return <td key={col.key} className="px-3 py-2">{int.format(p.matchesPlayed)}</td>;
                     case "totalGoals":
