@@ -40,6 +40,8 @@ interface ClubDetailsDto {
     StadName?: string | null;
     CrestAssetId?: string | null;
     TeamId?: number | null;
+
+    currentDivision?: number | null;
 }
 
 interface ClubMatchSummaryDto {
@@ -84,7 +86,18 @@ const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
 
 const FALLBACK_LOGO = "https://via.placeholder.com/96?text=Logo";
 const AVATAR_PX = 40;
+function asPositiveIntString(v: unknown): string | null {
+    if (v === null || v === undefined) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    const i = Math.trunc(n);
+    return i > 0 ? String(i) : null;
+}
 
+const divisionCrestUrl = (division?: string | number | null) => {
+    const n = asPositiveIntString(division);
+    return n ? `https://media.contentapi.ea.com/content/dam/eacom/fc/pro-clubs/divisioncrest${n}.png` : null;
+};
 function crestUrl(crestAssetId?: string | null) {
     if (!crestAssetId) return FALLBACK_LOGO;
     return `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${crestAssetId}.png`;
@@ -563,25 +576,37 @@ function MatchCard({
     const bDisc = m.clubBSummary?.disconnected === true;
     const anyDisc = aDisc || bDisc;
 
+    const divA = m.clubADetails.currentDivision;
+    const divB = m.clubBDetails.currentDivision;
+    const divAUrl = divisionCrestUrl(divA);
+    const divBUrl = divisionCrestUrl(divB);
+
     return (
         <Link
             to={`/match/${m.matchId}?matchType=${matchType}`}
             className={`block bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 border transition shadow-sm hover:shadow ${borderClass}`}
             title="Ver detalhes da partida"
         >
+            {/* Topo: data + selos */}
             <div className="flex items-center justify-between gap-2">
                 <div className="text-xs text-gray-500">
                     <span className="hidden sm:inline">{fmtDateTime.format(new Date(m.timestamp))}</span>
                     <span className="sm:hidden">{fmtDateTime.format(new Date(m.timestamp))}</span>
                 </div>
+                <div className="flex items-center gap-2">
+                    {anyDisc && <Badge color="red">Desconexão</Badge>}
+                    <OutcomeBadge a={p.myGoals} b={p.oppGoals} />
+                </div>
             </div>
 
+            {/* DESKTOP */}
             <div className="hidden sm:grid items-center justify-center grid-cols-[auto_auto_auto] sm:gap-6 sm:max-w-[820px] sm:mx-auto mt-2">
+                {/* A */}
                 <div className="flex items-center gap-2 min-w-0">
                     <div className="w-10 shrink-0">
                         <img
                             src={crestUrl(m.clubADetails?.team ?? m.clubADetails?.team ?? null)}
-                            onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
+                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                             alt={`Escudo ${m.clubAName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
                             className="rounded-full object-contain bg-white border"
@@ -591,6 +616,17 @@ function MatchCard({
                     <div className="min-w-0">
                         <div className="leading-tight font-medium sm:truncate" title={m.clubAName}>{m.clubAName}</div>
                         <div className="flex items-center gap-2 mt-1">
+                            {/* Crest da divisão A */}
+                            {divAUrl && (
+                                <img
+                                    src={divAUrl}
+                                    alt={`Divisão ${divA}`}
+                                    width={24}
+                                    height={24}
+                                    className="h-8 w-8 object-contain"
+                                    loading="lazy"
+                                />
+                            )}
                             <div className="w-10 shrink-0 flex justify-center overflow-visible">
                                 <KitJersey
                                     colors={[
@@ -607,17 +643,19 @@ function MatchCard({
                     </div>
                 </div>
 
+                {/* Placar */}
                 <div className="justify-self-center place-self-center px-3 py-1 rounded bg-gray-50 font-semibold text-base sm:text-lg border text-center min-w-[72px]">
                     <span className={`${p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubAGoals}</span>
                     <span className="text-gray-400"> x </span>
                     <span className={`${!p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubBGoals}</span>
                 </div>
 
+                {/* B */}
                 <div className="flex items-center gap-2 min-w-0 justify-end">
                     <div className="w-10 shrink-0">
                         <img
                             src={crestUrl(m.clubBDetails?.team ?? m.clubBDetails?.team ?? null)}
-                            onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
+                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                             alt={`Escudo ${m.clubBName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
                             className="rounded-full object-contain bg-white border"
@@ -627,6 +665,17 @@ function MatchCard({
                     <div className="min-w-0 text-right">
                         <div className="leading-tight font-medium sm:truncate" title={m.clubBName}>{m.clubBName}</div>
                         <div className="flex items-center gap-2 mt-1 justify-end">
+                            {/* Crest da divisão B */}
+                            {divBUrl && (
+                                <img
+                                    src={divBUrl}
+                                    alt={`Divisão ${divB}`}
+                                    width={24}
+                                    height={24}
+                                    className="h-8 w-8 object-contain"
+                                    loading="lazy"
+                                />
+                            )}
                             <div className="w-10 shrink-0 flex justify-end overflow-visible">
                                 <KitJersey
                                     colors={[
@@ -644,12 +693,15 @@ function MatchCard({
                 </div>
             </div>
 
+            {/* MOBILE */}
             <div className="sm:hidden mt-2 space-y-2">
+                {/* Linha 1: nomes + escudos */}
                 <div className="flex items-center justify-between gap-3">
+                    {/* A */}
                     <div className="flex items-center gap-2 min-w-0">
                         <img
                             src={crestUrl(m.clubADetails?.team ?? m.clubADetails?.team ?? null)}
-                            onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
+                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                             alt={`Escudo ${m.clubAName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
                             className="rounded-full object-contain bg-white border shrink-0"
@@ -657,16 +709,43 @@ function MatchCard({
                         />
                         <div className="min-w-0">
                             <div className="font-medium leading-snug whitespace-normal break-words">{m.clubAName}</div>
+                            {/* Crest da divisão A (mobile) */}
+                            {divAUrl && (
+                                <div className="mt-1">
+                                    <img
+                                        src={divAUrl}
+                                        alt={`Divisão ${divA}`}
+                                        width={20}
+                                        height={20}
+                                        className="h-5 w-5 object-contain"
+                                        loading="lazy"
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
 
+                    {/* B */}
                     <div className="flex items-center gap-2 min-w-0">
                         <div className="min-w-0 text-right">
                             <div className="font-medium leading-snug whitespace-normal break-words">{m.clubBName}</div>
+                            {/* Crest da divisão B (mobile) */}
+                            {divBUrl && (
+                                <div className="mt-1 flex justify-end">
+                                    <img
+                                        src={divBUrl}
+                                        alt={`Divisão ${divB}`}
+                                        width={20}
+                                        height={20}
+                                        className="h-5 w-5 object-contain"
+                                        loading="lazy"
+                                    />
+                                </div>
+                            )}
                         </div>
                         <img
                             src={crestUrl(m.clubBDetails?.team ?? m.clubBDetails?.team ?? null)}
-                            onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
+                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                             alt={`Escudo ${m.clubBName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
                             className="rounded-full object-contain bg-white border shrink-0"
@@ -675,6 +754,7 @@ function MatchCard({
                     </div>
                 </div>
 
+                {/* Linha 2: camisas */}
                 <div className="flex items-start justify-between">
                     <div className="flex flex-col items-start gap-1">
                         <KitJersey
@@ -703,6 +783,7 @@ function MatchCard({
                     </div>
                 </div>
 
+                {/* Placar centralizado */}
                 <div className="mt-1 px-3 py-2 rounded-lg bg-gray-50 font-semibold text-lg border text-center mx-auto w-40">
                     <span className={`${p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubAGoals}</span>
                     <span className="text-gray-400"> x </span>
@@ -710,6 +791,7 @@ function MatchCard({
                 </div>
             </div>
 
+            {/* Contagem de jogadores */}
             <div className="mt-3 flex items-center justify-center gap-3 text-base sm:text-sm">
                 <div className="inline-flex items-center gap-1">
                     <PersonIcon className="text-gray-700" />
@@ -722,15 +804,16 @@ function MatchCard({
                 </div>
             </div>
 
+            {/* Estádio */}
             <div className="mt-2 text-xs sm:text-sm text-gray-600 text-center font-medium">
                 {stadiumName || "Estádio não informado"}
             </div>
 
+            {/* Resumo */}
             <SummaryCard m={m} />
         </Link>
     );
 }
-
 
 /* ======================
    Página
