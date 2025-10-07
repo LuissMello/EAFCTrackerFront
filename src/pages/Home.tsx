@@ -1342,6 +1342,12 @@ export default function Home() {
                 </div>
             )}
 
+            {filtered.length > 0 && (
+                <div className="mt-8 text-xs text-gray-500 text-center">
+                    Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.
+                </div>
+            )}
+
             {/* Lista */}
             <div className="mt-4 grid gap-2">
                 {filtered.slice(0, visible).map((m) => (
