@@ -2,7 +2,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
-import { Crown, Hand, Star, Square } from "lucide-react";
+import { Crown, Hand, Star, Square, PlugZap } from "lucide-react";
 
 /* ======================
    Tipos
@@ -48,6 +48,7 @@ interface ClubMatchSummaryDto {
     hatTrickPlayerNames: Array<string | null>;
     goalkeeperPlayerName?: string | null;
     manOfTheMatchPlayerName?: string | null;
+    disconnected: boolean;
 }
 
 interface MatchResultDto {
@@ -436,6 +437,7 @@ function SummaryItem({
     hatTrickNames,
     goalkeeperName,
     motmName,
+    disconnected,
     align = "left",
 }: {
     title: string;
@@ -443,18 +445,17 @@ function SummaryItem({
     hatTrickNames?: Array<string | null>;
     goalkeeperName?: string | null;
     motmName?: string | null;
+    disconnected?: boolean;
     align?: "left" | "right";
 }) {
     const reds = typeof redCards === "number" ? redCards : 0;
     const textAlign = align === "right" ? "text-right" : "text-left";
     const dir = align === "right" ? "justify-end" : "justify-start";
-
     const hatList = (hatTrickNames ?? []).filter((n): n is string => !!n);
 
     return (
         <div className={`flex flex-col gap-1 ${textAlign}`}>
             <div className={`flex ${dir} gap-2 flex-wrap items-center`}>
-                {/* Vermelhos */}
                 <Chip
                     title={`Cartões vermelhos: ${reds}`}
                     className={`${reds > 0 ? "bg-red-50 border-red-200 text-red-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
@@ -463,7 +464,6 @@ function SummaryItem({
                     <span className="tabular-nums">{reds}</span>
                 </Chip>
 
-                {/* Hat-tricks */}
                 {hatList.length === 0 ? (
                     <Chip className="bg-gray-50 border-gray-200 text-gray-400" title="Sem hat-trick">
                         <Crown size={14} className="text-gray-400" />
@@ -471,18 +471,13 @@ function SummaryItem({
                     </Chip>
                 ) : (
                     hatList.map((name, i) => (
-                        <Chip
-                            key={`${name}-${i}`}
-                            className="bg-green-50 border-green-200 text-green-700"
-                            title={`Hat-trick: ${name}`}
-                        >
+                        <Chip key={`${name}-${i}`} className="bg-green-50 border-green-200 text-green-700" title={`Hat-trick: ${name}`}>
                             <Crown size={14} className="text-green-700" />
                             <span className="truncate max-w-[180px]">{name}</span>
                         </Chip>
                     ))
                 )}
 
-                {/* Goleiro */}
                 <Chip
                     className={`${goalkeeperName ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
                     title={goalkeeperName ? `Goleiro: ${goalkeeperName}` : "Goleiro não identificado"}
@@ -491,7 +486,6 @@ function SummaryItem({
                     <span className="truncate max-w-[180px]">{goalkeeperName ?? "—"}</span>
                 </Chip>
 
-                {/* Man of the Match */}
                 <Chip
                     className={`${motmName ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
                     title={motmName ? `Man of the Match: ${motmName}` : "Sem Man of the Match"}
@@ -499,6 +493,12 @@ function SummaryItem({
                     <Star size={14} className={`${motmName ? "text-amber-600" : "text-gray-400"}`} />
                     <span className="truncate max-w-[180px]">{motmName ?? "—"}</span>
                 </Chip>
+
+                {disconnected && (
+                    <Chip className="bg-red-50 border-red-200 text-red-700" title="Clube desconectou">
+                        <PlugZap size={14} className="text-red-600" />
+                    </Chip>
+                )}
             </div>
         </div>
     );
@@ -516,6 +516,7 @@ function SummaryCard({ m }: { m: MatchResultDto }) {
                     hatTrickNames={a?.hatTrickPlayerNames}
                     goalkeeperName={a?.goalkeeperPlayerName ?? null}
                     motmName={a?.manOfTheMatchPlayerName ?? null}
+                    disconnected={a?.disconnected === true}
                     align="left"
                 />
                 <SummaryItem
@@ -524,6 +525,7 @@ function SummaryCard({ m }: { m: MatchResultDto }) {
                     hatTrickNames={b?.hatTrickPlayerNames}
                     goalkeeperName={b?.goalkeeperPlayerName ?? null}
                     motmName={b?.manOfTheMatchPlayerName ?? null}
+                    disconnected={b?.disconnected === true}
                     align="right"
                 />
             </div>
@@ -557,24 +559,24 @@ function MatchCard({
     const stadiumName =
         m.clubADetails?.stadName ?? m.clubADetails?.StadName ?? m.clubADetails?.name ?? m.clubADetails?.Name ?? m.clubAName;
 
+    const aDisc = m.clubASummary?.disconnected === true;
+    const bDisc = m.clubBSummary?.disconnected === true;
+    const anyDisc = aDisc || bDisc;
+
     return (
         <Link
             to={`/match/${m.matchId}?matchType=${matchType}`}
             className={`block bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 border transition shadow-sm hover:shadow ${borderClass}`}
             title="Ver detalhes da partida"
         >
-            {/* Topo: data + selo de resultado */}
             <div className="flex items-center justify-between gap-2">
                 <div className="text-xs text-gray-500">
                     <span className="hidden sm:inline">{fmtDateTime.format(new Date(m.timestamp))}</span>
                     <span className="sm:hidden">{fmtDateTime.format(new Date(m.timestamp))}</span>
                 </div>
-                <OutcomeBadge a={p.myGoals} b={p.oppGoals} />
             </div>
 
-            {/* DESKTOP: times + placar */}
             <div className="hidden sm:grid items-center justify-center grid-cols-[auto_auto_auto] sm:gap-6 sm:max-w-[820px] sm:mx-auto mt-2">
-                {/* A */}
                 <div className="flex items-center gap-2 min-w-0">
                     <div className="w-10 shrink-0">
                         <img
@@ -605,14 +607,12 @@ function MatchCard({
                     </div>
                 </div>
 
-                {/* Placar */}
                 <div className="justify-self-center place-self-center px-3 py-1 rounded bg-gray-50 font-semibold text-base sm:text-lg border text-center min-w-[72px]">
                     <span className={`${p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubAGoals}</span>
                     <span className="text-gray-400"> x </span>
                     <span className={`${!p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubBGoals}</span>
                 </div>
 
-                {/* B */}
                 <div className="flex items-center gap-2 min-w-0 justify-end">
                     <div className="w-10 shrink-0">
                         <img
@@ -644,14 +644,11 @@ function MatchCard({
                 </div>
             </div>
 
-            {/* MOBILE: times + placar */}
             <div className="sm:hidden mt-2 space-y-2">
-                {/* Linha 1: nomes + escudos */}
                 <div className="flex items-center justify-between gap-3">
-                    {/* A */}
                     <div className="flex items-center gap-2 min-w-0">
                         <img
-                            src={crestUrl(m.clubADetails?.team ?? m.clubADetails?.team  ?? null)}
+                            src={crestUrl(m.clubADetails?.team ?? m.clubADetails?.team ?? null)}
                             onError={(e) => ((e.currentTarget.src = FALLBACK_LOGO))}
                             alt={`Escudo ${m.clubAName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
@@ -663,7 +660,6 @@ function MatchCard({
                         </div>
                     </div>
 
-                    {/* B */}
                     <div className="flex items-center gap-2 min-w-0">
                         <div className="min-w-0 text-right">
                             <div className="font-medium leading-snug whitespace-normal break-words">{m.clubBName}</div>
@@ -679,7 +675,6 @@ function MatchCard({
                     </div>
                 </div>
 
-                {/* Linha 2: camisas */}
                 <div className="flex items-start justify-between">
                     <div className="flex flex-col items-start gap-1">
                         <KitJersey
@@ -708,7 +703,6 @@ function MatchCard({
                     </div>
                 </div>
 
-                {/* Placar centralizado */}
                 <div className="mt-1 px-3 py-2 rounded-lg bg-gray-50 font-semibold text-lg border text-center mx-auto w-40">
                     <span className={`${p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubAGoals}</span>
                     <span className="text-gray-400"> x </span>
@@ -716,7 +710,6 @@ function MatchCard({
                 </div>
             </div>
 
-            {/* Contagem de jogadores */}
             <div className="mt-3 flex items-center justify-center gap-3 text-base sm:text-sm">
                 <div className="inline-flex items-center gap-1">
                     <PersonIcon className="text-gray-700" />
@@ -729,16 +722,15 @@ function MatchCard({
                 </div>
             </div>
 
-            {/* Estádio */}
             <div className="mt-2 text-xs sm:text-sm text-gray-600 text-center font-medium">
                 {stadiumName || "Estádio não informado"}
             </div>
 
-            {/* Resumo com ícones */}
             <SummaryCard m={m} />
         </Link>
     );
 }
+
 
 /* ======================
    Página
