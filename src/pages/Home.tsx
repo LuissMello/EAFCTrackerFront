@@ -815,6 +815,112 @@ function MatchCard({
     );
 }
 
+function DivisionsSelect({
+    value,
+    onChange,
+    className = "",
+}: {
+    value: number | null;
+    onChange: (v: number | null) => void;
+    className?: string;
+}) {
+    const [open, setOpen] = React.useState(false);
+    const ref = React.useRef<HTMLDivElement | null>(null);
+
+    React.useEffect(() => {
+        const onClick = (e: MouseEvent) => {
+            if (!ref.current) return;
+            if (!ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener("mousedown", onClick);
+        return () => document.removeEventListener("mousedown", onClick);
+    }, []);
+
+    const label = value ? `Divisão ${value}` : "Todos";
+    const selectedUrl = divisionCrestUrl(value);
+
+    const baseBtn =
+        "inline-flex items-center gap-2 border rounded-lg px-2 py-2 bg-white hover:bg-gray-50";
+
+    return (
+        <div ref={ref} className={`relative ${className}`}>
+            <button
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                onClick={() => setOpen((o) => !o)}
+                className={baseBtn}
+                title="Filtrar por divisão do adversário"
+            >
+                {selectedUrl ? (
+                    <img
+                        src={selectedUrl}
+                        alt={label}
+                        width={28}
+                        height={28}
+                        className="h-7 w-7 object-contain"
+                        loading="lazy"
+                    />
+                ) : (
+                    <span className="text-gray-600">Todos</span>
+                )}
+                <span className="text-gray-400">▾</span>
+            </button>
+
+            {open && (
+                <div
+                    role="listbox"
+                    className="absolute z-30 mt-1 w-[260px] rounded-lg border bg-white p-2 shadow-lg"
+                >
+                    {/* Opção: Todos */}
+                    <button
+                        role="option"
+                        aria-selected={!value}
+                        className={`w-full text-left px-2 py-2 rounded hover:bg-gray-50 ${!value ? "bg-gray-50" : ""
+                            }`}
+                        onClick={() => {
+                            onChange(null);
+                            setOpen(false);
+                        }}
+                    >
+                        Todos
+                    </button>
+
+                    <div className="mt-1 grid grid-cols-3 gap-2">
+                        {Array.from({ length: 6 }, (_, i) => i + 1).map((n) => {
+                            const url = divisionCrestUrl(n);
+                            return (
+                                <button
+                                    key={n}
+                                    role="option"
+                                    aria-selected={value === n}
+                                    className={`flex items-center justify-center rounded border p-2 hover:bg-gray-50 ${value === n ? "ring-2 ring-gray-300" : ""
+                                        }`}
+                                    onClick={() => {
+                                        onChange(n);
+                                        setOpen(false);
+                                    }}
+                                    title={`Divisão ${n}`}
+                                >
+                                    <img
+                                        src={url!}
+                                        alt={`Divisão ${n}`}
+                                        width={32}
+                                        height={32}
+                                        className="h-8 w-8 object-contain"
+                                        loading="lazy"
+                                    />
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+
 /* ======================
    Página
 ====================== */
@@ -822,6 +928,13 @@ export default function Home() {
     const { club } = useClub();
 
     const [searchParams, setSearchParams] = useSearchParams();
+
+    const initialOppDiv = (() => {
+        const v = searchParams.get("oppdiv");
+        const n = v ? Number(v) : NaN;
+        return Number.isFinite(n) && n >= 1 && n <= 6 ? n : null;
+    })();
+    const [opponentDivision, setOpponentDivision] = useState<number | null>(initialOppDiv);
 
     // Lê seleção múltipla da URL (?clubIds=1,2,3). Se não houver, usa o clubId único do contexto.
     const selectedClubIds: number[] = useMemo(() => {
@@ -890,18 +1003,17 @@ export default function Home() {
                     redFilter === "1plus" ? "1" : "2";
 
         const oppParam = opponentCount ? String(opponentCount) : undefined;
+        const oppDivParam = opponentDivision ? String(opponentDivision) : undefined; // <— NOVO
 
-        // clone seguro do estado atual da URL
         const next = new URLSearchParams(searchParams.toString());
 
-        // atualiza apenas os filtros (preserva clubIds/clubId já presentes)
         if (search) next.set("q", search); else next.delete("q");
         if (matchType !== "All") next.set("type", matchType); else next.delete("type");
         if (sortKey !== "recent") next.set("sort", sortKey); else next.delete("sort");
         if (rcParam) next.set("rc", rcParam); else next.delete("rc");
         if (oppParam) next.set("opp", oppParam); else next.delete("opp");
+        if (oppDivParam) next.set("oppdiv", oppDivParam); else next.delete("oppdiv"); // <— NOVO
 
-        // evita setSearchParams desnecessário (e re-render em loop)
         const prevStr = searchParams.toString();
         const nextStr = next.toString();
         if (nextStr !== prevStr) {
@@ -913,7 +1025,8 @@ export default function Home() {
         sortKey,
         redFilter,
         opponentCount,
-        searchParams,     // OK ter como dependência, com o guard acima não entra em loop
+        opponentDivision, 
+        searchParams,
         setSearchParams
     ]);
 
@@ -1008,7 +1121,15 @@ export default function Home() {
             return opp === opponentCount;
         };
 
-        const base = results.filter((m) => byText(m) && byReds(m) && byOppCount(m));
+        // NOVO: filtro por divisão do adversário
+        const byOppDivision = (m: MatchResultDto) => {
+            if (!opponentDivision) return true;
+            const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
+            const oppDiv = p.isMineA ? m.clubBDetails.currentDivision : m.clubADetails.currentDivision;
+            return oppDiv === opponentDivision;
+        };
+
+        const base = results.filter((m) => byText(m) && byReds(m) && byOppCount(m) && byOppDivision(m));
 
         const sorted = [...base].sort((a, b) => {
             if (sortKey === "recent") return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
@@ -1027,7 +1148,17 @@ export default function Home() {
         });
 
         return sorted;
-    }, [results, search, sortKey, redFilter, opponentCount, selectedClubIds.join(","), fallbackClubName, fallbackTeamId]);
+    }, [
+        results,
+        search,
+        sortKey,
+        redFilter,
+        opponentCount,
+        opponentDivision,           // <— NOVO
+        selectedClubIds.join(","),
+        fallbackClubName,
+        fallbackTeamId
+    ]);
 
     const summary = useMemo(() => {
         const s = filtered.reduce(
@@ -1147,6 +1278,16 @@ export default function Home() {
                                 ))}
                             </select>
                         </div>
+
+                        {/* Filtro por divisão do adversário */}
+                        <div className="flex items-center gap-2 text-sm">
+                            <span className="text-gray-600">Adversário (divisão):</span>
+                            <DivisionsSelect
+                                value={opponentDivision}
+                                onChange={setOpponentDivision}
+                            />
+                        </div>
+
 
                         {/* Ordenação */}
                         <div className="flex items-center gap-2 text-sm">
