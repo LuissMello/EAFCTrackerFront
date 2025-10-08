@@ -2,7 +2,8 @@
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
-import { Crown, Hand, Star, Square, PlugZap } from "lucide-react";
+import { PlugZap } from "lucide-react";
+import { GiGoalKeeper } from "react-icons/gi";
 
 /* ======================
    Tipos
@@ -116,6 +117,27 @@ function toHex(dec: string | number | null | undefined): string | null {
     return null;
 }
 
+const Emoji = ({
+    symbol,
+    label,
+    size = 14,
+    className = "",
+}: {
+    symbol: string;
+    label: string;
+    size?: number;
+    className?: string;
+}) => (
+    <span
+        role="img"
+        aria-label={label}
+        title={label}
+        className={`inline-block align-[-2px] leading-none ${className}`}
+        style={{ fontSize: size }}
+    >
+        {symbol}
+    </span>
+);
 function fromNow(ts: string) {
     const d = new Date(ts).getTime();
     const now = Date.now();
@@ -462,51 +484,59 @@ function SummaryItem({
     align?: "left" | "right";
 }) {
     const reds = typeof redCards === "number" ? redCards : 0;
-    const textAlign = align === "right" ? "text-right" : "text-left";
-    const dir = align === "right" ? "justify-end" : "justify-start";
+
+    // 👇 Mobile: sempre esquerda; Desktop: respeita 'align'
+    const textAlign = align === "right" ? "text-left sm:text-right" : "text-left";
+    const dir = align === "right" ? "justify-start sm:justify-end" : "justify-start";
+
     const hatList = (hatTrickNames ?? []).filter((n): n is string => !!n);
 
     return (
         <div className={`flex flex-col gap-1 ${textAlign}`}>
             <div className={`flex ${dir} gap-2 flex-wrap items-center`}>
+                {/* Cartões vermelhos */}
                 <Chip
                     title={`Cartões vermelhos: ${reds}`}
                     className={`${reds > 0 ? "bg-red-50 border-red-200 text-red-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
                 >
-                    <Square className={`${reds > 0 ? "text-red-600" : "text-gray-300"}`} size={14} />
+                    <span role="img" aria-label="Cartão vermelho" title="Cartão vermelho" className={`inline-block leading-none ${reds > 0 ? "" : "opacity-60"}`} style={{ fontSize: 14 }}>🟥</span>
                     <span className="tabular-nums">{reds}</span>
                 </Chip>
 
+                {/* Hat-tricks */}
                 {hatList.length === 0 ? (
                     <Chip className="bg-gray-50 border-gray-200 text-gray-400" title="Sem hat-trick">
-                        <Crown size={14} className="text-gray-400" />
+                        <span role="img" aria-label="Hat-trick" title="Hat-trick" className="inline-block leading-none opacity-60" style={{ fontSize: 14 }}>🎩</span>
                         <span>—</span>
                     </Chip>
                 ) : (
                     hatList.map((name, i) => (
                         <Chip key={`${name}-${i}`} className="bg-green-50 border-green-200 text-green-700" title={`Hat-trick: ${name}`}>
-                            <Crown size={14} className="text-green-700" />
+                            <span role="img" aria-label="Hat-trick" title="Hat-trick" className="inline-block leading-none" style={{ fontSize: 14 }}>🎩</span>
                             <span className="truncate max-w-[180px]">{name}</span>
                         </Chip>
                     ))
                 )}
 
+                {/* Goleiro */}
                 <Chip
                     className={`${goalkeeperName ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
                     title={goalkeeperName ? `Goleiro: ${goalkeeperName}` : "Goleiro não identificado"}
                 >
-                    <Hand size={14} className={`${goalkeeperName ? "text-blue-700" : "text-gray-400"}`} />
+                    <GiGoalKeeper size={14} className={goalkeeperName ? "text-blue-700" : "text-gray-400"} aria-label="Goleiro" />
                     <span className="truncate max-w-[180px]">{goalkeeperName ?? "—"}</span>
                 </Chip>
 
+                {/* Man of the Match */}
                 <Chip
                     className={`${motmName ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
                     title={motmName ? `Man of the Match: ${motmName}` : "Sem Man of the Match"}
                 >
-                    <Star size={14} className={`${motmName ? "text-amber-600" : "text-gray-400"}`} />
+                    <span role="img" aria-label="Man of the Match" title="Man of the Match" className={`${motmName ? "" : "opacity-60"} inline-block leading-none`} style={{ fontSize: 14 }}>🏆</span>
                     <span className="truncate max-w-[180px]">{motmName ?? "—"}</span>
                 </Chip>
 
+                {/* Desconexão */}
                 {disconnected && (
                     <Chip className="bg-red-50 border-red-200 text-red-700" title="Clube desconectou">
                         <PlugZap size={14} className="text-red-600" />
@@ -516,6 +546,7 @@ function SummaryItem({
         </div>
     );
 }
+
 
 function SummaryCard({ m }: { m: MatchResultDto }) {
     const a = m.clubASummary;
@@ -594,7 +625,6 @@ function MatchCard({
                     <span className="sm:hidden">{fmtDateTime.format(new Date(m.timestamp))}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    {anyDisc && <Badge color="red">Desconexão</Badge>}
                     <OutcomeBadge a={p.myGoals} b={p.oppGoals} />
                 </div>
             </div>
