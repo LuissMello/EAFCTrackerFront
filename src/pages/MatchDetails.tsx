@@ -266,28 +266,25 @@ export default function MatchDetails() {
         return clone;
     }, [clubs, selectedClubId]);
 
+    const haveTwoClubs = orderedClubs.length >= 2;
+
     // Transform clubs to include totalGoalsConceded
     const clubsWithGoalsConceded = useMemo(() => {
-        if (orderedClubs.length < 2) return orderedClubs;
-        
+        if (!haveTwoClubs) return orderedClubs;
         return orderedClubs.map((club, index) => {
-            // In a match, goals conceded by one team = goals scored by the other team
+            // goals conceded by one = goals scored by the other
             const opponentIndex = index === 0 ? 1 : 0;
             const goalsConceeded = orderedClubs[opponentIndex]?.totalGoals || 0;
-            
             return {
                 ...club,
-                totalGoalsConceded: goalsConceeded
+                totalGoalsConceded: goalsConceeded,
             };
         });
-    }, [orderedClubs]);
+    }, [orderedClubs, haveTwoClubs]);
 
     // ====== Reset de marcações se trocar partida ou par de clubes ======
     useEffect(() => {
         setFetchedOverall(new Set());
-        // se quiser também limpar cache visualmente:
-        // setOverallCache(new Map());
-        // setPlayoffsCache(new Map());
     }, [matchId, orderedClubs.map((c) => c.clubId).join(",")]);
 
     // ====== Fetch-once de Overalls/Playoffs (somente ao abrir o painel) ======
@@ -317,7 +314,6 @@ export default function MatchDetails() {
                 })
             );
 
-            // atualiza caches de uma vez
             setOverallCache((prev) => {
                 const next = new Map(prev);
                 for (const r of results) {
@@ -353,7 +349,7 @@ export default function MatchDetails() {
     }, [fetchOverallIfNeeded]);
 
     // Auxiliares do placar
-    const haveScore = orderedClubs.length >= 2;
+    const haveScore = haveTwoClubs;
     const goalsA = haveScore ? orderedClubs[0].totalGoals : undefined;
     const goalsB = haveScore ? orderedClubs[1].totalGoals : undefined;
     const scoreLabel = haveScore ? `${goalsA} x ${goalsB}` : null;
@@ -447,7 +443,7 @@ export default function MatchDetails() {
 
     // Chart clubes
     const clubChart = useMemo(() => {
-        if (orderedClubs.length < 2) return null;
+        if (!haveTwoClubs) return null;
         const a = orderedClubs[0];
         const b = orderedClubs[1];
         const key = selectedStat;
@@ -483,7 +479,7 @@ export default function MatchDetails() {
                 elements: { bar: { borderWidth: 2, barThickness: 18 } },
             },
         };
-    }, [orderedClubs, selectedStat]);
+    }, [orderedClubs, selectedStat, haveTwoClubs]);
 
     // Ordenação e filtro de jogadores por clube
     const sortPlayers = useCallback(
@@ -585,7 +581,6 @@ export default function MatchDetails() {
                         onClick={() => {
                             const next = !showOverallPanel;
                             setShowOverallPanel(next);
-                            // não chamamos fetch aqui; o useEffect dispara quando abrir
                         }}
                     >
                         {showOverallPanel ? "Minimizar" : "Maximizar"}
@@ -615,7 +610,7 @@ export default function MatchDetails() {
             </div>
 
             {/* Team Stats Section */}
-            {clubsWithGoalsConceded.length >= 2 && (
+            {haveTwoClubs && clubsWithGoalsConceded.length >= 2 && (
                 <div className="bg-white shadow-sm rounded-xl p-4 border">
                     <h2 className="text-lg font-semibold mb-4">Estatísticas da Partida</h2>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -624,14 +619,14 @@ export default function MatchDetails() {
                                 <img
                                     src={crestUrl(clubsWithGoalsConceded[0]?.clubCrestAssetId)}
                                     onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                                    alt={`Escudo ${clubsWithGoalsConceded[0].clubName}`}
+                                    alt={`Escudo ${clubsWithGoalsConceded[0]?.clubName ?? "Clube A"}`}
                                     className="w-6 h-6 rounded-full bg-white border"
                                 />
-                                {clubsWithGoalsConceded[0].clubName}
+                                {clubsWithGoalsConceded[0]?.clubName ?? "Clube A"}
                             </h3>
-                            <TeamStatsSection 
-                                clubStats={clubsWithGoalsConceded[0]} 
-                                loading={false} 
+                            <TeamStatsSection
+                                clubStats={clubsWithGoalsConceded[0]}
+                                loading={false}
                                 error={null}
                                 hiddenStats={["matches", "results"]}
                             />
@@ -641,14 +636,14 @@ export default function MatchDetails() {
                                 <img
                                     src={crestUrl(clubsWithGoalsConceded[1]?.clubCrestAssetId)}
                                     onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                                    alt={`Escudo ${clubsWithGoalsConceded[1].clubName}`}
+                                    alt={`Escudo ${clubsWithGoalsConceded[1]?.clubName ?? "Clube B"}`}
                                     className="w-6 h-6 rounded-full bg-white border"
                                 />
-                                {clubsWithGoalsConceded[1].clubName}
+                                {clubsWithGoalsConceded[1]?.clubName ?? "Clube B"}
                             </h3>
-                            <TeamStatsSection 
-                                clubStats={clubsWithGoalsConceded[1]} 
-                                loading={false} 
+                            <TeamStatsSection
+                                clubStats={clubsWithGoalsConceded[1]}
+                                loading={false}
                                 error={null}
                                 hiddenStats={["matches", "results"]}
                             />
@@ -659,77 +654,100 @@ export default function MatchDetails() {
 
             {/* Cabeçalho dos clubes + placar e highlights */}
             <div className="bg-white shadow-sm rounded-xl p-4 border">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    {/* Esquerda */}
-                    <div className={`flex items-center gap-2 px-2 py-1 rounded ${leftIsSelected ? "border-2 border-blue-600" : ""}`}>
-                        <img
-                            src={crestUrl(orderedClubs[0]?.clubCrestAssetId)}
-                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                            alt={`Escudo ${orderedClubs[0].clubName}`}
-                            className="w-8 h-8 rounded-full bg-white border"
-                        />
-                        <div className="font-semibold flex items-center gap-2">
-                            {orderedClubs[0].clubName}
-                            {leftIsSelected && <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>}
-                            {leftWon && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Vitória</Badge>}
-                            {!leftWon && haveScore && !rightWon && <Badge className="bg-gray-100 text-gray-700">Empate</Badge>}
+                {haveTwoClubs ? (
+                    <>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            {/* Esquerda */}
+                            <div className={`flex items-center gap-2 px-2 py-1 rounded ${leftIsSelected ? "border-2 border-blue-600" : ""}`}>
+                                <img
+                                    src={crestUrl(orderedClubs[0]?.clubCrestAssetId)}
+                                    onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                                    alt={`Escudo ${orderedClubs[0]?.clubName ?? "Clube A"}`}
+                                    className="w-8 h-8 rounded-full bg-white border"
+                                />
+                                <div className="font-semibold flex items-center gap-2">
+                                    {orderedClubs[0]?.clubName ?? "Clube A"}
+                                    {leftIsSelected && <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>}
+                                    {leftWon && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Vitória</Badge>}
+                                    {!leftWon && haveScore && !rightWon && <Badge className="bg-gray-100 text-gray-700">Empate</Badge>}
+                                </div>
+                            </div>
+
+                            {/* Placar */}
+                            <div className="text-lg sm:text-xl font-bold text-gray-900">{scoreLabel}</div>
+
+                            {/* Direita */}
+                            <div className={`flex items-center gap-2 px-2 py-1 rounded ${rightIsSelected ? "border-2 border-blue-600" : ""}`}>
+                                <div className="font-semibold flex items-center gap-2">
+                                    {orderedClubs[1]?.clubName ?? "Clube B"}
+                                    {rightIsSelected && (
+                                        <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>
+                                    )}
+                                    {rightWon && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Vitória</Badge>}
+                                </div>
+                                <img
+                                    src={crestUrl(orderedClubs[1]?.clubCrestAssetId)}
+                                    onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                                    alt={`Escudo ${orderedClubs[1]?.clubName ?? "Clube B"}`}
+                                    className="w-8 h-8 rounded-full bg-white border"
+                                />
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Placar */}
-                    <div className="text-lg sm:text-xl font-bold text-gray-900">{scoreLabel}</div>
-
-                    {/* Direita */}
-                    <div className={`flex items-center gap-2 px-2 py-1 rounded ${rightIsSelected ? "border-2 border-blue-600" : ""}`}>
-                        <div className="font-semibold flex items-center gap-2">
-                            {orderedClubs[1].clubName}
-                            {rightIsSelected && (
-                                <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>
-                            )}
-                            {rightWon && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Vitória</Badge>}
-                        </div>
-                        <img
-                            src={crestUrl(orderedClubs[1]?.clubCrestAssetId)}
-                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                            alt={`Escudo ${orderedClubs[1].clubName}`}
-                            className="w-8 h-8 rounded-full bg-white border"
-                        />
-                    </div>
-                </div>
-
-                {/* Tabela comparativa com heat */}
-                <div className="overflow-x-auto mt-4">
-                    <table className="w-full table-auto text-xs sm:text-sm border text-center">
-                        <thead>
-                            <tr className="bg-gray-50">
-                                <th className="p-1.5 sm:p-2">{orderedClubs[0].clubName}</th>
-                                <th className="p-1.5 sm:p-2">Estatística</th>
-                                <th className="p-1.5 sm:p-2">{orderedClubs[1].clubName}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {comparisonStats.map(({ label, key }) => {
-                                const va = (orderedClubs[0] as any)[key] as number;
-                                const vb = (orderedClubs[1] as any)[key] as number;
-                                const heat = cellHeat(va, vb);
-                                return (
-                                    <tr key={String(key)} className="border-t">
-                                        <td className={`p-2 tabular-nums ${heat.a}`}>{fmt(va)}</td>
-                                        <td className="p-2 font-medium">{label}</td>
-                                        <td className={`p-2 tabular-nums ${heat.b}`}>{fmt(vb)}</td>
+                        {/* Tabela comparativa com heat */}
+                        <div className="overflow-x-auto mt-4">
+                            <table className="w-full table-auto text-xs sm:text-sm border text-center">
+                                <thead>
+                                    <tr className="bg-gray-50">
+                                        <th className="p-1.5 sm:p-2">{orderedClubs[0]?.clubName ?? "Clube A"}</th>
+                                        <th className="p-1.5 sm:p-2">Estatística</th>
+                                        <th className="p-1.5 sm:p-2">{orderedClubs[1]?.clubName ?? "Clube B"}</th>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+                                </thead>
+                                <tbody>
+                                    {comparisonStats.map(({ label, key }) => {
+                                        const va = (orderedClubs[0] as any)?.[key] as number;
+                                        const vb = (orderedClubs[1] as any)?.[key] as number;
+                                        const heat = cellHeat(va, vb);
+                                        return (
+                                            <tr key={String(key)} className="border-t">
+                                                <td className={`p-2 tabular-nums ${heat.a}`}>{fmt(va)}</td>
+                                                <td className="p-2 font-medium">{label}</td>
+                                                <td className={`p-2 tabular-nums ${heat.b}`}>{fmt(vb)}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
 
-                {/* MVP */}
-                {mom && (
-                    <div className="mt-4 p-3 rounded-lg border bg-amber-50 text-amber-900 inline-flex items-center gap-2">
-                        <span aria-hidden>⭐</span>
-                        <span className="font-medium">Homem da Partida:</span>
-                        <span>{mom.playerName}</span>
+                        {/* MVP */}
+                        {mom && (
+                            <div className="mt-4 p-3 rounded-lg border bg-amber-50 text-amber-900 inline-flex items-center gap-2">
+                                <span aria-hidden>⭐</span>
+                                <span className="font-medium">Homem da Partida:</span>
+                                <span>{mom.playerName}</span>
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    // Fallback quando só há 1 clube na resposta
+                    <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2 px-2 py-1 rounded">
+                            <img
+                                src={crestUrl(orderedClubs[0]?.clubCrestAssetId)}
+                                onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                                alt={`Escudo ${orderedClubs[0]?.clubName ?? "Clube"}`}
+                                className="w-8 h-8 rounded-full bg-white border"
+                            />
+                            <div className="font-semibold flex items-center gap-2">
+                                {orderedClubs[0]?.clubName ?? "Clube"}
+                                {leftIsSelected && <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>}
+                            </div>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                            Sem dados do adversário para esta partida. Alguns painéis ficam indisponíveis.
+                        </div>
                     </div>
                 )}
             </div>
@@ -737,22 +755,33 @@ export default function MatchDetails() {
             {/* Disciplina */}
             <div className="bg-white shadow-sm rounded-xl p-4 border">
                 <h2 className="text-lg font-semibold mb-2">Disciplina</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="p-3 rounded border">
-                        <div className="text-sm text-gray-500 mb-1">{orderedClubs[0].clubName}</div>
-                        <div className="inline-flex items-center gap-2">
-                            <span className="inline-block w-3 h-5 rounded-[2px] bg-red-600" />
-                            <span className="tabular-nums font-semibold">{orderedClubs[0].totalRedCards ?? 0}</span>
+
+                {haveTwoClubs ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="p-3 rounded border">
+                            <div className="text-sm text-gray-500 mb-1">{orderedClubs[0]?.clubName ?? "Clube A"}</div>
+                            <div className="inline-flex items-center gap-2">
+                                <span className="inline-block w-3 h-5 rounded-[2px] bg-red-600" />
+                                <span className="tabular-nums font-semibold">{orderedClubs[0]?.totalRedCards ?? 0}</span>
+                            </div>
+                        </div>
+                        <div className="p-3 rounded border">
+                            <div className="text-sm text-gray-500 mb-1">{orderedClubs[1]?.clubName ?? "Clube B"}</div>
+                            <div className="inline-flex items-center gap-2">
+                                <span className="inline-block w-3 h-5 rounded-[2px] bg-red-600" />
+                                <span className="tabular-nums font-semibold">{orderedClubs[1]?.totalRedCards ?? 0}</span>
+                            </div>
                         </div>
                     </div>
-                    <div className="p-3 rounded border">
-                        <div className="text-sm text-gray-500 mb-1">{orderedClubs[1].clubName}</div>
+                ) : (
+                    <div className="p-3 rounded border inline-block">
+                        <div className="text-sm text-gray-500 mb-1">{orderedClubs[0]?.clubName ?? "Clube"}</div>
                         <div className="inline-flex items-center gap-2">
                             <span className="inline-block w-3 h-5 rounded-[2px] bg-red-600" />
-                            <span className="tabular-nums font-semibold">{orderedClubs[1].totalRedCards ?? 0}</span>
+                            <span className="tabular-nums font-semibold">{orderedClubs[0]?.totalRedCards ?? 0}</span>
                         </div>
                     </div>
-                </div>
+                )}
 
                 {sentOff.length > 0 ? (
                     <div className="mt-3 text-sm">
@@ -761,7 +790,10 @@ export default function MatchDetails() {
                             {sentOff.map((p) => (
                                 <li key={p.playerId}>
                                     <span className="font-medium">{p.playerName}</span>
-                                    <span className="text-gray-500"> - {orderedClubs.find((c) => c.clubId === p.clubId)?.clubName ?? "Clube"}</span>
+                                    <span className="text-gray-500">
+                                        {" "}
+                                        - {orderedClubs.find((c) => c.clubId === p.clubId)?.clubName ?? "Clube"}
+                                    </span>
                                 </li>
                             ))}
                         </ul>
@@ -814,6 +846,7 @@ export default function MatchDetails() {
                 <div className="bg-white shadow-sm rounded-xl p-4 border h-[200px] sm:h-[240px] md:h-[260px] xl:col-span-1">
                     <h2 className="text-lg font-semibold mb-2">Comparativo entre Clubes</h2>
                     {clubChart && <Bar data={clubChart.data} options={clubChart.options as any} />}
+                    {!clubChart && <div className="text-sm text-gray-600">Comparativo indisponível (faltam dados do adversário).</div>}
                 </div>
 
                 {/* Jogadores */}
@@ -836,25 +869,29 @@ export default function MatchDetails() {
 
             {/* Player Stats Tables by Club */}
             {orderedClubs.map((clubRow) => {
-                const clubPlayers = players.filter(p => p.clubId === clubRow.clubId);
-                
+                const clubPlayers = players.filter((p) => p.clubId === clubRow.clubId);
+
                 return (
                     <div key={clubRow.clubId} className="bg-white shadow-sm rounded-xl p-4 border">
                         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                             <img
-                                src={crestUrl(clubRow.clubCrestAssetId)}
+                                src={crestUrl(clubRow?.clubCrestAssetId)}
                                 onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                                alt={`Escudo ${clubRow.clubName}`}
+                                alt={`Escudo ${clubRow?.clubName ?? "Clube"}`}
                                 className="w-6 h-6 rounded-full bg-white border"
                             />
-                            {clubRow.clubName} - Jogadores
+                            {clubRow?.clubName ?? "Clube"} - Jogadores
                         </h3>
-                        
+
                         <PlayerStatsTable
                             players={clubPlayers}
                             loading={false}
                             error={null}
-                            clubStats={clubsWithGoalsConceded.find(c => c.clubId === clubRow.clubId) || null}
+                            clubStats={
+                                haveTwoClubs
+                                    ? (clubsWithGoalsConceded.find((c) => c.clubId === clubRow.clubId) as any) || null
+                                    : (orderedClubs.find((c) => c.clubId === clubRow.clubId) as any) || null
+                            }
                             minMatches={0}
                             searchTerm={playerQuery}
                             initialSortKey={sortKey as keyof PlayerStats}
