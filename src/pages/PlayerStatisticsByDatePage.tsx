@@ -77,7 +77,7 @@ function getMatchesPlayed(p: any): number {
     );
 }
 
-// Pequeno componente de dica (tooltip nativo via title)
+// Tooltip simples via title
 const Info: React.FC<{ title: string }> = ({ title }) => (
     <span
         className="ml-1 inline-flex items-center justify-center w-4 h-4 text-xs rounded-full border border-gray-300 text-gray-600 select-none"
@@ -93,10 +93,6 @@ export default function PlayerStatisticsByDatePage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [days, setDays] = useState<DayBlock[]>([]);
-
-    // toggles de exibição
-    const [showBestPerPlayer, setShowBestPerPlayer] = useState(true);
-    const [showWorstPerPlayer, setShowWorstPerPlayer] = useState(true);
 
     // clubes selecionados (?clubIds=355651,352016,...)
     const clubIds = useMemo(() => {
@@ -266,15 +262,28 @@ export default function PlayerStatisticsByDatePage() {
             .slice(0, 5);
     }, [rankedDays]);
 
-    const topByGF = useMemo(() => {
+    // === NOVOS: Top 5 por gols/jogo (GF) e gols sofridos/jogo (GA) ===
+    const topByGFPerGame = useMemo(() => {
         return [...rankedDays]
-            .sort((a, b) => b.goalsFor - a.goalsFor || a.goalsAgainst - b.goalsAgainst)
+            .filter((d) => d.matchesCount > 0)
+            .sort((a, b) =>
+                b.gfPerMatch - a.gfPerMatch ||
+                b.goalsFor - a.goalsFor ||
+                a.goalsAgainst - b.goalsAgainst ||
+                b.date.localeCompare(a.date)
+            )
             .slice(0, 5);
     }, [rankedDays]);
 
-    const topByLowGA = useMemo(() => {
+    const topByLowGAPerGame = useMemo(() => {
         return [...rankedDays]
-            .sort((a, b) => a.goalsAgainst - b.goalsAgainst || b.goalsFor - a.goalsFor)
+            .filter((d) => d.matchesCount > 0)
+            .sort((a, b) =>
+                a.gaPerMatch - b.gaPerMatch ||
+                a.goalsAgainst - b.goalsAgainst ||
+                b.goalsFor - a.goalsFor ||
+                b.date.localeCompare(a.date)
+            )
             .slice(0, 5);
     }, [rankedDays]);
 
@@ -353,7 +362,6 @@ export default function PlayerStatisticsByDatePage() {
                     rating: { date: d.date, value: rating },
                 };
 
-                // pickers
                 const pickBest = (best: BestPerMetric, v: number): BestPerMetric => {
                     if (v > best.value) return { date: d.date, value: v };
                     if (v === best.value && d.date > best.date) return { date: d.date, value: v };
@@ -361,7 +369,7 @@ export default function PlayerStatisticsByDatePage() {
                 };
                 const pickWorst = (worst: BestPerMetric, v: number): BestPerMetric => {
                     if (v < worst.value) return { date: d.date, value: v };
-                    if (v === worst.value && d.date > worst.date) return { date: d.date, value: v }; // empate -> mais recente
+                    if (v === worst.value && d.date > worst.date) return { date: d.date, value: v };
                     return worst;
                 };
 
@@ -434,28 +442,6 @@ export default function PlayerStatisticsByDatePage() {
                 </div>
             </header>
 
-            {/* Controles de exibição */}
-            <div className="flex flex-wrap gap-3">
-                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        className="accent-black"
-                        checked={showBestPerPlayer}
-                        onChange={(e) => setShowBestPerPlayer(e.target.checked)}
-                    />
-                    <span className="text-sm">Mostrar “Melhor dia por jogador”</span>
-                </label>
-                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        className="accent-black"
-                        checked={showWorstPerPlayer}
-                        onChange={(e) => setShowWorstPerPlayer(e.target.checked)}
-                    />
-                    <span className="text-sm">Mostrar “Pior dia por jogador”</span>
-                </label>
-            </div>
-
             {loading && <div>Carregando…</div>}
             {error && <div className="text-red-600">{error}</div>}
             {!loading && !error && !clubIds.length && (
@@ -516,21 +502,13 @@ export default function PlayerStatisticsByDatePage() {
                         <div className="rounded-lg border p-3">
                             <div className="text-sm text-gray-600">GF por jogo</div>
                             <div className="font-semibold">
-                                {(() => {
-                                    const m = days.reduce((a, d) => a + d.matchesCount, 0);
-                                    const gf = days.reduce((a, d) => a + d.goalsFor, 0);
-                                    return m > 0 ? (gf / m).toFixed(2) : "0.00";
-                                })()}
+                                {period.gfPerMatch.toFixed(2)}
                             </div>
                         </div>
                         <div className="rounded-lg border p-3">
                             <div className="text-sm text-gray-600">GA por jogo</div>
                             <div className="font-semibold">
-                                {(() => {
-                                    const m = days.reduce((a, d) => a + d.matchesCount, 0);
-                                    const ga = days.reduce((a, d) => a + d.goalsAgainst, 0);
-                                    return m > 0 ? (ga / m).toFixed(2) : "0.00";
-                                })()}
+                                {period.gaPerMatch.toFixed(2)}
                             </div>
                         </div>
                         <div className="rounded-lg border p-3">
@@ -582,6 +560,7 @@ export default function PlayerStatisticsByDatePage() {
                 <section className="rounded-xl border p-4 shadow-sm">
                     <h2 className="text-lg font-semibold mb-3">Top 5 dias por critério</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                        {/* Win% */}
                         <div className="rounded-lg border">
                             <div className="px-3 py-2 border-b font-medium">Maior Win%</div>
                             <ul className="text-sm divide-y">
@@ -593,35 +572,53 @@ export default function PlayerStatisticsByDatePage() {
                                 ))}
                             </ul>
                         </div>
+
+                        {/* Saldo */}
                         <div className="rounded-lg border">
                             <div className="px-3 py-2 border-b font-medium">Maior saldo</div>
                             <ul className="text-sm divide-y">
                                 {topBySaldo.map((d) => (
                                     <li key={`sd-${d.date}`} className="px-3 py-2 flex justify-between">
                                         <span>{d.date}</span>
-                                        <span>{d.saldo >= 0 ? "+" : ""}{d.saldo} ({d.goalsFor}-{d.goalsAgainst})</span>
+                                        <span>
+                                            {d.saldo >= 0 ? "+" : ""}{d.saldo} ({d.goalsFor}-{d.goalsAgainst})
+                                        </span>
                                     </li>
                                 ))}
                             </ul>
                         </div>
+
+                        {/* Mais gols marcados (ordenado por gols/jogo) */}
                         <div className="rounded-lg border">
-                            <div className="px-3 py-2 border-b font-medium">Mais gols marcados</div>
+                            <div className="px-3 py-2 border-b font-medium">Mais gols marcados (por jogo)</div>
                             <ul className="text-sm divide-y">
-                                {topByGF.map((d) => (
-                                    <li key={`gf-${d.date}`} className="px-3 py-2 flex justify-between">
-                                        <span>{d.date}</span>
-                                        <span>{d.goalsFor}</span>
+                                {topByGFPerGame.map((d) => (
+                                    <li key={`gfpg-${d.date}`} className="px-3 py-2 flex flex-col">
+                                        <div className="flex justify-between">
+                                            <span>{d.date}</span>
+                                            <span>{d.gfPerMatch.toFixed(2)} gol/jogo</span>
+                                        </div>
+                                        <div className="text-gray-500 text-xs text-right">
+                                            Total: {d.goalsFor} em {d.matchesCount} jogos
+                                        </div>
                                     </li>
                                 ))}
                             </ul>
                         </div>
+
+                        {/* Menos gols sofridos (ordenado por gols sofridos/jogo) */}
                         <div className="rounded-lg border">
-                            <div className="px-3 py-2 border-b font-medium">Menos gols sofridos</div>
+                            <div className="px-3 py-2 border-b font-medium">Menos gols sofridos (por jogo)</div>
                             <ul className="text-sm divide-y">
-                                {topByLowGA.map((d) => (
-                                    <li key={`ga-${d.date}`} className="px-3 py-2 flex justify-between">
-                                        <span>{d.date}</span>
-                                        <span>{d.goalsAgainst}</span>
+                                {topByLowGAPerGame.map((d) => (
+                                    <li key={`gapg-${d.date}`} className="px-3 py-2 flex flex-col">
+                                        <div className="flex justify-between">
+                                            <span>{d.date}</span>
+                                            <span>{d.gaPerMatch.toFixed(2)} gol/jogo</span>
+                                        </div>
+                                        <div className="text-gray-500 text-xs text-right">
+                                            Total: {d.goalsAgainst} em {d.matchesCount} jogos
+                                        </div>
                                     </li>
                                 ))}
                             </ul>
@@ -631,7 +628,7 @@ export default function PlayerStatisticsByDatePage() {
             )}
 
             {/* Melhor dia por jogador — com Participações */}
-            {!loading && !error && days.length > 0 && showBestPerPlayer && (
+            {!loading && !error && days.length > 0 && (
                 <section className="rounded-xl border p-4 shadow-sm">
                     <div className="flex items-center gap-2 mb-3">
                         <h2 className="text-lg font-semibold">Melhor dia de cada jogador por métrica</h2>
@@ -698,7 +695,7 @@ export default function PlayerStatisticsByDatePage() {
             )}
 
             {/* Pior dia por jogador — espelhado, escolhendo o MENOR valor */}
-            {!loading && !error && days.length > 0 && showWorstPerPlayer && (
+            {!loading && !error && days.length > 0 && (
                 <section className="rounded-xl border p-4 shadow-sm">
                     <div className="flex items-center gap-2 mb-3">
                         <h2 className="text-lg font-semibold">Pior dia de cada jogador por métrica</h2>
