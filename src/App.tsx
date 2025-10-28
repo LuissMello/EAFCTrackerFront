@@ -6,6 +6,7 @@ import GlobalStats from "./pages/GlobalStats.tsx";
 import Calendar from "./pages/Calendar.tsx";
 import Trends from "./pages/Trends.tsx";
 import PlayerAttributes from "./pages/PlayerAttributes.tsx";
+import PlayerStatisticsByDatePage from "./pages/PlayerStatisticsByDatePage.tsx";
 import Navbar from "./components/Navbar.tsx";
 import { ClubProvider } from "./hooks/useClub.tsx";
 
@@ -23,6 +24,7 @@ export default function App() {
                         <Route path="/calendar" element={<Calendar />} />
                         <Route path="/trends" element={<Trends />} />
                         <Route path="/attributes" element={<PlayerAttributes />} />
+                        <Route path="/statisticsbydate" element={<PlayerStatisticsByDatePage />} />
                     </Routes>
                 </div>
             </ClubProvider>
