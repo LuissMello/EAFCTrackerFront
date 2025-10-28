@@ -20,6 +20,8 @@ interface PlayerStatsTableProps {
     showTitle?: boolean;
     hiddenColumns?: string[];
     onSortChange?: (key: keyof PlayerStats, order: "asc" | "desc") => void;
+    /** Quando true, oculta o cabeçalho e o rodapé/paginação */
+    compactMode?: boolean;
 }
 
 const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);
@@ -109,11 +111,16 @@ export function PlayerStatsTable({
     showTitle = true,
     hiddenColumns = [],
     onSortChange,
+    compactMode = false,
 }: PlayerStatsTableProps) {
     const [sortKey, setSortKey] = useState<keyof PlayerStats>(initialSortKey);
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialSortOrder);
     const [page, setPage] = useState(1);
     const { int, p1, p2 } = useNumberFormats();
+
+    // aplica compactMode: força esconder título e paginação
+    const effectiveShowTitle = compactMode ? false : showTitle;
+    const effectiveShowPagination = compactMode ? false : showPagination;
 
     // Filter players
     const filtered = useMemo(() => {
@@ -211,7 +218,7 @@ export function PlayerStatsTable({
 
     return (
         <section>
-            {showTitle && <h2 className="text-xl font-bold mb-2 text-center">Estatísticas dos Jogadores</h2>}
+            {effectiveShowTitle && <h2 className="text-xl font-bold mb-2 text-center">Estatísticas dos Jogadores</h2>}
 
             <div className="overflow-x-auto rounded-lg border bg-white shadow">
                 <table className="table-auto w-full text-sm text-center">
@@ -272,13 +279,12 @@ export function PlayerStatsTable({
                                 const conceded = clubGoalsAgainst;
                                 const savePct = pct(saves, saves + conceded);
 
-                                // NOVO: computa flags e só destaca quando for jogo único
                                 const isDisconnected = Boolean((p as any).disconnected);
                                 const isMotm = Number(p.totalMom || 0) > 0;
                                 const isGoalkeeper =
                                     ((p as any).position?.toUpperCase?.() === "GK") || saves > 0;
 
-                                const showHighlights = p.matchesPlayed === 1; // <— chave da lógica
+                                const showHighlights = p.matchesPlayed === 1;
 
                                 const rowClass = showHighlights
                                     ? isDisconnected
@@ -288,7 +294,6 @@ export function PlayerStatsTable({
                                             : ""
                                     : "";
 
-                                // Ícones aparecem apenas se showHighlights
                                 const Icons = showHighlights ? (
                                     <span className="inline-flex items-center gap-1 mr-2">
                                         {isDisconnected && (
@@ -457,7 +462,7 @@ export function PlayerStatsTable({
                 </table>
             </div>
 
-            {showPagination && (
+            {effectiveShowPagination && (
                 <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
                     <div className="text-sm text-gray-600">
                         Mostrando {pageItems.length} de {sorted.length} jogadores (pág. {page}/{totalPages})
