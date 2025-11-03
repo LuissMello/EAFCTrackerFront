@@ -1,4 +1,5 @@
-﻿import React, { useEffect, useMemo, useRef, useState, useId, useCallback } from "react";
+﻿// src/pages/Home.tsx
+import React, { useEffect, useMemo, useRef, useState, useId, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
@@ -36,6 +37,7 @@ interface ClubDetailsDto {
     crestAssetId?: string | null;
     selectedKitType?: string | null;
     team?: string | null;
+
     // PascalCase aliases
     Name?: string | null;
     StadName?: string | null;
@@ -56,7 +58,7 @@ interface ClubMatchSummaryDto {
 
 interface MatchResultDto {
     matchId: number;
-    timestamp: string;
+    timestamp: string | number | null;
 
     clubAName: string;
     clubAGoals: number;
@@ -79,6 +81,17 @@ type MatchTypeFilter = "All" | "League" | "Playoff";
 type SortKey = "recent" | "oldest" | "gf" | "ga";
 type RedCardFilter = "all" | "none" | "1plus" | "2plus";
 
+/** Payload paginado (back) */
+interface PagedResult<T> {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+    hasPrevious: boolean;
+    hasNext: boolean;
+    items: T[];
+}
+
 /* ======================
    Helpers
 ====================== */
@@ -87,6 +100,7 @@ const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
 
 const FALLBACK_LOGO = "https://via.placeholder.com/96?text=Logo";
 const AVATAR_PX = 40;
+
 function asPositiveIntString(v: unknown): string | null {
     if (v === null || v === undefined) return null;
     const n = Number(v);
@@ -99,6 +113,7 @@ const divisionCrestUrl = (division?: string | number | null) => {
     const n = asPositiveIntString(division);
     return n ? `https://media.contentapi.ea.com/content/dam/eacom/fc/pro-clubs/divisioncrest${n}.png` : null;
 };
+
 function crestUrl(crestAssetId?: string | null) {
     if (!crestAssetId) return FALLBACK_LOGO;
     return `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${crestAssetId}.png`;
@@ -117,79 +132,83 @@ function toHex(dec: string | number | null | undefined): string | null {
     return null;
 }
 
-const Emoji = ({
-    symbol,
-    label,
-    size = 14,
-    className = "",
-}: {
-    symbol: string;
-    label: string;
-    size?: number;
-    className?: string;
-}) => (
-    <span
-        role="img"
-        aria-label={label}
-        title={label}
-        className={`inline-block align-[-2px] leading-none ${className}`}
-        style={{ fontSize: size }}
-    >
-        {symbol}
-    </span>
-);
-function fromNow(ts: string) {
-    const d = new Date(ts).getTime();
-    const now = Date.now();
-    const diffMs = d - now;
-    const abs = Math.abs(diffMs);
-    const minutes = Math.round(abs / 60000);
-    if (minutes < 60) return rtf.format(Math.sign(diffMs) * Math.round(minutes), "minute");
-    const hours = Math.round(minutes / 60);
-    if (hours < 48) return rtf.format(Math.sign(diffMs) * hours, "hour");
-    const days = Math.round(hours / 24);
-    return rtf.format(Math.sign(diffMs) * days, "day");
+/** 🔒 Timestamp robusto */
+function parseTimestamp(ts?: string | number | null): Date | null {
+    if (ts == null) return null;
+    if (typeof ts === "number") {
+        const d = new Date(ts);
+        return Number.isFinite(d.getTime()) ? d : null;
+    }
+    const raw = String(ts).trim();
+    if (!raw) return null;
+    // adiciona Z se vier sem timezone, ex: "2025-10-29T12:34:56"
+    const needsZ = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/.test(raw);
+    const d = new Date(needsZ ? `${raw}Z` : raw);
+    return Number.isFinite(d.getTime()) ? d : null;
 }
 
-/** Perspectiva antiga (fallback) */
-function perspectiveForByNameOrTeam(
-    m: MatchResultDto,
-    myClubName?: string | null,
-    myTeamIdNum?: number
-) {
-    if (typeof myTeamIdNum === "number" && Number.isFinite(myTeamIdNum)) {
-        if (m.clubADetails?.teamId === myTeamIdNum || m.clubADetails?.TeamId === myTeamIdNum)
-            return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
-        if (m.clubBDetails?.teamId === myTeamIdNum || m.clubBDetails?.TeamId === myTeamIdNum)
-            return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
-    }
-    const name = (myClubName ?? "").toLowerCase();
-    if (name) {
-        if ((m.clubAName ?? "").toLowerCase() === name) return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
-        if ((m.clubBName ?? "").toLowerCase() === name) return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
-    }
-    return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+function formatDateSafe(ts?: string | number | null, fallback = "—"): string {
+    const d = parseTimestamp(ts);
+    return d ? fmtDateTime.format(d) : fallback;
 }
 
-/** Nova perspectiva para multi seleção de clubes */
-function perspectiveForSelected(
-    m: MatchResultDto,
-    selectedClubIds: number[],
-    fallbackClubName?: string | null,
-    fallbackTeamId?: number
-) {
-    const aId = m.clubADetails?.clubId ?? null;
-    const bId = m.clubBDetails?.clubId ?? null;
+function timeValue(ts?: string | number | null, whenInvalid = -Infinity) {
+    const d = parseTimestamp(ts);
+    return d ? d.getTime() : whenInvalid;
+}
 
-    if (aId && selectedClubIds.includes(Number(aId))) {
-        return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
-    }
-    if (bId && selectedClubIds.includes(Number(bId))) {
-        return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
-    }
+/** Normalização do payload (paged vs array; camelCase vs PascalCase) */
+type PagedLike<T> = {
+    items?: T[]; Items?: T[];
+    totalCount?: number; TotalCount?: number;
+    totalPages?: number; TotalPages?: number;
+    page?: number; Page?: number;
+    pageSize?: number; PageSize?: number;
+    hasNext?: boolean; HasNext?: boolean;
+    hasPrevious?: boolean; HasPrevious?: boolean;
+};
 
-    // fallback (ex.: dados sem clubId nas details)
-    return perspectiveForByNameOrTeam(m, fallbackClubName, fallbackTeamId);
+function coercePaged<T>(data: any): {
+    items: T[];
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+    isPaged: boolean;
+} {
+    if (Array.isArray(data)) {
+        const items = data as T[];
+        return {
+            items,
+            page: 1,
+            pageSize: items.length,
+            totalCount: items.length,
+            totalPages: items.length ? 1 : 0,
+            hasNext: false,
+            hasPrevious: false,
+            isPaged: false,
+        };
+    }
+    const obj = (data ?? {}) as PagedLike<T>;
+    const items = (obj.items ?? obj.Items ?? []) as T[];
+
+    const alt = (data?.data ?? data?.Data);
+    const finalItems =
+        Array.isArray(items) && items.length ? items :
+            (Array.isArray(alt) ? (alt as T[]) : []);
+
+    const page = obj.page ?? obj.Page ?? 1;
+    const pageSize = obj.pageSize ?? obj.PageSize ?? finalItems.length;
+    const totalCount = obj.totalCount ?? obj.TotalCount ?? finalItems.length;
+    const totalPages = obj.totalPages ?? obj.TotalPages ?? (finalItems.length ? 1 : 0);
+    const hasNext = obj.hasNext ?? obj.HasNext ?? (page < totalPages);
+    const hasPrevious = obj.hasPrevious ?? obj.HasPrevious ?? (page > 1);
+
+    const isPaged = !!(obj.items ?? obj.Items ?? alt);
+
+    return { items: finalItems, page, pageSize, totalCount, totalPages, hasNext, hasPrevious, isPaged };
 }
 
 /* ======================
@@ -256,9 +275,9 @@ const KNOWN_TEMPLATES: Record<string, JerseyPattern> = {};
 
 function guessPattern(details?: ClubDetailsDto | null): JerseyPattern {
     const txt =
-        ((details?.customKitId || details?.KitId || details?.kitId) ?? "") +
+        ((details?.customKitId || details?.kitId) ?? "") +
         "|" +
-        ((details?.kitId || details?.KitId) ?? "") +
+        ((details?.kitId) ?? "") +
         "|" +
         (details?.dCustomKit ?? (details as any)?.DCustomKit ?? "");
 
@@ -311,7 +330,6 @@ function KitJersey({
 
     const bodyX = 20, bodyY = 18, bodyW = 24, bodyH = 34;
     const slLy1 = 18, slLy2 = 32;
-    const slRy1 = 18, slRy2 = 32;
 
     const renderHoops = () => {
         const stripeCount = 5;
@@ -322,23 +340,7 @@ function KitJersey({
             const y = bodyY + i * (h + gap);
             rows.push(<rect key={`b-${i}`} x={bodyX} y={y} width={bodyW} height={h} fill={accent} />);
         }
-        const sleeveTop = slLy1, sleeveBottom = slLy2;
-        const sleeveH = sleeveBottom - sleeveTop;
-        const stripeCountS = 4, gapS = 1.5;
-        const hS = (sleeveH - (stripeCountS - 1) * gapS) / stripeCountS;
-        const slRowsL: JSX.Element[] = [], slRowsR: JSX.Element[] = [];
-        for (let i = 0; i < stripeCountS; i++) {
-            const y = sleeveTop + i * (hS + gapS);
-            slRowsL.push(<rect key={`sl-${i}`} x={12} y={y} width={8} height={hS} fill={accent} />);
-            slRowsR.push(<rect key={`sr-${i}`} x={44} y={y} width={8} height={hS} fill={accent} />);
-        }
-        return (
-            <>
-                <g clipPath={`url(#${idBody})`}>{rows}</g>
-                <g clipPath={`url(#${idSlL})`}>{slRowsL}</g>
-                <g clipPath={`url(#${idSlR})`}>{slRowsR}</g>
-            </>
-        );
+        return <g clipPath={`url(#${idBody})`}>{rows}</g>;
     };
 
     const renderStripes = () => {
@@ -350,32 +352,12 @@ function KitJersey({
             const x = bodyX + i * (w + gap);
             cols.push(<rect key={`bcol-${i}`} x={x} y={bodyY} width={w} height={bodyH} fill={accent} />);
         }
-        const slColsL: JSX.Element[] = [], slColsR: JSX.Element[] = [];
-        const wS = 2;
-        for (let i = 0; i < 4; i++) {
-            const xL = 12 + i * (wS + 1);
-            const xR = 44 + i * (wS + 1);
-            slColsL.push(<rect key={`slc-${i}`} x={xL} y={22} width={wS} height={8} fill={accent} />);
-            slColsR.push(<rect key={`src-${i}`} x={xR} y={22} width={wS} height={8} fill={accent} />);
-        }
-        return (
-            <>
-                <g clipPath={`url(#${idBody})`}>{cols}</g>
-                <g clipPath={`url(#${idSlL})`}>{slColsL}</g>
-                <g clipPath={`url(#${idSlR})`}>{slColsR}</g>
-            </>
-        );
+        return <g clipPath={`url(#${idBody})`}>{cols}</g>;
     };
 
     const renderSash = () => (
         <>
             <polygon points="16,18 24,18 48,52 40,52" fill={accent} opacity={0.95} />
-            <g clipPath={`url(#${idSlL})`}>
-                <rect x={12} y={26} width={8} height={3} fill={accent} />
-            </g>
-            <g clipPath={`url(#${idSlR})`}>
-                <rect x={44} y={22} width={8} height={3} fill={accent} />
-            </g>
         </>
     );
 
@@ -484,17 +466,13 @@ function SummaryItem({
     align?: "left" | "right";
 }) {
     const reds = typeof redCards === "number" ? redCards : 0;
-
-    // 👇 Mobile: sempre esquerda; Desktop: respeita 'align'
     const textAlign = align === "right" ? "text-left sm:text-right" : "text-left";
     const dir = align === "right" ? "justify-start sm:justify-end" : "justify-start";
-
     const hatList = (hatTrickNames ?? []).filter((n): n is string => !!n);
 
     return (
         <div className={`flex flex-col gap-1 ${textAlign}`}>
             <div className={`flex ${dir} gap-2 flex-wrap items-center`}>
-                {/* Cartões vermelhos */}
                 <Chip
                     title={`Cartões vermelhos: ${reds}`}
                     className={`${reds > 0 ? "bg-red-50 border-red-200 text-red-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
@@ -503,7 +481,6 @@ function SummaryItem({
                     <span className="tabular-nums">{reds}</span>
                 </Chip>
 
-                {/* Hat-tricks */}
                 {hatList.length === 0 ? (
                     <Chip className="bg-gray-50 border-gray-200 text-gray-400" title="Sem hat-trick">
                         <span role="img" aria-label="Hat-trick" title="Hat-trick" className="inline-block leading-none opacity-60" style={{ fontSize: 14 }}>🎩</span>
@@ -518,7 +495,6 @@ function SummaryItem({
                     ))
                 )}
 
-                {/* Goleiro */}
                 <Chip
                     className={`${goalkeeperName ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
                     title={goalkeeperName ? `Goleiro: ${goalkeeperName}` : "Goleiro não identificado"}
@@ -527,7 +503,6 @@ function SummaryItem({
                     <span className="truncate max-w-[180px]">{goalkeeperName ?? "—"}</span>
                 </Chip>
 
-                {/* Man of the Match */}
                 <Chip
                     className={`${motmName ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
                     title={motmName ? `Man of the Match: ${motmName}` : "Sem Man of the Match"}
@@ -536,7 +511,6 @@ function SummaryItem({
                     <span className="truncate max-w-[180px]">{motmName ?? "—"}</span>
                 </Chip>
 
-                {/* Desconexão */}
                 {disconnected && (
                     <Chip className="bg-red-50 border-red-200 text-red-700" title="Clube desconectou">
                         <PlugZap size={14} className="text-red-600" />
@@ -546,7 +520,6 @@ function SummaryItem({
         </div>
     );
 }
-
 
 function SummaryCard({ m }: { m: MatchResultDto }) {
     const a = m.clubASummary;
@@ -578,6 +551,47 @@ function SummaryCard({ m }: { m: MatchResultDto }) {
 }
 
 /* ======================
+   Filtros/perspectiva
+====================== */
+function perspectiveForByNameOrTeam(
+    m: MatchResultDto,
+    myClubName?: string | null,
+    myTeamIdNum?: number
+) {
+    if (typeof myTeamIdNum === "number" && Number.isFinite(myTeamIdNum)) {
+        if (m.clubADetails?.teamId === myTeamIdNum || m.clubADetails?.TeamId === myTeamIdNum)
+            return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+        if (m.clubBDetails?.teamId === myTeamIdNum || m.clubBDetails?.TeamId === myTeamIdNum)
+            return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
+    }
+    const name = (myClubName ?? "").toLowerCase();
+    if (name) {
+        if ((m.clubAName ?? "").toLowerCase() === name) return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+        if ((m.clubBName ?? "").toLowerCase() === name) return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
+    }
+    return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+}
+
+function perspectiveForSelected(
+    m: MatchResultDto,
+    selectedClubIds: number[],
+    fallbackClubName?: string | null,
+    fallbackTeamId?: number
+) {
+    const aId = m.clubADetails?.clubId ?? null;
+    const bId = m.clubBDetails?.clubId ?? null;
+
+    if (aId && selectedClubIds.includes(Number(aId))) {
+        return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+    }
+    if (bId && selectedClubIds.includes(Number(bId))) {
+        return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
+    }
+
+    return perspectiveForByNameOrTeam(m, fallbackClubName, fallbackTeamId);
+}
+
+/* ======================
    Card de partida
 ====================== */
 function MatchCard({
@@ -603,14 +617,20 @@ function MatchCard({
     const stadiumName =
         m.clubADetails?.stadName ?? m.clubADetails?.StadName ?? m.clubADetails?.name ?? m.clubADetails?.Name ?? m.clubAName;
 
-    const aDisc = m.clubASummary?.disconnected === true;
-    const bDisc = m.clubBSummary?.disconnected === true;
-    const anyDisc = aDisc || bDisc;
-
-    const divA = m.clubADetails.currentDivision;
-    const divB = m.clubBDetails.currentDivision;
+    const divA = m.clubADetails?.currentDivision ?? null;
+    const divB = m.clubBDetails?.currentDivision ?? null;
     const divAUrl = divisionCrestUrl(divA);
     const divBUrl = divisionCrestUrl(divB);
+
+    const crestA =
+        m.clubADetails?.crestAssetId ??
+        m.clubADetails?.CrestAssetId ??
+        null;
+
+    const crestB =
+        m.clubBDetails?.crestAssetId ??
+        m.clubBDetails?.CrestAssetId ??
+        null;
 
     return (
         <Link
@@ -621,8 +641,8 @@ function MatchCard({
             {/* Topo: data + selos */}
             <div className="flex items-center justify-between gap-2">
                 <div className="text-xs text-gray-500">
-                    <span className="hidden sm:inline">{fmtDateTime.format(new Date(m.timestamp))}</span>
-                    <span className="sm:hidden">{fmtDateTime.format(new Date(m.timestamp))}</span>
+                    <span className="hidden sm:inline">{formatDateSafe(m.timestamp)}</span>
+                    <span className="sm:hidden">{formatDateSafe(m.timestamp)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <OutcomeBadge a={p.myGoals} b={p.oppGoals} />
@@ -635,7 +655,7 @@ function MatchCard({
                 <div className="flex items-center gap-2 min-w-0">
                     <div className="w-10 shrink-0">
                         <img
-                            src={crestUrl(m.clubADetails?.team ?? m.clubADetails?.team ?? null)}
+                            src={crestUrl(crestA)}
                             onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                             alt={`Escudo ${m.clubAName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
@@ -646,7 +666,6 @@ function MatchCard({
                     <div className="min-w-0">
                         <div className="leading-tight font-medium sm:truncate" title={m.clubAName}>{m.clubAName}</div>
                         <div className="flex items-center gap-2 mt-1">
-                            {/* Crest da divisão A */}
                             {divAUrl && (
                                 <img
                                     src={divAUrl}
@@ -684,7 +703,7 @@ function MatchCard({
                 <div className="flex items-center gap-2 min-w-0 justify-end">
                     <div className="w-10 shrink-0">
                         <img
-                            src={crestUrl(m.clubBDetails?.team ?? m.clubBDetails?.team ?? null)}
+                            src={crestUrl(crestB)}
                             onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                             alt={`Escudo ${m.clubBName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
@@ -695,7 +714,6 @@ function MatchCard({
                     <div className="min-w-0 text-right">
                         <div className="leading-tight font-medium sm:truncate" title={m.clubBName}>{m.clubBName}</div>
                         <div className="flex items-center gap-2 mt-1 justify-end">
-                            {/* Crest da divisão B */}
                             {divBUrl && (
                                 <img
                                     src={divBUrl}
@@ -730,7 +748,7 @@ function MatchCard({
                     {/* A */}
                     <div className="flex items-center gap-2 min-w-0">
                         <img
-                            src={crestUrl(m.clubADetails?.team ?? m.clubADetails?.team ?? null)}
+                            src={crestUrl(crestA)}
                             onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                             alt={`Escudo ${m.clubAName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
@@ -739,7 +757,6 @@ function MatchCard({
                         />
                         <div className="min-w-0">
                             <div className="font-medium leading-snug whitespace-normal break-words">{m.clubAName}</div>
-                            {/* Crest da divisão A (mobile) */}
                             {divAUrl && (
                                 <div className="mt-1">
                                     <img
@@ -759,7 +776,6 @@ function MatchCard({
                     <div className="flex items-center gap-2 min-w-0">
                         <div className="min-w-0 text-right">
                             <div className="font-medium leading-snug whitespace-normal break-words">{m.clubBName}</div>
-                            {/* Crest da divisão B (mobile) */}
                             {divBUrl && (
                                 <div className="mt-1 flex justify-end">
                                     <img
@@ -774,7 +790,7 @@ function MatchCard({
                             )}
                         </div>
                         <img
-                            src={crestUrl(m.clubBDetails?.team ?? m.clubBDetails?.team ?? null)}
+                            src={crestUrl(crestB)}
                             onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                             alt={`Escudo ${m.clubBName}`}
                             style={{ width: AVATAR_PX, height: AVATAR_PX }}
@@ -784,7 +800,7 @@ function MatchCard({
                     </div>
                 </div>
 
-                {/* Linha 2: camisas */}
+                {/* Camisas */}
                 <div className="flex items-start justify-between">
                     <div className="flex flex-col items-start gap-1">
                         <KitJersey
@@ -845,6 +861,9 @@ function MatchCard({
     );
 }
 
+/* ======================
+   Select de Divisões
+====================== */
 function DivisionsSelect({
     value,
     onChange,
@@ -866,7 +885,6 @@ function DivisionsSelect({
         return () => document.removeEventListener("mousedown", onClick);
     }, []);
 
-    const label = value ? `Divisão ${value}` : "Todos";
     const selectedUrl = divisionCrestUrl(value);
 
     const baseBtn =
@@ -885,7 +903,7 @@ function DivisionsSelect({
                 {selectedUrl ? (
                     <img
                         src={selectedUrl}
-                        alt={label}
+                        alt={value ? `Divisão ${value}` : "Todos"}
                         width={28}
                         height={28}
                         className="h-7 w-7 object-contain"
@@ -917,7 +935,7 @@ function DivisionsSelect({
                     </button>
 
                     <div className="mt-1 grid grid-cols-3 gap-2">
-                        {Array.from({ length: 6 }, (_, i) => i + 1).map((n) => {
+                        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
                             const url = divisionCrestUrl(n);
                             return (
                                 <button
@@ -932,14 +950,18 @@ function DivisionsSelect({
                                     }}
                                     title={`Divisão ${n}`}
                                 >
-                                    <img
-                                        src={url!}
-                                        alt={`Divisão ${n}`}
-                                        width={32}
-                                        height={32}
-                                        className="h-8 w-8 object-contain"
-                                        loading="lazy"
-                                    />
+                                    {url ? (
+                                        <img
+                                            src={url}
+                                            alt={`Divisão ${n}`}
+                                            width={32}
+                                            height={32}
+                                            className="h-8 w-8 object-contain"
+                                            loading="lazy"
+                                        />
+                                    ) : (
+                                        <span className="text-sm">D{n}</span>
+                                    )}
                                 </button>
                             );
                         })}
@@ -949,7 +971,6 @@ function DivisionsSelect({
         </div>
     );
 }
-
 
 /* ======================
    Página
@@ -962,11 +983,11 @@ export default function Home() {
     const initialOppDiv = (() => {
         const v = searchParams.get("oppdiv");
         const n = v ? Number(v) : NaN;
-        return Number.isFinite(n) && n >= 1 && n <= 6 ? n : null;
+        return Number.isFinite(n) && n >= 1 && n <= 10 ? n : null;
     })();
     const [opponentDivision, setOpponentDivision] = useState<number | null>(initialOppDiv);
 
-    // Lê seleção múltipla da URL (?clubIds=1,2,3). Se não houver, usa o clubId único do contexto.
+    // Seleção múltipla da URL (?clubIds=1,2,3) ou single (contexto/clubId)
     const selectedClubIds: number[] = useMemo(() => {
         const raw = searchParams.get("clubIds");
         if (raw && raw.trim().length) {
@@ -1011,6 +1032,21 @@ export default function Home() {
     })();
     const [opponentCount, setOpponentCount] = useState<number | null>(initialOpp);
 
+    /** Paginação server-side */
+    const initialPage = Math.max(1, Number(searchParams.get("page") ?? 1) || 1);
+    const initialSize = (() => {
+        const n = Number(searchParams.get("size") ?? 30) || 30;
+        return Math.min(Math.max(n, 10), 200);
+    })();
+    const [page, setPage] = useState<number>(initialPage);
+    const [pageSize, setPageSize] = useState<number>(initialSize);
+    const [totalCount, setTotalCount] = useState<number>(0);
+    const [totalPages, setTotalPages] = useState<number>(0);
+    const [hasNext, setHasNext] = useState<boolean>(false);
+    const [hasPrev, setHasPrev] = useState<boolean>(false);
+    const [isServerPaged, setIsServerPaged] = useState<boolean>(false);
+
+    // Modo multi-clubes usa "mostrar mais"
     const [visible, setVisible] = useState(30);
 
     const searchRef = useRef<HTMLInputElement | null>(null);
@@ -1025,7 +1061,7 @@ export default function Home() {
         return () => window.removeEventListener("keydown", onKey);
     }, []);
 
-    // Persistir filtros na URL (preservando clubIds/clubId)
+    // Persistir filtros na URL (inclui paginação)
     useEffect(() => {
         const rcParam =
             redFilter === "all" ? undefined :
@@ -1033,7 +1069,7 @@ export default function Home() {
                     redFilter === "1plus" ? "1" : "2";
 
         const oppParam = opponentCount ? String(opponentCount) : undefined;
-        const oppDivParam = opponentDivision ? String(opponentDivision) : undefined; // <— NOVO
+        const oppDivParam = opponentDivision ? String(opponentDivision) : undefined;
 
         const next = new URLSearchParams(searchParams.toString());
 
@@ -1042,7 +1078,10 @@ export default function Home() {
         if (sortKey !== "recent") next.set("sort", sortKey); else next.delete("sort");
         if (rcParam) next.set("rc", rcParam); else next.delete("rc");
         if (oppParam) next.set("opp", oppParam); else next.delete("opp");
-        if (oppDivParam) next.set("oppdiv", oppDivParam); else next.delete("oppdiv"); // <— NOVO
+        if (oppDivParam) next.set("oppdiv", oppDivParam); else next.delete("oppdiv");
+
+        next.set("page", String(page));
+        next.set("size", String(pageSize));
 
         const prevStr = searchParams.toString();
         const nextStr = next.toString();
@@ -1055,13 +1094,19 @@ export default function Home() {
         sortKey,
         redFilter,
         opponentCount,
-        opponentDivision, 
+        opponentDivision,
+        page,
+        pageSize,
         searchParams,
         setSearchParams
     ]);
 
+    // Reset page quando trocar seleção/filtros que afetam a chamada
+    useEffect(() => {
+        setPage(1);
+    }, [selectedClubIds.join(","), matchType, opponentCount]);
 
-    // Carregar resultados (multi seleção)
+    // Carregar resultados
     useEffect(() => {
         let mounted = true;
         const controller = new AbortController();
@@ -1077,34 +1122,63 @@ export default function Home() {
                     return;
                 }
 
-                const params: any = {};
-                if (matchType !== "All") params.matchType = matchType;
+                const baseParams: any = {};
+                if (matchType !== "All") baseParams.matchType = matchType;
+                if (opponentCount) baseParams.opponentCount = opponentCount;
 
                 if (selectedClubIds.length === 1) {
-                    // caso simples
+                    // Paginação no servidor
                     const id = selectedClubIds[0];
-                    const { data } = await api.get<MatchResultDto[]>(
-                        `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/${id}/matches/results`,
+                    const params = {
+                        ...baseParams,
+                        // aliases comuns
+                        page,
+                        pageNumber: page,
+                        pageIndex: page - 1, // back 0-based?
+                        size: pageSize,
+                        pageSize,
+                        limit: pageSize,
+                    };
+
+                    const { data } = await api.get<PagedResult<MatchResultDto> | MatchResultDto[]>(
+                        `/api/clubs/${id}/matches/results`,
                         { params, signal: (controller as any).signal }
                     );
+
                     if (!mounted) return;
-                    setResults(Array.isArray(data) ? data : []);
-                    setVisible(30);
+
+                    const norm = coercePaged<MatchResultDto>(data);
+
+                    setIsServerPaged(norm.isPaged);
+                    setResults(norm.items);
+                    setTotalCount(norm.totalCount);
+                    setTotalPages(norm.totalPages);
+                    setHasNext(norm.hasNext);
+                    setHasPrev(norm.hasPrevious);
+
+                    // se vier array puro
+                    if (!norm.isPaged) {
+                        setVisible(Math.max(30, Math.min(norm.items.length, pageSize)));
+                    }
                     return;
                 }
 
-                // múltiplos clubes → busca em paralelo e agrega
+                // Múltiplos clubes → busca paralela e merge (sem paginação no servidor)
                 const reqs = selectedClubIds.map((id) =>
-                    api.get<MatchResultDto[]>(
-                        `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/${id}/matches/results`,
-                        { params, signal: (controller as any).signal }
-                    ).then(r => r.data).catch(() => [])
+                    api.get<MatchResultDto[] | PagedResult<MatchResultDto>>(
+                        `/api/clubs/${id}/matches/results`,
+                        { params: baseParams, signal: (controller as any).signal }
+                    )
+                        .then(r => {
+                            const c = coercePaged<MatchResultDto>(r.data);
+                            return c.items;
+                        })
+                        .catch(() => [])
                 );
 
                 const arrays = await Promise.all(reqs);
                 if (!mounted) return;
 
-                // merge + dedupe por matchId
                 const merged = ([] as MatchResultDto[]).concat(...arrays);
                 const byId = new Map<number, MatchResultDto>();
                 for (const m of merged) {
@@ -1112,7 +1186,12 @@ export default function Home() {
                 }
                 const unique = Array.from(byId.values());
 
+                setIsServerPaged(false);
                 setResults(unique);
+                setTotalCount(unique.length);
+                setTotalPages(Math.ceil(unique.length / Math.max(visible, 1)) || 1);
+                setHasNext(false);
+                setHasPrev(false);
                 setVisible(30);
             } catch (err: any) {
                 if (mounted) setError(err?.message ?? "Erro ao carregar resultados");
@@ -1125,9 +1204,9 @@ export default function Home() {
             mounted = false;
             controller.abort();
         };
-    }, [selectedClubIds.join(","), matchType]);
+    }, [selectedClubIds.join(","), matchType, opponentCount, page, pageSize]);
 
-    // Filtros + ordenação em memória
+    // Filtros/ordenação em memória (sobre itens carregados)
     const filtered = useMemo(() => {
         const term = search.trim().toLowerCase();
 
@@ -1151,19 +1230,26 @@ export default function Home() {
             return opp === opponentCount;
         };
 
-        // NOVO: filtro por divisão do adversário
         const byOppDivision = (m: MatchResultDto) => {
             if (!opponentDivision) return true;
             const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
-            const oppDiv = p.isMineA ? m.clubBDetails.currentDivision : m.clubADetails.currentDivision;
+            const oppDiv = p.isMineA ? m.clubBDetails?.currentDivision : m.clubADetails?.currentDivision;
             return oppDiv === opponentDivision;
         };
 
         const base = results.filter((m) => byText(m) && byReds(m) && byOppCount(m) && byOppDivision(m));
 
         const sorted = [...base].sort((a, b) => {
-            if (sortKey === "recent") return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-            if (sortKey === "oldest") return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+            if (sortKey === "recent") {
+                const ta = timeValue(a.timestamp, -Infinity);
+                const tb = timeValue(b.timestamp, -Infinity);
+                return tb - ta;
+            }
+            if (sortKey === "oldest") {
+                const ta = timeValue(a.timestamp, +Infinity);
+                const tb = timeValue(b.timestamp, +Infinity);
+                return ta - tb;
+            }
 
             if (sortKey === "gf" || sortKey === "ga") {
                 const pa = perspectiveForSelected(a, selectedClubIds, fallbackClubName, fallbackTeamId);
@@ -1171,10 +1257,14 @@ export default function Home() {
                 const va = sortKey === "gf" ? pa.myGoals : pa.oppGoals;
                 const vb = sortKey === "gf" ? pb.myGoals : pb.oppGoals;
                 if (vb !== va) return vb - va;
-                return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+                const ta = timeValue(a.timestamp, -Infinity);
+                const tb = timeValue(b.timestamp, -Infinity);
+                return tb - ta;
             }
 
-            return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+            const ta = timeValue(a.timestamp, -Infinity);
+            const tb = timeValue(b.timestamp, -Infinity);
+            return tb - ta;
         });
 
         return sorted;
@@ -1184,12 +1274,13 @@ export default function Home() {
         sortKey,
         redFilter,
         opponentCount,
-        opponentDivision,           // <— NOVO
+        opponentDivision,
         selectedClubIds.join(","),
         fallbackClubName,
         fallbackTeamId
     ]);
 
+    // Resumo
     const summary = useMemo(() => {
         const s = filtered.reduce(
             (acc, m) => {
@@ -1218,7 +1309,6 @@ export default function Home() {
             const ev = new Event("visibilitychange");
             document.dispatchEvent(ev);
         }
-        setVisible((v) => v);
     }, [hasSelection]);
 
     const headerRight = hasSelection
@@ -1226,6 +1316,42 @@ export default function Home() {
             ? <>Clubes atuais: <span className="font-medium">{selectedClubIds.join(", ")}</span></>
             : <>Clube atual: <span className="font-medium">{selectedClubIds[0]}</span></>)
         : <>Selecione clubes no topo para carregar os resultados.</>;
+
+    // Paginação server-side
+    const goTo = (p: number) => setPage(Math.max(1, Math.min(totalPages || 1, p)));
+    const next = () => hasNext && setPage(p => p + 1);
+    const prev = () => hasPrev && setPage(p => Math.max(1, p - 1));
+
+    const PageControls = () => {
+        if (!isServerPaged || selectedClubIds.length !== 1) return null;
+        return (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+                <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-600">Itens por página:</span>
+                    <select
+                        className="border rounded-lg px-2 py-2"
+                        value={pageSize}
+                        onChange={(e) => {
+                            const n = Number(e.target.value);
+                            setPageSize(Math.min(Math.max(n, 10), 200));
+                            setPage(1); // reset
+                        }}
+                    >
+                        {[10, 20, 30, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                </div>
+                <div className="text-sm text-gray-600">
+                    Página <span className="font-semibold">{totalPages ? page : 0}</span> de <span className="font-semibold">{totalPages}</span> — {totalCount} partidas
+                </div>
+                <div className="flex items-center gap-2">
+                    <button className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50" onClick={() => goTo(1)} disabled={!hasPrev}>« Primeira</button>
+                    <button className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50" onClick={prev} disabled={!hasPrev}>‹ Anterior</button>
+                    <button className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50" onClick={next} disabled={!hasNext}>Próxima ›</button>
+                    <button className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50" onClick={() => goTo(totalPages)} disabled={!hasNext}>Última »</button>
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="p-4 max-w-5xl mx-auto">
@@ -1318,7 +1444,6 @@ export default function Home() {
                             />
                         </div>
 
-
                         {/* Ordenação */}
                         <div className="flex items-center gap-2 text-sm">
                             <span className="text-gray-600">Ordenar:</span>
@@ -1361,7 +1486,7 @@ export default function Home() {
                     <ul className="list-disc ml-5 mt-2 text-sm text-gray-600">
                         <li>Verifique a grafia dos clubes.</li>
                         <li>Altere o tipo (Todos/Liga/Playoff).</li>
-                        <li>Ajuste o filtro de cartões ou de jogadores do adversário.</li>
+                        <li>Ajuste os filtros de cartões, jogadores ou divisão.</li>
                     </ul>
                 </div>
             )}
@@ -1372,15 +1497,22 @@ export default function Home() {
                 </div>
             )}
 
-            {filtered.length > 0 && (
-                <div className="mt-8 text-xs text-gray-500 text-center">
-                    Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.
+            {/* Info de contagem */}
+            {isServerPaged && selectedClubIds.length === 1 ? (
+                <div className="mt-6 text-xs text-gray-500 text-center">
+                    Exibindo {filtered.length} de {totalCount} partidas (página {totalPages ? page : 0}/{totalPages}).
                 </div>
+            ) : (
+                filtered.length > 0 && (
+                    <div className="mt-6 text-xs text-gray-500 text-center">
+                        Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.
+                    </div>
+                )
             )}
 
             {/* Lista */}
             <div className="mt-4 grid gap-2">
-                {filtered.slice(0, visible).map((m) => (
+                {(isServerPaged && selectedClubIds.length === 1 ? filtered : filtered.slice(0, visible)).map((m) => (
                     <MatchCard
                         key={m.matchId}
                         m={m}
@@ -1393,18 +1525,29 @@ export default function Home() {
             </div>
 
             {/* Paginação */}
-            {filtered.length > 0 && visible < filtered.length && (
-                <div className="flex justify-center mt-4">
-                    <button className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50" onClick={() => setVisible((v) => v + 30)}>
-                        Mostrar mais ({Math.min(filtered.length - visible, 30)})
-                    </button>
-                </div>
+            {isServerPaged && selectedClubIds.length === 1 ? (
+                <PageControls />
+            ) : (
+                filtered.length > 0 && visible < filtered.length && (
+                    <div className="flex justify-center mt-4">
+                        <button className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50" onClick={() => setVisible((v) => v + 30)}>
+                            Mostrar mais ({Math.min(filtered.length - visible, 30)})
+                        </button>
+                    </div>
+                )
             )}
 
-            {filtered.length > 0 && (
-                <div className="mt-8 text-xs text-gray-500 text-center">
-                    Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.
+            {/* Rodapé de contagem */}
+            {isServerPaged && selectedClubIds.length === 1 ? (
+                <div className="mt-6 text-xs text-gray-500 text-center">
+                    Página {totalPages ? page : 0} de {totalPages} — {totalCount} partidas.
                 </div>
+            ) : (
+                filtered.length > 0 && (
+                    <div className="mt-6 text-xs text-gray-500 text-center">
+                        Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.
+                    </div>
+                )
             )}
         </div>
     );
