@@ -623,13 +623,13 @@ function MatchCard({
     const divBUrl = divisionCrestUrl(divB);
 
     const crestA =
-        m.clubADetails?.crestAssetId ??
-        m.clubADetails?.CrestAssetId ??
+        m.clubADetails?.TeamId.toString() ??
+        m.clubADetails?.TeamId.toString() ??
         null;
 
     const crestB =
-        m.clubBDetails?.crestAssetId ??
-        m.clubBDetails?.CrestAssetId ??
+        m.clubBDetails?.TeamId.toString() ??
+        m.clubBDetails?.TeamId.toString() ??
         null;
 
     return (
