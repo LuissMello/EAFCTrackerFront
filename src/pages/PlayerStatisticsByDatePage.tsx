@@ -56,59 +56,39 @@ function fmtBRFromISO(iso: string) {
     return `${d}/${m}/${y}`;
 }
 
-// ======= Cores por data (mais distintas & determinísticas) =======
+// ======= Cores por data (NUNCA repete entre datas diferentes) =======
+// Gera um mapa data->cor baseado na lista de dias carregada.
+// Usa o "golden angle" para maximizar a diferença entre matizes.
 type DateColor = { bg: string; border: string; fg: string };
-const dateColorCache = new Map<string, DateColor>();
 
-// Paleta de alto contraste (categorias bem separadas)
-const DISTINCT_PALETTE: Array<{ bg: string; border: string }> = [
-    { bg: "#FDE68A", border: "#EAB308" }, // amarelo
-    { bg: "#A7F3D0", border: "#10B981" }, // verde-água
-    { bg: "#BFDBFE", border: "#3B82F6" }, // azul
-    { bg: "#FBCFE8", border: "#EC4899" }, // rosa
-    { bg: "#C7D2FE", border: "#6366F1" }, // índigo
-    { bg: "#FECACA", border: "#EF4444" }, // vermelho
-    { bg: "#DDD6FE", border: "#8B5CF6" }, // roxo
-    { bg: "#BBF7D0", border: "#22C55E" }, // verde
-    { bg: "#FDE2E2", border: "#F43F5E" }, // rosé/cerise
-    { bg: "#FFE4C7", border: "#F59E0B" }, // laranja
-    { bg: "#BAE6FD", border: "#0EA5E9" }, // azul-céu
-    { bg: "#DCFCE7", border: "#16A34A" }, // esmeralda
-];
+function buildDateColorMap(datesISODesc: string[]): Map<string, DateColor> {
+    // Garante unicidade preservando a ordem recebida
+    const uniq: string[] = [];
+    const seen = new Set<string>();
+    for (const d of datesISODesc) {
+        const key = d.slice(0, 10);
+        if (!seen.has(key)) {
+            seen.add(key);
+            uniq.push(key);
+        }
+    }
 
-// hash djb2 simples (determinístico)
-function djb2(str: string) {
-    let h = 5381;
-    for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i);
-    return h >>> 0; // unsigned
+    const map = new Map<string, DateColor>();
+    const GOLDEN_ANGLE = 137.508; // graus
+    for (let i = 0; i < uniq.length; i++) {
+        const h = (i * GOLDEN_ANGLE) % 360;
+        // Fundo bem claro p/ texto escuro; borda mais saturada e escura
+        const bg = `hsl(${h} 80% 88%)`;
+        const border = `hsl(${h} 75% 45%)`;
+        const fg = "#111827";
+        map.set(uniq[i], { bg, border, fg });
+    }
+    return map;
 }
 
-// escolher texto preto/branco pelo YIQ do background
-function pickTextColor(hex: string): "#111827" | "#ffffff" {
-    const c = hex.replace("#", "");
-    const r = parseInt(c.substring(0, 2), 16);
-    const g = parseInt(c.substring(2, 4), 16);
-    const b = parseInt(c.substring(4, 6), 16);
-    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-    return yiq >= 160 ? "#111827" : "#ffffff";
-}
-
-function getDateColor(dateISO: string): DateColor {
-    const k = dateISO.slice(0, 10);
-    const hit = dateColorCache.get(k);
-    if (hit) return hit;
-
-    const idx = djb2(k) % DISTINCT_PALETTE.length;
-    const { bg, border } = DISTINCT_PALETTE[idx];
-    const fg = pickTextColor(bg);
-
-    const c = { bg, border, fg };
-    dateColorCache.set(k, c);
-    return c;
-}
-
-const DateBadge: React.FC<{ dateISO: string; className?: string }> = ({ dateISO, className }) => {
-    const c = getDateColor(dateISO);
+const DateBadge: React.FC<{ dateISO: string; colorMap: Map<string, DateColor>; className?: string }> = ({ dateISO, colorMap, className }) => {
+    const key = dateISO.slice(0, 10);
+    const c = colorMap.get(key) ?? { bg: "#E5E7EB", border: "#9CA3AF", fg: "#111827" }; // fallback neutro
     return (
         <span
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${className ?? ""}`}
@@ -288,6 +268,13 @@ export default function PlayerStatisticsByDatePage() {
             disposed = true;
         };
     }, [dateFrom, dateTo, clubIds]);
+
+    // ===== Mapa de cores por data (garante cores únicas por data) =====
+    const dateColorMap = useMemo(() => {
+        // lista de datas (desc) atuais na página
+        const datesDesc = days.map(d => d.date);
+        return buildDateColorMap(datesDesc);
+    }, [days]);
 
     // ===== Agregações para os quadros =====
     type RankedDay = DayBlock & {
@@ -605,7 +592,7 @@ export default function PlayerStatisticsByDatePage() {
                         <div className="rounded-lg border p-3">
                             <div className="text-sm text-gray-600">Data</div>
                             <div className="font-medium">
-                                <DateBadge dateISO={bestOverallDay.date} />
+                                <DateBadge dateISO={bestOverallDay.date} colorMap={dateColorMap} />
                             </div>
                         </div>
                         <div className="rounded-lg border p-3">
@@ -646,7 +633,7 @@ export default function PlayerStatisticsByDatePage() {
                             <ul className="text-sm divide-y">
                                 {topByWinPct.map((d) => (
                                     <li key={`wp-${d.date}`} className="px-3 py-2 flex justify-between items-center">
-                                        <DateBadge dateISO={d.date} />
+                                        <DateBadge dateISO={d.date} colorMap={dateColorMap} />
                                         <span>{d.winPct.toFixed(1)}% • {d.wins}V/{d.matchesCount}</span>
                                     </li>
                                 ))}
@@ -659,7 +646,7 @@ export default function PlayerStatisticsByDatePage() {
                             <ul className="text-sm divide-y">
                                 {topBySaldo.map((d) => (
                                     <li key={`sd-${d.date}`} className="px-3 py-2 flex justify-between items-center">
-                                        <DateBadge dateISO={d.date} />
+                                        <DateBadge dateISO={d.date} colorMap={dateColorMap} />
                                         <span>
                                             {d.saldo >= 0 ? "+" : ""}{d.saldo} ({d.goalsFor}-{d.goalsAgainst})
                                         </span>
@@ -675,7 +662,7 @@ export default function PlayerStatisticsByDatePage() {
                                 {topByGFPerGame.map((d) => (
                                     <li key={`gfpg-${d.date}`} className="px-3 py-2">
                                         <div className="flex justify-between items-center">
-                                            <DateBadge dateISO={d.date} />
+                                            <DateBadge dateISO={d.date} colorMap={dateColorMap} />
                                             <span>{d.gfPerMatch.toFixed(2)} gol/jogo</span>
                                         </div>
                                         <div className="text-gray-500 text-xs text-right">
@@ -693,7 +680,7 @@ export default function PlayerStatisticsByDatePage() {
                                 {topByLowGAPerGame.map((d) => (
                                     <li key={`gapg-${d.date}`} className="px-3 py-2">
                                         <div className="flex justify-between items-center">
-                                            <DateBadge dateISO={d.date} />
+                                            <DateBadge dateISO={d.date} colorMap={dateColorMap} />
                                             <span>{d.gaPerMatch.toFixed(2)} gol/jogo</span>
                                         </div>
                                         <div className="text-gray-500 text-xs text-right">
@@ -743,31 +730,31 @@ export default function PlayerStatisticsByDatePage() {
                                         <td className="px-3 py-2 text-left">{r.playerName}</td>
                                         <td className="px-3 py-2">
                                             {r.goals.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.goals.date} />
+                                            <DateBadge className="ml-1" dateISO={r.goals.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.assists.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.assists.date} />
+                                            <DateBadge className="ml-1" dateISO={r.assists.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.passPct.value.toFixed(1)}%{" "}
-                                            <DateBadge className="ml-1" dateISO={r.passPct.date} />
+                                            <DateBadge className="ml-1" dateISO={r.passPct.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.tacklePct.value.toFixed(1)}%{" "}
-                                            <DateBadge className="ml-1" dateISO={r.tacklePct.date} />
+                                            <DateBadge className="ml-1" dateISO={r.tacklePct.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.participations.value.toFixed(2)}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.participations.date} />
+                                            <DateBadge className="ml-1" dateISO={r.participations.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.saves.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.saves.date} />
+                                            <DateBadge className="ml-1" dateISO={r.saves.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {Number(r.rating.value).toFixed(2)}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.rating.date} />
+                                            <DateBadge className="ml-1" dateISO={r.rating.date} colorMap={dateColorMap} />
                                         </td>
                                     </tr>
                                 ))}
@@ -813,31 +800,31 @@ export default function PlayerStatisticsByDatePage() {
                                         <td className="px-3 py-2 text-left">{r.playerName}</td>
                                         <td className="px-3 py-2">
                                             {r.goals.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.goals.date} />
+                                            <DateBadge className="ml-1" dateISO={r.goals.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.assists.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.assists.date} />
+                                            <DateBadge className="ml-1" dateISO={r.assists.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.passPct.value.toFixed(1)}%{" "}
-                                            <DateBadge className="ml-1" dateISO={r.passPct.date} />
+                                            <DateBadge className="ml-1" dateISO={r.passPct.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.tacklePct.value.toFixed(1)}%{" "}
-                                            <DateBadge className="ml-1" dateISO={r.tacklePct.date} />
+                                            <DateBadge className="ml-1" dateISO={r.tacklePct.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.participations.value.toFixed(2)}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.participations.date} />
+                                            <DateBadge className="ml-1" dateISO={r.participations.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.saves.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.saves.date} />
+                                            <DateBadge className="ml-1" dateISO={r.saves.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {Number(r.rating.value).toFixed(2)}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.rating.date} />
+                                            <DateBadge className="ml-1" dateISO={r.rating.date} colorMap={dateColorMap} />
                                         </td>
                                     </tr>
                                 ))}
@@ -854,19 +841,20 @@ export default function PlayerStatisticsByDatePage() {
                         <div className="text-gray-500">Nenhum jogo no período selecionado.</div>
                     )}
                     {days.map((d) => {
-                        const dateColors = getDateColor(d.date);
+                        const key = d.date.slice(0, 10);
+                        const dateColors = dateColorMap.get(key) ?? { bg: "#E5E7EB", border: "#9CA3AF", fg: "#111827" };
                         return (
                             <section
                                 key={d.date}
                                 className="rounded-xl border p-3 shadow-sm"
                                 style={{
                                     borderLeft: `8px solid ${dateColors.border}`,
-                                    backgroundColor: `${dateColors.bg}22`, // leve realce coerente com o chip
+                                    backgroundColor: `${dateColors.bg}22`, // leve realce coerente
                                 }}
                             >
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="font-medium">
-                                        <DateBadge dateISO={d.date} />
+                                        <DateBadge dateISO={d.date} colorMap={dateColorMap} />
                                     </div>
                                     <div className="text-sm text-gray-700">
                                         Jogos: <strong>{d.matchesCount}</strong> • {d.wins}V {d.draws}E {d.losses}D • Gols: {d.goalsFor}-{d.goalsAgainst} •{" "}
