@@ -49,6 +49,58 @@ function fmtYYYYMMDD(d: Date) {
 }
 const toNum = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
+// "2025-11-04" -> "04/11/2025"
+function fmtBRFromISO(iso: string) {
+    if (!iso || iso.length < 10) return iso ?? "";
+    const [y, m, d] = iso.substring(0, 10).split("-");
+    return `${d}/${m}/${y}`;
+}
+
+// ======= Color por data (mesma data => mesma cor) =======
+// Hash simples (djb2) => hue HSL estável
+function hashHue(str: string) {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i);
+    // normaliza 0..359
+    return Math.abs(h) % 360;
+}
+type DateColor = { bg: string; border: string; fg: string; };
+const dateColorCache = new Map<string, DateColor>();
+
+function getDateColor(dateISO: string): DateColor {
+    const k = dateISO.slice(0, 10);
+    const hit = dateColorCache.get(k);
+    if (hit) return hit;
+
+    const h = hashHue(k);
+    const s = 75;       // saturação
+    const lBg = 88;     // fundo claro
+    const lBorder = 65; // borda um pouco mais escura
+
+    const bg = `hsl(${h} ${s}% ${lBg}%)`;
+    const border = `hsl(${h} ${s}% ${lBorder}%)`;
+    // texto escuro para fundo claro
+    const fg = "#111827";
+
+    const c = { bg, border, fg };
+    dateColorCache.set(k, c);
+    return c;
+}
+
+const DateBadge: React.FC<{ dateISO: string; className?: string }> = ({ dateISO, className }) => {
+    const c = getDateColor(dateISO);
+    return (
+        <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${className ?? ""}`}
+            style={{ backgroundColor: c.bg, color: c.fg, borderColor: c.border }}
+            title={fmtBRFromISO(dateISO)}
+            aria-label={fmtBRFromISO(dateISO)}
+        >
+            {fmtBRFromISO(dateISO)}
+        </span>
+    );
+};
+
 // Helpers para ler percentuais do DTO (camelCase / PascalCase)
 function getPassPct(p: any): number {
     const v =
@@ -200,7 +252,8 @@ export default function PlayerStatisticsByDatePage() {
                                 : [],
                         };
                     })
-                    .sort((a, b) => a.date.localeCompare(b.date));
+                    // ====== ORDENAR DO MAIS RECENTE PARA O MAIS ANTIGO ======
+                    .sort((a, b) => b.date.localeCompare(a.date));
 
                 if (!disposed) setDays(blocks);
             } catch (e: any) {
@@ -241,7 +294,7 @@ export default function PlayerStatisticsByDatePage() {
             if (b.saldo !== a.saldo) return b.saldo - a.saldo;
             if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
             if (a.goalsAgainst !== b.goalsAgainst) return a.goalsAgainst - b.goalsAgainst;
-            return b.date.localeCompare(a.date);
+            return b.date.localeCompare(a.date); // mais recente desempata
         });
         return cp[0];
     }, [rankedDays]);
@@ -249,7 +302,7 @@ export default function PlayerStatisticsByDatePage() {
     const topByWinPct = useMemo(() => {
         return [...rankedDays]
             .filter((d) => d.matchesCount > 0)
-            .sort((a, b) => b.winPct - a.winPct || b.saldo - a.saldo || b.goalsFor - a.goalsFor)
+            .sort((a, b) => b.winPct - a.winPct || b.saldo - a.saldo || b.goalsFor - a.goalsFor || b.date.localeCompare(a.date))
             .slice(0, 5);
     }, [rankedDays]);
 
@@ -257,12 +310,15 @@ export default function PlayerStatisticsByDatePage() {
         return [...rankedDays]
             .sort(
                 (a, b) =>
-                    b.saldo - a.saldo || b.goalsFor - a.goalsFor || a.goalsAgainst - b.goalsAgainst
+                    b.saldo - a.saldo ||
+                    b.goalsFor - a.goalsFor ||
+                    a.goalsAgainst - b.goalsAgainst ||
+                    b.date.localeCompare(a.date)
             )
             .slice(0, 5);
     }, [rankedDays]);
 
-    // === NOVOS: Top 5 por gols/jogo (GF) e gols sofridos/jogo (GA) ===
+    // === Top 5 por gols/jogo (GF) e gols sofridos/jogo (GA) ===
     const topByGFPerGame = useMemo(() => {
         return [...rankedDays]
             .filter((d) => d.matchesCount > 0)
@@ -513,7 +569,9 @@ export default function PlayerStatisticsByDatePage() {
                         </div>
                         <div className="rounded-lg border p-3">
                             <div className="text-sm text-gray-600">Intervalo</div>
-                            <div className="font-semibold">{dateFrom} → {dateTo}</div>
+                            <div className="font-semibold">
+                                {fmtBRFromISO(dateFrom)} → {fmtBRFromISO(dateTo)}
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -526,7 +584,9 @@ export default function PlayerStatisticsByDatePage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         <div className="rounded-lg border p-3">
                             <div className="text-sm text-gray-600">Data</div>
-                            <div className="font-medium">{bestOverallDay.date}</div>
+                            <div className="font-medium">
+                                <DateBadge dateISO={bestOverallDay.date} />
+                            </div>
                         </div>
                         <div className="rounded-lg border p-3">
                             <div className="text-sm text-gray-600">Resultados</div>
@@ -565,8 +625,8 @@ export default function PlayerStatisticsByDatePage() {
                             <div className="px-3 py-2 border-b font-medium">Maior Win%</div>
                             <ul className="text-sm divide-y">
                                 {topByWinPct.map((d) => (
-                                    <li key={`wp-${d.date}`} className="px-3 py-2 flex justify-between">
-                                        <span>{d.date}</span>
+                                    <li key={`wp-${d.date}`} className="px-3 py-2 flex justify-between items-center">
+                                        <DateBadge dateISO={d.date} />
                                         <span>{d.winPct.toFixed(1)}% • {d.wins}V/{d.matchesCount}</span>
                                     </li>
                                 ))}
@@ -578,8 +638,8 @@ export default function PlayerStatisticsByDatePage() {
                             <div className="px-3 py-2 border-b font-medium">Maior saldo</div>
                             <ul className="text-sm divide-y">
                                 {topBySaldo.map((d) => (
-                                    <li key={`sd-${d.date}`} className="px-3 py-2 flex justify-between">
-                                        <span>{d.date}</span>
+                                    <li key={`sd-${d.date}`} className="px-3 py-2 flex justify-between items-center">
+                                        <DateBadge dateISO={d.date} />
                                         <span>
                                             {d.saldo >= 0 ? "+" : ""}{d.saldo} ({d.goalsFor}-{d.goalsAgainst})
                                         </span>
@@ -588,14 +648,14 @@ export default function PlayerStatisticsByDatePage() {
                             </ul>
                         </div>
 
-                        {/* Mais gols marcados (ordenado por gols/jogo) */}
+                        {/* Mais gols marcados (por jogo) */}
                         <div className="rounded-lg border">
                             <div className="px-3 py-2 border-b font-medium">Mais gols marcados (por jogo)</div>
                             <ul className="text-sm divide-y">
                                 {topByGFPerGame.map((d) => (
-                                    <li key={`gfpg-${d.date}`} className="px-3 py-2 flex flex-col">
-                                        <div className="flex justify-between">
-                                            <span>{d.date}</span>
+                                    <li key={`gfpg-${d.date}`} className="px-3 py-2">
+                                        <div className="flex justify-between items-center">
+                                            <DateBadge dateISO={d.date} />
                                             <span>{d.gfPerMatch.toFixed(2)} gol/jogo</span>
                                         </div>
                                         <div className="text-gray-500 text-xs text-right">
@@ -606,14 +666,14 @@ export default function PlayerStatisticsByDatePage() {
                             </ul>
                         </div>
 
-                        {/* Menos gols sofridos (ordenado por gols sofridos/jogo) */}
+                        {/* Menos gols sofridos (por jogo) */}
                         <div className="rounded-lg border">
                             <div className="px-3 py-2 border-b font-medium">Menos gols sofridos (por jogo)</div>
                             <ul className="text-sm divide-y">
                                 {topByLowGAPerGame.map((d) => (
-                                    <li key={`gapg-${d.date}`} className="px-3 py-2 flex flex-col">
-                                        <div className="flex justify-between">
-                                            <span>{d.date}</span>
+                                    <li key={`gapg-${d.date}`} className="px-3 py-2">
+                                        <div className="flex justify-between items-center">
+                                            <DateBadge dateISO={d.date} />
                                             <span>{d.gaPerMatch.toFixed(2)} gol/jogo</span>
                                         </div>
                                         <div className="text-gray-500 text-xs text-right">
@@ -662,29 +722,32 @@ export default function PlayerStatisticsByDatePage() {
                                     <tr key={r.playerId} className="hover:bg-gray-50">
                                         <td className="px-3 py-2 text-left">{r.playerName}</td>
                                         <td className="px-3 py-2">
-                                            {r.goals.value} <span className="text-gray-500">({r.goals.date})</span>
+                                            {r.goals.value}{" "}
+                                            <DateBadge className="ml-1" dateISO={r.goals.date} />
                                         </td>
                                         <td className="px-3 py-2">
-                                            {r.assists.value} <span className="text-gray-500">({r.assists.date})</span>
+                                            {r.assists.value}{" "}
+                                            <DateBadge className="ml-1" dateISO={r.assists.date} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.passPct.value.toFixed(1)}%{" "}
-                                            <span className="text-gray-500">({r.passPct.date})</span>
+                                            <DateBadge className="ml-1" dateISO={r.passPct.date} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.tacklePct.value.toFixed(1)}%{" "}
-                                            <span className="text-gray-500">({r.tacklePct.date})</span>
+                                            <DateBadge className="ml-1" dateISO={r.tacklePct.date} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.participations.value.toFixed(2)}{" "}
-                                            <span className="text-gray-500">({r.participations.date})</span>
+                                            <DateBadge className="ml-1" dateISO={r.participations.date} />
                                         </td>
                                         <td className="px-3 py-2">
-                                            {r.saves.value} <span className="text-gray-500">({r.saves.date})</span>
+                                            {r.saves.value}{" "}
+                                            <DateBadge className="ml-1" dateISO={r.saves.date} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {Number(r.rating.value).toFixed(2)}{" "}
-                                            <span className="text-gray-500">({r.rating.date})</span>
+                                            <DateBadge className="ml-1" dateISO={r.rating.date} />
                                         </td>
                                     </tr>
                                 ))}
@@ -694,7 +757,7 @@ export default function PlayerStatisticsByDatePage() {
                 </section>
             )}
 
-            {/* Pior dia por jogador — espelhado, escolhendo o MENOR valor */}
+            {/* Pior dia por jogador — espelhado */}
             {!loading && !error && days.length > 0 && (
                 <section className="rounded-xl border p-4 shadow-sm">
                     <div className="flex items-center gap-2 mb-3">
@@ -729,29 +792,32 @@ export default function PlayerStatisticsByDatePage() {
                                     <tr key={r.playerId} className="hover:bg-gray-50">
                                         <td className="px-3 py-2 text-left">{r.playerName}</td>
                                         <td className="px-3 py-2">
-                                            {r.goals.value} <span className="text-gray-500">({r.goals.date})</span>
+                                            {r.goals.value}{" "}
+                                            <DateBadge className="ml-1" dateISO={r.goals.date} />
                                         </td>
                                         <td className="px-3 py-2">
-                                            {r.assists.value} <span className="text-gray-500">({r.assists.date})</span>
+                                            {r.assists.value}{" "}
+                                            <DateBadge className="ml-1" dateISO={r.assists.date} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.passPct.value.toFixed(1)}%{" "}
-                                            <span className="text-gray-500">({r.passPct.date})</span>
+                                            <DateBadge className="ml-1" dateISO={r.passPct.date} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.tacklePct.value.toFixed(1)}%{" "}
-                                            <span className="text-gray-500">({r.tacklePct.date})</span>
+                                            <DateBadge className="ml-1" dateISO={r.tacklePct.date} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.participations.value.toFixed(2)}{" "}
-                                            <span className="text-gray-500">({r.participations.date})</span>
+                                            <DateBadge className="ml-1" dateISO={r.participations.date} />
                                         </td>
                                         <td className="px-3 py-2">
-                                            {r.saves.value} <span className="text-gray-500">({r.saves.date})</span>
+                                            {r.saves.value}{" "}
+                                            <DateBadge className="ml-1" dateISO={r.saves.date} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {Number(r.rating.value).toFixed(2)}{" "}
-                                            <span className="text-gray-500">({r.rating.date})</span>
+                                            <DateBadge className="ml-1" dateISO={r.rating.date} />
                                         </td>
                                     </tr>
                                 ))}
@@ -767,26 +833,35 @@ export default function PlayerStatisticsByDatePage() {
                     {days.length === 0 && (
                         <div className="text-gray-500">Nenhum jogo no período selecionado.</div>
                     )}
-                    {days.map((d) => (
-                        <section key={d.date} className="rounded-xl border p-3 shadow-sm">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="font-medium">{d.date}</div>
-                                <div className="text-sm text-gray-700">
-                                    Jogos: <strong>{d.matchesCount}</strong> • {d.wins}V {d.draws}E {d.losses}D • Gols: {d.goalsFor}-{d.goalsAgainst} •
-                                    {" "}GF/jg {d.matchesCount ? (d.goalsFor / d.matchesCount).toFixed(2) : "0.00"} •
-                                    {" "}GA/jg {d.matchesCount ? (d.goalsAgainst / d.matchesCount).toFixed(2) : "0.00"}
+                    {days.map((d) => {
+                        const dateColors = getDateColor(d.date);
+                        return (
+                            <section
+                                key={d.date}
+                                className="rounded-xl border p-3 shadow-sm"
+                                style={{ borderLeft: `6px solid ${dateColors.border}` }}
+                            >
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="font-medium">
+                                        <DateBadge dateISO={d.date} />
+                                    </div>
+                                    <div className="text-sm text-gray-700">
+                                        Jogos: <strong>{d.matchesCount}</strong> • {d.wins}V {d.draws}E {d.losses}D • Gols: {d.goalsFor}-{d.goalsAgainst} •{" "}
+                                        GF/jg {d.matchesCount ? (d.goalsFor / d.matchesCount).toFixed(2) : "0.00"} •{" "}
+                                        GA/jg {d.matchesCount ? (d.goalsAgainst / d.matchesCount).toFixed(2) : "0.00"}
+                                    </div>
                                 </div>
-                            </div>
 
-                            <PlayerStatsTable
-                                players={d.players}
-                                loading={false}
-                                error={null}
-                                clubStats={null}
-                                compactMode
-                            />
-                        </section>
-                    ))}
+                                <PlayerStatsTable
+                                    players={d.players}
+                                    loading={false}
+                                    error={null}
+                                    clubStats={null}
+                                    compactMode
+                                />
+                            </section>
+                        );
+                    })}
                 </div>
             )}
         </div>
