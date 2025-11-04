@@ -56,31 +56,51 @@ function fmtBRFromISO(iso: string) {
     return `${d}/${m}/${y}`;
 }
 
-// ======= Color por data (mesma data => mesma cor) =======
-// Hash simples (djb2) => hue HSL estável
-function hashHue(str: string) {
+// ======= Cores por data (mais distintas & determinísticas) =======
+type DateColor = { bg: string; border: string; fg: string };
+const dateColorCache = new Map<string, DateColor>();
+
+// Paleta de alto contraste (categorias bem separadas)
+const DISTINCT_PALETTE: Array<{ bg: string; border: string }> = [
+    { bg: "#FDE68A", border: "#EAB308" }, // amarelo
+    { bg: "#A7F3D0", border: "#10B981" }, // verde-água
+    { bg: "#BFDBFE", border: "#3B82F6" }, // azul
+    { bg: "#FBCFE8", border: "#EC4899" }, // rosa
+    { bg: "#C7D2FE", border: "#6366F1" }, // índigo
+    { bg: "#FECACA", border: "#EF4444" }, // vermelho
+    { bg: "#DDD6FE", border: "#8B5CF6" }, // roxo
+    { bg: "#BBF7D0", border: "#22C55E" }, // verde
+    { bg: "#FDE2E2", border: "#F43F5E" }, // rosé/cerise
+    { bg: "#FFE4C7", border: "#F59E0B" }, // laranja
+    { bg: "#BAE6FD", border: "#0EA5E9" }, // azul-céu
+    { bg: "#DCFCE7", border: "#16A34A" }, // esmeralda
+];
+
+// hash djb2 simples (determinístico)
+function djb2(str: string) {
     let h = 5381;
     for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i);
-    // normaliza 0..359
-    return Math.abs(h) % 360;
+    return h >>> 0; // unsigned
 }
-type DateColor = { bg: string; border: string; fg: string; };
-const dateColorCache = new Map<string, DateColor>();
+
+// escolher texto preto/branco pelo YIQ do background
+function pickTextColor(hex: string): "#111827" | "#ffffff" {
+    const c = hex.replace("#", "");
+    const r = parseInt(c.substring(0, 2), 16);
+    const g = parseInt(c.substring(2, 4), 16);
+    const b = parseInt(c.substring(4, 6), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 160 ? "#111827" : "#ffffff";
+}
 
 function getDateColor(dateISO: string): DateColor {
     const k = dateISO.slice(0, 10);
     const hit = dateColorCache.get(k);
     if (hit) return hit;
 
-    const h = hashHue(k);
-    const s = 75;       // saturação
-    const lBg = 88;     // fundo claro
-    const lBorder = 65; // borda um pouco mais escura
-
-    const bg = `hsl(${h} ${s}% ${lBg}%)`;
-    const border = `hsl(${h} ${s}% ${lBorder}%)`;
-    // texto escuro para fundo claro
-    const fg = "#111827";
+    const idx = djb2(k) % DISTINCT_PALETTE.length;
+    const { bg, border } = DISTINCT_PALETTE[idx];
+    const fg = pickTextColor(bg);
 
     const c = { bg, border, fg };
     dateColorCache.set(k, c);
@@ -839,7 +859,10 @@ export default function PlayerStatisticsByDatePage() {
                             <section
                                 key={d.date}
                                 className="rounded-xl border p-3 shadow-sm"
-                                style={{ borderLeft: `6px solid ${dateColors.border}` }}
+                                style={{
+                                    borderLeft: `8px solid ${dateColors.border}`,
+                                    backgroundColor: `${dateColors.bg}22`, // leve realce coerente com o chip
+                                }}
                             >
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="font-medium">
