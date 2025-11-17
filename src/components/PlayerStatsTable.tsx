@@ -30,7 +30,10 @@ const clamp = (v: number, min = 0, max = 100) => Math.max(min, Math.min(max, v))
 function useNumberFormats() {
     const int = useMemo(() => new Intl.NumberFormat("pt-BR"), []);
     const p1 = useMemo(() => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }), []);
-    const p2 = useMemo(() => new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), []);
+    const p2 = useMemo(
+        () => new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        []
+    );
     return { int, p1, p2 };
 }
 
@@ -204,7 +207,16 @@ export function PlayerStatsTable({
             tooltip: "Defesas e Gols Sofridos do CLUBE no período: % = S / (S + Gc)",
         },
         { key: "totalPassesMade", label: "Passes", tooltip: "Completos / Tentados e %" },
-        { key: "totalTacklesMade", label: "Desarmes", tooltip: "Completos / Tentados e %" },
+        {
+            key: "totalTacklesMade",
+            label: "Desarmes",
+            tooltip: "Número de desarmes/tackles certos no período",
+        },
+        {
+            key: "tackleSuccessPercent",
+            label: "% Desarmes",
+            tooltip: "Desarmes certos / tentados no período",
+        },
         { key: "totalWins", label: "Vitórias" },
         { key: "totalLosses", label: "Derrotas" },
         { key: "totalDraws", label: "Empates" },
@@ -214,7 +226,7 @@ export function PlayerStatsTable({
         { key: "avgRating", label: "Nota" },
     ];
 
-    const columns = allColumns.filter(col => !hiddenColumns.includes(col.key));
+    const columns = allColumns.filter((col) => !hiddenColumns.includes(col.key));
 
     return (
         <section>
@@ -345,17 +357,29 @@ export function PlayerStatsTable({
                                                 </td>
                                             );
                                         case "matchesPlayed":
-                                            return <td key={col.key} className="px-3 py-2">{int.format(p.matchesPlayed)}</td>;
+                                            return (
+                                                <td key={col.key} className="px-3 py-2">
+                                                    {int.format(p.matchesPlayed)}
+                                                </td>
+                                            );
                                         case "totalGoals":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    <CellBar value={p.totalGoals} max={maxByKey.get("totalGoals") || 1} format={v => int.format(v)} />
+                                                    <CellBar
+                                                        value={p.totalGoals}
+                                                        max={maxByKey.get("totalGoals") || 1}
+                                                        format={(v) => int.format(v)}
+                                                    />
                                                 </td>
                                             );
                                         case "totalAssists":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    <CellBar value={p.totalAssists} max={maxByKey.get("totalAssists") || 1} format={v => int.format(v)} />
+                                                    <CellBar
+                                                        value={p.totalAssists}
+                                                        max={maxByKey.get("totalAssists") || 1}
+                                                        format={(v) => int.format(v)}
+                                                    />
                                                 </td>
                                             );
                                         case "totalShots":
@@ -407,27 +431,46 @@ export function PlayerStatsTable({
                                                 </td>
                                             );
                                         case "totalTacklesMade":
+                                            // campo de contagem de desarmes
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.totalTacklesMade)} / {int.format(p.totalTackleAttempts)}
-                                                    <div className="mt-1">
-                                                        <CellBar
-                                                            value={pct(p.totalTacklesMade, p.totalTackleAttempts)}
-                                                            max={100}
-                                                            suffix="%"
-                                                            positive
-                                                            format={(v) => p1.format(v)}
-                                                            statType="tackleDuelWin"
-                                                        />
-                                                    </div>
+                                                    {int.format(p.totalTacklesMade)}
                                                 </td>
                                             );
+                                        case "tackleSuccessPercent": {
+                                            // campo de % desarmes (derivado para garantir consistência)
+                                            const tacklePct = pct(p.totalTacklesMade, p.totalTackleAttempts);
+                                            return (
+                                                <td key={col.key} className="px-3 py-2">
+                                                    <CellBar
+                                                        value={tacklePct}
+                                                        max={100}
+                                                        suffix="%"
+                                                        positive
+                                                        format={(v) => p1.format(v)}
+                                                        statType="tackleDuelWin"
+                                                    />
+                                                </td>
+                                            );
+                                        }
                                         case "totalWins":
-                                            return <td key={col.key} className="px-3 py-2">{int.format(p.totalWins)}</td>;
+                                            return (
+                                                <td key={col.key} className="px-3 py-2">
+                                                    {int.format(p.totalWins)}
+                                                </td>
+                                            );
                                         case "totalLosses":
-                                            return <td key={col.key} className="px-3 py-2">{int.format(p.totalLosses)}</td>;
+                                            return (
+                                                <td key={col.key} className="px-3 py-2">
+                                                    {int.format(p.totalLosses)}
+                                                </td>
+                                            );
                                         case "totalDraws":
-                                            return <td key={col.key} className="px-3 py-2">{int.format(p.totalDraws)}</td>;
+                                            return (
+                                                <td key={col.key} className="px-3 py-2">
+                                                    {int.format(p.totalDraws)}
+                                                </td>
+                                            );
                                         case "winPercent":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
@@ -442,11 +485,23 @@ export function PlayerStatsTable({
                                                 </td>
                                             );
                                         case "totalRedCards":
-                                            return <td key={col.key} className="px-3 py-2">{int.format(p.totalRedCards)}</td>;
+                                            return (
+                                                <td key={col.key} className="px-3 py-2">
+                                                    {int.format(p.totalRedCards)}
+                                                </td>
+                                            );
                                         case "totalMom":
-                                            return <td key={col.key} className="px-3 py-2">{int.format(p.totalMom)}</td>;
+                                            return (
+                                                <td key={col.key} className="px-3 py-2">
+                                                    {int.format(p.totalMom)}
+                                                </td>
+                                            );
                                         case "avgRating":
-                                            return <td key={col.key} className="px-3 py-2">{p2.format(Number(p.avgRating || 0))}</td>;
+                                            return (
+                                                <td key={col.key} className="px-3 py-2">
+                                                    {p2.format(Number(p.avgRating || 0))}
+                                                </td>
+                                            );
                                         default:
                                             return null;
                                     }

@@ -57,12 +57,9 @@ function fmtBRFromISO(iso: string) {
 }
 
 // ======= Cores por data (NUNCA repete entre datas diferentes) =======
-// Gera um mapa data->cor baseado na lista de dias carregada.
-// Usa o "golden angle" para maximizar a diferença entre matizes.
 type DateColor = { bg: string; border: string; fg: string };
 
 function buildDateColorMap(datesISODesc: string[]): Map<string, DateColor> {
-    // Garante unicidade preservando a ordem recebida
     const uniq: string[] = [];
     const seen = new Set<string>();
     for (const d of datesISODesc) {
@@ -74,10 +71,9 @@ function buildDateColorMap(datesISODesc: string[]): Map<string, DateColor> {
     }
 
     const map = new Map<string, DateColor>();
-    const GOLDEN_ANGLE = 137.508; // graus
+    const GOLDEN_ANGLE = 137.508;
     for (let i = 0; i < uniq.length; i++) {
         const h = (i * GOLDEN_ANGLE) % 360;
-        // Fundo bem claro p/ texto escuro; borda mais saturada e escura
         const bg = `hsl(${h} 80% 88%)`;
         const border = `hsl(${h} 75% 45%)`;
         const fg = "#111827";
@@ -88,7 +84,7 @@ function buildDateColorMap(datesISODesc: string[]): Map<string, DateColor> {
 
 const DateBadge: React.FC<{ dateISO: string; colorMap: Map<string, DateColor>; className?: string }> = ({ dateISO, colorMap, className }) => {
     const key = dateISO.slice(0, 10);
-    const c = colorMap.get(key) ?? { bg: "#E5E7EB", border: "#9CA3AF", fg: "#111827" }; // fallback neutro
+    const c = colorMap.get(key) ?? { bg: "#E5E7EB", border: "#9CA3AF", fg: "#111827" };
     return (
         <span
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${className ?? ""}`}
@@ -129,6 +125,15 @@ function getMatchesPlayed(p: any): number {
     );
 }
 
+// Número de tackles certos (não tentativas, não %)
+function getSuccessfulTackles(p: any): number {
+    return toNum(
+        p?.totalTacklesMade ??   // camelCase
+        p?.TotalTacklesMade ??   // PascalCase (se vier assim)
+        0
+    );
+}
+
 // Tooltip simples via title
 const Info: React.FC<{ title: string }> = ({ title }) => (
     <span
@@ -160,8 +165,7 @@ export default function PlayerStatisticsByDatePage() {
     const [dateFrom, setDateFrom] = useState(() => {
         const fromUrl = searchParams.get("dateFrom");
         if (fromUrl) return fromUrl;
-        const now = new Date();
-        return fmtYYYYMMDD(new Date(now.getFullYear(), now.getMonth(), 1));
+        return "2025-10-14"; // FIXO
     });
     const [dateTo, setDateTo] = useState(() => {
         const toUrl = searchParams.get("dateTo");
@@ -229,7 +233,6 @@ export default function PlayerStatisticsByDatePage() {
                             ? row.statistics!.clubs!
                             : [];
 
-                        // soma GF/GA de todos os clubes (visão geral como "um clube")
                         const gf = clubsArr.reduce(
                             (acc, c: any) => acc + toNum(c?.goalsFor ?? c?.GoalsFor),
                             0
@@ -252,7 +255,6 @@ export default function PlayerStatisticsByDatePage() {
                                 : [],
                         };
                     })
-                    // ====== ORDENAR DO MAIS RECENTE PARA O MAIS ANTIGO ======
                     .sort((a, b) => b.date.localeCompare(a.date));
 
                 if (!disposed) setDays(blocks);
@@ -269,9 +271,8 @@ export default function PlayerStatisticsByDatePage() {
         };
     }, [dateFrom, dateTo, clubIds]);
 
-    // ===== Mapa de cores por data (garante cores únicas por data) =====
+    // ===== Mapa de cores por data =====
     const dateColorMap = useMemo(() => {
-        // lista de datas (desc) atuais na página
         const datesDesc = days.map(d => d.date);
         return buildDateColorMap(datesDesc);
     }, [days]);
@@ -301,7 +302,7 @@ export default function PlayerStatisticsByDatePage() {
             if (b.saldo !== a.saldo) return b.saldo - a.saldo;
             if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
             if (a.goalsAgainst !== b.goalsAgainst) return a.goalsAgainst - b.goalsAgainst;
-            return b.date.localeCompare(a.date); // mais recente desempata
+            return b.date.localeCompare(a.date);
         });
         return cp[0];
     }, [rankedDays]);
@@ -325,7 +326,6 @@ export default function PlayerStatisticsByDatePage() {
             .slice(0, 5);
     }, [rankedDays]);
 
-    // === Top 5 por gols/jogo (GF) e gols sofridos/jogo (GA) ===
     const topByGFPerGame = useMemo(() => {
         return [...rankedDays]
             .filter((d) => d.matchesCount > 0)
@@ -379,15 +379,16 @@ export default function PlayerStatisticsByDatePage() {
         };
     }, [days]);
 
-    // ===== Melhor/Pior dia de cada jogador por métrica (com Participações) =====
+    // ===== Melhor/Pior dia de cada jogador por métrica (com Participações e Tackles certos) =====
     type BestPerMetric = { date: string; value: number };
     type PlayerBestDays = {
         playerId: number;
         playerName: string;
         goals: BestPerMetric;
         assists: BestPerMetric;
-        passPct: BestPerMetric;    // backend
-        tacklePct: BestPerMetric;  // backend
+        passPct: BestPerMetric;
+        tacklePct: BestPerMetric;
+        tackles: BestPerMetric;        // número de tackles certos
         participations: BestPerMetric; // (gols + assistências) / jogos
         saves: BestPerMetric;
         rating: BestPerMetric;
@@ -405,10 +406,11 @@ export default function PlayerStatisticsByDatePage() {
 
                 const goals = toNum((p as any).totalGoals ?? (p as any).TotalGoals);
                 const assists = toNum((p as any).totalAssists ?? (p as any).TotalAssists);
-                const matches = Math.max(1, getMatchesPlayed(p)); // evita div/0
+                const matches = Math.max(1, getMatchesPlayed(p));
                 const participationsVal = (goals + assists) / matches;
                 const passPct = getPassPct(p as any);
                 const tacklePct = getTacklePct(p as any);
+                const tacklesCount = getSuccessfulTackles(p as any); // tackles certos
                 const saves = toNum((p as any).totalSaves ?? (p as any).TotalSaves);
                 const rating = toNum((p as any).avgRating ?? (p as any).AvgRating);
                 const name = (p as any).playerName ?? (p as any).PlayerName ?? `Player ${pid}`;
@@ -420,6 +422,7 @@ export default function PlayerStatisticsByDatePage() {
                     assists: { date: d.date, value: assists },
                     passPct: { date: d.date, value: passPct },
                     tacklePct: { date: d.date, value: tacklePct },
+                    tackles: { date: d.date, value: tacklesCount },
                     participations: { date: d.date, value: participationsVal },
                     saves: { date: d.date, value: saves },
                     rating: { date: d.date, value: rating },
@@ -443,6 +446,7 @@ export default function PlayerStatisticsByDatePage() {
                 curBest.assists = pickBest(curBest.assists, assists);
                 curBest.passPct = pickBest(curBest.passPct, passPct);
                 curBest.tacklePct = pickBest(curBest.tacklePct, tacklePct);
+                curBest.tackles = pickBest(curBest.tackles, tacklesCount);
                 curBest.participations = pickBest(curBest.participations, participationsVal);
                 curBest.saves = pickBest(curBest.saves, saves);
                 curBest.rating = pickBest(curBest.rating, rating);
@@ -455,6 +459,7 @@ export default function PlayerStatisticsByDatePage() {
                 curWorst.assists = pickWorst(curWorst.assists, assists);
                 curWorst.passPct = pickWorst(curWorst.passPct, passPct);
                 curWorst.tacklePct = pickWorst(curWorst.tacklePct, tacklePct);
+                curWorst.tackles = pickWorst(curWorst.tackles, tacklesCount);
                 curWorst.participations = pickWorst(curWorst.participations, participationsVal);
                 curWorst.saves = pickWorst(curWorst.saves, saves);
                 curWorst.rating = pickWorst(curWorst.rating, rating);
@@ -694,7 +699,7 @@ export default function PlayerStatisticsByDatePage() {
                 </section>
             )}
 
-            {/* Melhor dia por jogador — com Participações */}
+            {/* Melhor dia por jogador — com Participações e Tackles certos */}
             {!loading && !error && days.length > 0 && (
                 <section className="rounded-xl border p-4 shadow-sm">
                     <div className="flex items-center gap-2 mb-3">
@@ -710,6 +715,10 @@ export default function PlayerStatisticsByDatePage() {
                                     <th className="px-3 py-2">Passe (%)</th>
                                     <th className="px-3 py-2">Desarme (%)</th>
                                     <th className="px-3 py-2">
+                                        Tackles certos
+                                        <Info title="Número de desarmes/tackles bem sucedidos no dia" />
+                                    </th>
+                                    <th className="px-3 py-2">
                                         Participações
                                         <Info title="(Gols + Assistências) / Jogos do dia" />
                                     </th>
@@ -720,7 +729,7 @@ export default function PlayerStatisticsByDatePage() {
                             <tbody>
                                 {bestDayPerPlayer.length === 0 && (
                                     <tr>
-                                        <td colSpan={8} className="px-3 py-3 text-center text-gray-600">
+                                        <td colSpan={9} className="px-3 py-3 text-center text-gray-600">
                                             Nenhum jogador no período.
                                         </td>
                                     </tr>
@@ -743,6 +752,10 @@ export default function PlayerStatisticsByDatePage() {
                                         <td className="px-3 py-2">
                                             {r.tacklePct.value.toFixed(1)}%{" "}
                                             <DateBadge className="ml-1" dateISO={r.tacklePct.date} colorMap={dateColorMap} />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {r.tackles.value}{" "}
+                                            <DateBadge className="ml-1" dateISO={r.tackles.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.participations.value.toFixed(2)}{" "}
@@ -780,6 +793,10 @@ export default function PlayerStatisticsByDatePage() {
                                     <th className="px-3 py-2">Passe (%)</th>
                                     <th className="px-3 py-2">Desarme (%)</th>
                                     <th className="px-3 py-2">
+                                        Tackles certos
+                                        <Info title="Número de desarmes/tackles bem sucedidos no dia" />
+                                    </th>
+                                    <th className="px-3 py-2">
                                         Participações
                                         <Info title="(Gols + Assistências) / Jogos do dia" />
                                     </th>
@@ -790,7 +807,7 @@ export default function PlayerStatisticsByDatePage() {
                             <tbody>
                                 {worstDayPerPlayer.length === 0 && (
                                     <tr>
-                                        <td colSpan={8} className="px-3 py-3 text-center text-gray-600">
+                                        <td colSpan={9} className="px-3 py-3 text-center text-gray-600">
                                             Nenhum jogador no período.
                                         </td>
                                     </tr>
@@ -813,6 +830,10 @@ export default function PlayerStatisticsByDatePage() {
                                         <td className="px-3 py-2">
                                             {r.tacklePct.value.toFixed(1)}%{" "}
                                             <DateBadge className="ml-1" dateISO={r.tacklePct.date} colorMap={dateColorMap} />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {r.tackles.value}{" "}
+                                            <DateBadge className="ml-1" dateISO={r.tackles.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2">
                                             {r.participations.value.toFixed(2)}{" "}
@@ -849,7 +870,7 @@ export default function PlayerStatisticsByDatePage() {
                                 className="rounded-xl border p-3 shadow-sm"
                                 style={{
                                     borderLeft: `8px solid ${dateColors.border}`,
-                                    backgroundColor: `${dateColors.bg}22`, // leve realce coerente
+                                    backgroundColor: `${dateColors.bg}22`,
                                 }}
                             >
                                 <div className="flex items-center justify-between mb-2">
