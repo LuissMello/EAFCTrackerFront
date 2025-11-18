@@ -131,6 +131,7 @@ export default function Navbar() {
                 <Link className="font-bold" to="/stats">Estatísticas</Link>
                 <Link className="font-bold" to="/calendar">Calendário</Link>
                 <Link className="font-bold" to="/statisticsbydate">Estatisticas (periodo)</Link>
+                <Link className="font-bold" to="/singlestatisticsbydate">Estatisticas Individuais (periodo)</Link>
                 <Link className="font-bold" to="/trends">Trends</Link>
                 <Link className="font-bold" to="/attributes">Atributos</Link>
 
