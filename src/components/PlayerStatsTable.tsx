@@ -217,16 +217,9 @@ export function PlayerStatsTable({
         {
             key: "totalTacklesMade",
             label: "Desarmes",
-            tooltip: "Número de desarmes/tackles certos no período",
+            tooltip: "Desarmes certos / tentados e %",
         },
-        {
-            key: "tackleSuccessPercent",
-            label: "% Desarmes",
-            tooltip: "Desarmes certos / tentados no período",
-        },
-        { key: "totalWins", label: "Vitórias" },
-        { key: "totalLosses", label: "Derrotas" },
-        { key: "totalDraws", label: "Empates" },
+        { key: "record", label: "V/E/D", tooltip: "Vitórias / Empates / Derrotas" },
         { key: "winPercent", label: "Win %" },
         { key: "totalMom", label: "MOM" },
         { key: "avgRating", label: "Nota" },
@@ -434,45 +427,28 @@ export function PlayerStatsTable({
                                                     </div>
                                                 </td>
                                             );
-                                        case "totalTacklesMade":
-                                            // campo de contagem de desarmes
-                                            return (
-                                                <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.totalTacklesMade)}
-                                                </td>
-                                            );
-                                        case "tackleSuccessPercent": {
-                                            // campo de % desarmes (derivado para garantir consistência)
+                                        case "totalTacklesMade": {
                                             const tacklePct = pct(p.totalTacklesMade, p.totalTackleAttempts);
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    <CellBar
-                                                        value={tacklePct}
-                                                        max={100}
-                                                        suffix="%"
-                                                        positive
-                                                        format={(v) => p1.format(v)}
-                                                        statType="tackleDuelWin"
-                                                    />
+                                                    {int.format(p.totalTacklesMade)} / {int.format(p.totalTackleAttempts)}
+                                                    <div className="mt-1">
+                                                        <CellBar
+                                                            value={tacklePct}
+                                                            max={100}
+                                                            suffix="%"
+                                                            positive
+                                                            format={(v) => p1.format(v)}
+                                                            statType="tackleDuelWin"
+                                                        />
+                                                    </div>
                                                 </td>
                                             );
                                         }
-                                        case "totalWins":
+                                        case "record":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.totalWins)}
-                                                </td>
-                                            );
-                                        case "totalLosses":
-                                            return (
-                                                <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.totalLosses)}
-                                                </td>
-                                            );
-                                        case "totalDraws":
-                                            return (
-                                                <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.totalDraws)}
+                                                    {int.format(p.totalWins)}/{int.format(p.totalDraws)}/{int.format(p.totalLosses)}
                                                 </td>
                                             );
                                         case "winPercent":
