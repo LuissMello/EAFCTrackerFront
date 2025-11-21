@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { PlayerStats, ClubStats } from "../types/stats.ts";
 import { classifyStat, getStatQualityDetails } from "../utils/statClassifier.ts";
 import { Tooltip } from "./Tooltip.tsx";
-import { PlugZap, Star } from "lucide-react";
+import { PlugZap, Star, RectangleVertical } from "lucide-react";
 import { GiGoalKeeper } from "react-icons/gi";
 
 interface PlayerStatsTableProps {
@@ -193,19 +193,26 @@ export function PlayerStatsTable({
 
     const clubGoalsAgainst = Number(clubStats?.totalGoalsConceded || 0);
 
+    // Check if any player has goalkeeper stats
+    const hasGoalkeeperStats = useMemo(() => {
+        return filtered.some((p) => {
+            const saves = Number(p.totalSaves || 0);
+            const isGk = ((p as any).position?.toUpperCase?.() === "GK");
+            return saves > 0 || isGk;
+        });
+    }, [filtered]);
+
     const allColumns = [
         { key: "proName", label: "Jogador", tooltip: "Nome do jogador" },
-        { key: "overallStr", label: "Overall", tooltip: "Overall" },
-        { key: "proHeight", label: "Altura", tooltip: "Altura" },
         { key: "matchesPlayed", label: "Partidas" },
         { key: "totalGoals", label: "Gols" },
         { key: "totalAssists", label: "Assistências" },
         { key: "totalShots", label: "Chutes", tooltip: "Gols / Tentativas totais e % de conversão" },
-        {
+        ...(hasGoalkeeperStats ? [{
             key: "totalSaves",
             label: "Defesas",
             tooltip: "Defesas e Gols Sofridos do CLUBE no período: % = S / (S + Gc)",
-        },
+        }] : []),
         { key: "totalPassesMade", label: "Passes", tooltip: "Completos / Tentados e %" },
         {
             key: "totalTacklesMade",
@@ -221,7 +228,6 @@ export function PlayerStatsTable({
         { key: "totalLosses", label: "Derrotas" },
         { key: "totalDraws", label: "Empates" },
         { key: "winPercent", label: "Win %" },
-        { key: "totalRedCards", label: "Vermelhos" },
         { key: "totalMom", label: "MOM" },
         { key: "avgRating", label: "Nota" },
     ];
@@ -295,6 +301,7 @@ export function PlayerStatsTable({
                                 const isMotm = Number(p.totalMom || 0) > 0;
                                 const isGoalkeeper =
                                     ((p as any).position?.toUpperCase?.() === "GK") || saves > 0;
+                                const hasRedCard = Number(p.totalRedCards || 0) > 0;
 
                                 const showHighlights = p.matchesPlayed === 1;
 
@@ -303,8 +310,12 @@ export function PlayerStatsTable({
                                         ? "bg-red-50 border-l-4 border-red-400"
                                         : isMotm
                                             ? "bg-amber-50 border-l-4 border-amber-400"
-                                            : ""
-                                    : "";
+                                            : hasRedCard
+                                                ? "bg-red-50 border-l-4 border-red-500"
+                                                : ""
+                                    : hasRedCard
+                                        ? "bg-red-50"
+                                        : "";
 
                                 const Icons = showHighlights ? (
                                     <span className="inline-flex items-center gap-1 mr-2">
@@ -323,6 +334,17 @@ export function PlayerStatsTable({
                                                 <GiGoalKeeper size={16} className="text-blue-700" />
                                             </Tooltip>
                                         )}
+                                        {hasRedCard && (
+                                            <Tooltip content={`${int.format(p.totalRedCards)} Cartão${p.totalRedCards > 1 ? 'ões' : ''} Vermelho${p.totalRedCards > 1 ? 's' : ''}`}>
+                                                <RectangleVertical size={16} className="text-red-700 fill-red-700" />
+                                            </Tooltip>
+                                        )}
+                                    </span>
+                                ) : hasRedCard ? (
+                                    <span className="inline-flex items-center gap-1 mr-2">
+                                        <Tooltip content={`${int.format(p.totalRedCards)} Cartão${p.totalRedCards > 1 ? 'ões' : ''} Vermelho${p.totalRedCards > 1 ? 's' : ''}`}>
+                                            <RectangleVertical size={16} className="text-red-700 fill-red-700" />
+                                        </Tooltip>
                                     </span>
                                 ) : null;
 
@@ -336,24 +358,6 @@ export function PlayerStatsTable({
                                                 >
                                                     {Icons}
                                                     {p.proName}
-                                                </td>
-                                            );
-                                        case "overallStr":
-                                            return (
-                                                <td
-                                                    key={col.key}
-                                                    className="px-3 py-2 text-left sticky left-0 bg-inherit"
-                                                >
-                                                    {p.proOverallStr}
-                                                </td>
-                                            );
-                                        case "proHeight":
-                                            return (
-                                                <td
-                                                    key={col.key}
-                                                    className="px-3 py-2 text-left sticky left-0 bg-inherit"
-                                                >
-                                                    {p.proHeight}
                                                 </td>
                                             );
                                         case "matchesPlayed":
@@ -482,12 +486,6 @@ export function PlayerStatsTable({
                                                         format={(v) => p1.format(v)}
                                                         statType="winRate"
                                                     />
-                                                </td>
-                                            );
-                                        case "totalRedCards":
-                                            return (
-                                                <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.totalRedCards)}
                                                 </td>
                                             );
                                         case "totalMom":
