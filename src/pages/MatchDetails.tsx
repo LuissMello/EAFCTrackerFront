@@ -121,11 +121,6 @@ const comparisonStats: Array<{
   { label: "Desarmes Tentados", key: "totalTackleAttempts" },
   { label: "Precisão de Desarmes (%)", key: "tackleSuccessPercent" },
   { label: "Nota Média", key: "avgRating" },
-  { label: "Defesas (GK)", key: "totalSaves" },
-  { label: "Clean Sheets", key: "totalCleanSheets" },
-  { label: "Cartões Vermelhos", key: "totalRedCards" },
-  { label: "Homem da Partida", key: "totalMom" },
-  { label: "Vitórias (%)", key: "winPercent" },
 ];
 
 const Badge: React.FC<{ className?: string; children: React.ReactNode; title?: string }> = ({
@@ -476,20 +471,16 @@ export default function MatchDetails() {
       <div className="bg-white shadow-sm rounded-xl p-4 border">
         {haveTwoClubs ? (
           <>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
               {/* Esquerda */}
-              <div
-                className={`flex items-center gap-2 px-2 py-1 rounded ${
-                  leftIsSelected ? "border-2 border-blue-600" : ""
-                }`}
-              >
+              <div className="flex items-center gap-2 px-2 py-1 rounded justify-center sm:justify-start">
                 <img
                   src={crestUrl(orderedClubs[0]?.clubCrestAssetId)}
                   onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                   alt={`Escudo ${orderedClubs[0]?.clubName ?? "Clube A"}`}
                   className="w-8 h-8 rounded-full bg-white border"
                 />
-                <div className="font-semibold flex items-center gap-2">
+                <div className="font-semibold flex items-center gap-2 flex-wrap">
                   {orderedClubs[0]?.clubName ?? "Clube A"}
                   {leftIsSelected && (
                     <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>
@@ -500,15 +491,11 @@ export default function MatchDetails() {
               </div>
 
               {/* Placar */}
-              <div className="text-lg sm:text-xl font-bold text-gray-900">{scoreLabel}</div>
+              <div className="text-lg sm:text-xl font-bold text-gray-900 text-center">{scoreLabel}</div>
 
               {/* Direita */}
-              <div
-                className={`flex items-center gap-2 px-2 py-1 rounded ${
-                  rightIsSelected ? "border-2 border-blue-600" : ""
-                }`}
-              >
-                <div className="font-semibold flex items-center gap-2">
+              <div className="flex items-center gap-2 px-2 py-1 rounded justify-center sm:justify-end">
+                <div className="font-semibold flex items-center gap-2 flex-wrap">
                   {orderedClubs[1]?.clubName ?? "Clube B"}
                   {rightIsSelected && (
                     <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>
@@ -526,12 +513,12 @@ export default function MatchDetails() {
 
             {/* Tabela comparativa com heat */}
             <div className="overflow-x-auto mt-4">
-              <table className="w-full table-auto text-xs sm:text-sm border text-center">
+              <table className="w-full table-fixed text-xs sm:text-sm border text-center">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="p-1.5 sm:p-2">{orderedClubs[0]?.clubName ?? "Clube A"}</th>
-                    <th className="p-1.5 sm:p-2">Estatística</th>
-                    <th className="p-1.5 sm:p-2">{orderedClubs[1]?.clubName ?? "Clube B"}</th>
+                    <th className="p-1.5 sm:p-2 w-1/3">{orderedClubs[0]?.clubName ?? "Clube A"}</th>
+                    <th className="p-1.5 sm:p-2 w-1/3">Estatística</th>
+                    <th className="p-1.5 sm:p-2 w-1/3">{orderedClubs[1]?.clubName ?? "Clube B"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -553,10 +540,9 @@ export default function MatchDetails() {
 
             {/* MVP */}
             {mom && (
-              <div className="mt-4 p-3 rounded-lg border bg-amber-50 text-amber-900 inline-flex items-center gap-2">
+              <div className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-700">
                 <span aria-hidden>⭐</span>
-                <span className="font-medium">Homem da Partida:</span>
-                <span>{mom.playerName}</span>
+                <span className="font-medium">{mom.playerName}</span>
               </div>
             )}
           </>
@@ -617,7 +603,7 @@ export default function MatchDetails() {
               showPagination={false}
               showSearch={false}
               showTitle={false}
-              hiddenColumns={["matchesPlayed", "totalWins", "totalLosses", "totalDraws", "winPercent"]}
+              hiddenColumns={["matchesPlayed", "totalWins", "totalLosses", "totalDraws", "winPercent", "totalMom"]}
               onSortChange={(key, order) => {
                 setSortKey(key);
                 setSortOrder(order);
