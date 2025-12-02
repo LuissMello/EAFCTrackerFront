@@ -1,16 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import api from "../services/api.ts";
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js";
-import { Bar } from "react-chartjs-2";
 import { useClub } from "../hooks/useClub.tsx";
 import OverallSummaryCard, { ClubOverallRow, PlayoffAchievementDto } from "../components/OverallSummaryCard.tsx";
 import { TeamStatsSection } from "../components/TeamStatsSection.tsx";
 import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
 import { GoalLinkingSection } from "../components/GoalLinkingSection.tsx";
 import { ClubStats, PlayerStats } from "../types/stats.ts";
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 // ======================
 // Tipos (espelham /api/Matches/{matchId}/statistics)
@@ -105,17 +101,6 @@ const crestUrl = (id?: string | null) =>
     ? `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${id}.png`
     : FALLBACK_LOGO;
 
-function colorFromId(num: number) {
-  let x = Math.imul(num ^ 0x9e3779b9, 0x85ebca6b);
-  x ^= x >>> 13;
-  x = Math.imul(x, 0xc2b2ae35);
-  x ^= x >>> 16;
-  const r = (x & 0xff).toString(16).padStart(2, "0");
-  const g = ((x >>> 8) & 0xff).toString(16).padStart(2, "0");
-  const b = ((x >>> 16) & 0xff).toString(16).padStart(2, "0");
-  return `#${r}${g}${b}`.toUpperCase();
-}
-
 function fmt(value: number | undefined | null) {
   if (value === undefined || value === null) return "–";
   return Number.isInteger(value) ? String(value) : (Math.round((value as number) * 100) / 100).toFixed(2);
@@ -124,24 +109,23 @@ function fmt(value: number | undefined | null) {
 const comparisonStats: Array<{
   label: string;
   key: keyof (ClubRow & PlayerRow);
-  scope: "club" | "player" | "both";
 }> = [
-  { label: "Gols", key: "totalGoals", scope: "both" },
-  { label: "Assistências", key: "totalAssists", scope: "both" },
-  { label: "Chutes", key: "totalShots", scope: "both" },
-  { label: "Precisão de Chutes (%)", key: "goalAccuracyPercent", scope: "both" },
-  { label: "Passes Certos", key: "totalPassesMade", scope: "both" },
-  { label: "Passes Tentados", key: "totalPassAttempts", scope: "both" },
-  { label: "Precisão de Passe (%)", key: "passAccuracyPercent", scope: "both" },
-  { label: "Desarmes Certos", key: "totalTacklesMade", scope: "both" },
-  { label: "Desarmes Tentados", key: "totalTackleAttempts", scope: "both" },
-  { label: "Precisão de Desarmes (%)", key: "tackleSuccessPercent", scope: "both" },
-  { label: "Nota Média", key: "avgRating", scope: "both" },
-  { label: "Defesas (GK)", key: "totalSaves", scope: "both" },
-  { label: "Clean Sheets", key: "totalCleanSheets", scope: "both" },
-  { label: "Cartões Vermelhos", key: "totalRedCards", scope: "both" },
-  { label: "Homem da Partida", key: "totalMom", scope: "both" },
-  { label: "Vitórias (%)", key: "winPercent", scope: "both" },
+  { label: "Gols", key: "totalGoals" },
+  { label: "Assistências", key: "totalAssists" },
+  { label: "Chutes", key: "totalShots" },
+  { label: "Precisão de Chutes (%)", key: "goalAccuracyPercent" },
+  { label: "Passes Certos", key: "totalPassesMade" },
+  { label: "Passes Tentados", key: "totalPassAttempts" },
+  { label: "Precisão de Passe (%)", key: "passAccuracyPercent" },
+  { label: "Desarmes Certos", key: "totalTacklesMade" },
+  { label: "Desarmes Tentados", key: "totalTackleAttempts" },
+  { label: "Precisão de Desarmes (%)", key: "tackleSuccessPercent" },
+  { label: "Nota Média", key: "avgRating" },
+  { label: "Defesas (GK)", key: "totalSaves" },
+  { label: "Clean Sheets", key: "totalCleanSheets" },
+  { label: "Cartões Vermelhos", key: "totalRedCards" },
+  { label: "Homem da Partida", key: "totalMom" },
+  { label: "Vitórias (%)", key: "winPercent" },
 ];
 
 const Badge: React.FC<{ className?: string; children: React.ReactNode; title?: string }> = ({
@@ -169,7 +153,6 @@ const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ class
 export default function MatchDetails() {
   const { matchId } = useParams();
   const { club, selectedClubIds } = useClub();
-  const [searchParams, setSearchParams] = useSearchParams();
 
   const [stats, setStats] = useState<FullMatchStatisticsDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -183,32 +166,9 @@ export default function MatchDetails() {
   const [overallBusy, setOverallBusy] = useState(false);
   const [overallErr, setOverallErr] = useState<string | null>(null);
 
-  const initialStat = (searchParams.get("stat") as (typeof comparisonStats)[number]["key"]) || "totalGoals";
-  const initialOnlySel = searchParams.get("onlyClub") === "1";
-
-  const [selectedStat, setSelectedStat] = useState<(typeof comparisonStats)[number]["key"]>(initialStat);
-  const [onlySelectedClubPlayers, setOnlySelectedClubPlayers] = useState<boolean>(initialOnlySel);
-  const [playerQuery, setPlayerQuery] = useState("");
   const [sortKey, setSortKey] = useState<keyof PlayerRow>("totalGoals");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [showOverallPanel, setShowOverallPanel] = useState<boolean>(false);
-
-  const persistParams = useCallback(
-    (key: string, val: string | null) => {
-      const sp = new URLSearchParams(searchParams);
-      if (val === null) sp.delete(key);
-      else sp.set(key, val);
-      setSearchParams(sp, { replace: true });
-    },
-    [searchParams, setSearchParams]
-  );
-
-  useEffect(() => {
-    persistParams("stat", selectedStat);
-  }, [selectedStat]);
-  useEffect(() => {
-    persistParams("onlyClub", onlySelectedClubPlayers ? "1" : null);
-  }, [onlySelectedClubPlayers]);
 
   // ====== Buscar estatísticas da partida ======
   const fetchData = useCallback(async () => {
@@ -245,10 +205,6 @@ export default function MatchDetails() {
     if (club?.clubId && stats.clubs.some((c) => c.clubId === club.clubId)) return club.clubId;
     return stats.clubs[0]?.clubId ?? null;
   }, [stats?.clubs, selectedClubIds, club?.clubId]);
-
-  useEffect(() => {
-    if (!selectedClubId && onlySelectedClubPlayers) setOnlySelectedClubPlayers(false);
-  }, [selectedClubId, onlySelectedClubPlayers]);
 
   // Ordena clubes mantendo o selecionado à esquerda
   const orderedClubs = useMemo(() => {
@@ -375,138 +331,6 @@ export default function MatchDetails() {
     return map;
   }, [players, clubs]);
 
-  // Chart jogadores
-  const playerChart = useMemo(() => {
-    const base =
-      onlySelectedClubPlayers && selectedClubId ? players.filter((p) => p.clubId === selectedClubId) : players;
-
-    const filtered = playerQuery.trim()
-      ? base.filter((p) => p.playerName.toLowerCase().includes(playerQuery.toLowerCase()))
-      : base;
-
-    const playerSupportsSelected = filtered.some(
-      (p) => Object.prototype.hasOwnProperty.call(p, selectedStat) && typeof (p as any)[selectedStat] === "number"
-    );
-
-    const rows = filtered.map((p) => ({
-      label: p.playerName,
-      value: playerSupportsSelected ? ((p as any)[selectedStat] as number) : undefined,
-      color: colorFromId(p.playerId),
-    }));
-
-    const top = rows
-      .filter((r) => typeof r.value === "number" && !Number.isNaN(r.value))
-      .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
-      .slice(0, 20);
-
-    return {
-      supported: playerSupportsSelected,
-      top,
-      data: {
-        labels: top.map((r) => r.label),
-        datasets: [
-          {
-            label: "Jogadores",
-            data: top.map((r) => r.value),
-            backgroundColor: top.map((r) => r.color),
-            borderColor: top.map((r) => r.color),
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        indexAxis: "y" as const,
-        plugins: {
-          legend: { display: false },
-          title: {
-            display: true,
-            text: onlySelectedClubPlayers
-              ? "Comparativo de Jogadores (apenas clube selecionado)"
-              : "Comparativo de Jogadores",
-          },
-          tooltip: {
-            callbacks: { label: (item: any) => `${item.raw}` },
-          },
-        },
-        scales: { x: { beginAtZero: true } },
-        elements: { bar: { borderWidth: 1, barThickness: 12 } },
-      },
-    };
-  }, [players, selectedStat, onlySelectedClubPlayers, selectedClubId, playerQuery]);
-
-  // Chart clubes
-  const clubChart = useMemo(() => {
-    if (!haveTwoClubs) return null;
-    const a = orderedClubs[0];
-    const b = orderedClubs[1];
-    const key = selectedStat;
-
-    const label = comparisonStats.find((c) => c.key === key)?.label ?? "Estatística";
-    const va = (a as any)[key] as number;
-    const vb = (b as any)[key] as number;
-
-    return {
-      data: {
-        labels: [label],
-        datasets: [
-          {
-            label: a.clubName,
-            data: [va ?? 0],
-            backgroundColor: "#4F46E5",
-            borderColor: "#4F46E5",
-          },
-          {
-            label: b.clubName,
-            data: [vb ?? 0],
-            backgroundColor: "#10B981",
-            borderColor: "#10B981",
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        indexAxis: "y" as const,
-        plugins: { title: { display: true, text: `Clubes - ${label}` } },
-        scales: { x: { beginAtZero: true } },
-        elements: { bar: { borderWidth: 2, barThickness: 18 } },
-      },
-    };
-  }, [orderedClubs, selectedStat, haveTwoClubs]);
-
-  // Ordenação e filtro de jogadores por clube
-  const sortPlayers = useCallback(
-    (list: PlayerRow[]) => {
-      const copy = [...list];
-      copy.sort((a, b) => {
-        const va = (a as any)[sortKey] ?? (sortKey === "playerName" ? a.playerName : 0);
-        const vb = (b as any)[sortKey] ?? (sortKey === "playerName" ? b.playerName : 0);
-        if (typeof va === "string" && typeof vb === "string") {
-          return sortOrder === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
-        }
-        const numA = Number(va) || 0;
-        const numB = Number(vb) || 0;
-        return sortOrder === "asc" ? numA - numB : numB - numA;
-      });
-      return copy;
-    },
-    [sortKey, sortOrder]
-  );
-
-  const playersByClub = useMemo(() => {
-    const map = new Map<number, PlayerRow[]>();
-    for (const p of players) {
-      if (playerQuery && !p.playerName.toLowerCase().includes(playerQuery.toLowerCase())) continue;
-      const arr = map.get(p.clubId) ?? [];
-      arr.push(p);
-      map.set(p.clubId, arr);
-    }
-    for (const [k, list] of map) map.set(k, sortPlayers(list));
-    return map;
-  }, [players, playerQuery, sortPlayers]);
-
   const cellHeat = (va?: number, vb?: number) => {
     const a = Number(va ?? 0);
     const b = Number(vb ?? 0);
@@ -517,7 +341,6 @@ export default function MatchDetails() {
   };
 
   const mom = (stats?.players ?? []).find((p) => (p.totalMom ?? 0) > 0);
-  const sentOff = (stats?.players ?? []).filter((p) => (p.totalRedCards ?? 0) > 0);
 
   if (loading) {
     return (
@@ -761,123 +584,6 @@ export default function MatchDetails() {
         )}
       </div>
 
-      {/* Disciplina */}
-      <div className="bg-white shadow-sm rounded-xl p-4 border">
-        <h2 className="text-lg font-semibold mb-2">Disciplina</h2>
-
-        {haveTwoClubs ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="p-3 rounded border">
-              <div className="text-sm text-gray-500 mb-1">{orderedClubs[0]?.clubName ?? "Clube A"}</div>
-              <div className="inline-flex items-center gap-2">
-                <span className="inline-block w-3 h-5 rounded-[2px] bg-red-600" />
-                <span className="tabular-nums font-semibold">{orderedClubs[0]?.totalRedCards ?? 0}</span>
-              </div>
-            </div>
-            <div className="p-3 rounded border">
-              <div className="text-sm text-gray-500 mb-1">{orderedClubs[1]?.clubName ?? "Clube B"}</div>
-              <div className="inline-flex items-center gap-2">
-                <span className="inline-block w-3 h-5 rounded-[2px] bg-red-600" />
-                <span className="tabular-nums font-semibold">{orderedClubs[1]?.totalRedCards ?? 0}</span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="p-3 rounded border inline-block">
-            <div className="text-sm text-gray-500 mb-1">{orderedClubs[0]?.clubName ?? "Clube"}</div>
-            <div className="inline-flex items-center gap-2">
-              <span className="inline-block w-3 h-5 rounded-[2px] bg-red-600" />
-              <span className="tabular-nums font-semibold">{orderedClubs[0]?.totalRedCards ?? 0}</span>
-            </div>
-          </div>
-        )}
-
-        {sentOff.length > 0 ? (
-          <div className="mt-3 text-sm">
-            <div className="font-medium mb-1">Expulsos:</div>
-            <ul className="list-disc pl-5 space-y-1">
-              {sentOff.map((p) => (
-                <li key={p.playerId}>
-                  <span className="font-medium">{p.playerName}</span>
-                  <span className="text-gray-500">
-                    {" "}
-                    - {orderedClubs.find((c) => c.clubId === p.clubId)?.clubName ?? "Clube"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <div className="mt-3 text-sm text-gray-600">Nenhum jogador expulso.</div>
-        )}
-      </div>
-
-      {/* Controles de gráficos */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-700">Estatística:</label>
-          <select
-            value={selectedStat}
-            onChange={(e) => setSelectedStat(e.target.value as (typeof comparisonStats)[number]["key"])}
-            className="border rounded px-2 py-1 text-sm w-full sm:w-auto"
-          >
-            {comparisonStats.map((s) => (
-              <option key={String(s.key)} value={s.key as string}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={onlySelectedClubPlayers}
-              onChange={(e) => setOnlySelectedClubPlayers(e.target.checked)}
-              disabled={!selectedClubId}
-            />
-            Mostrar apenas jogadores do clube selecionado
-          </label>
-          <input
-            type="text"
-            value={playerQuery}
-            onChange={(e) => setPlayerQuery(e.target.value)}
-            placeholder="Filtrar por jogador…"
-            className="border rounded px-2 py-1 text-sm w-full sm:w-auto"
-          />
-        </div>
-      </div>
-
-      {/* Gráficos */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Clubes */}
-        <div className="bg-white shadow-sm rounded-xl p-4 border h-[200px] sm:h-[240px] md:h-[260px] xl:col-span-1">
-          <h2 className="text-lg font-semibold mb-2">Comparativo entre Clubes</h2>
-          {clubChart && <Bar data={clubChart.data} options={clubChart.options as any} />}
-          {!clubChart && (
-            <div className="text-sm text-gray-600">Comparativo indisponível (faltam dados do adversário).</div>
-          )}
-        </div>
-
-        {/* Jogadores */}
-        <div className="bg-white shadow-sm rounded-xl p-4 border min-h-[200px] xl:col-span-2">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold">Comparativo de Jogadores</h2>
-          </div>
-          {!playerChart.supported ? (
-            <div className="p-3 text-sm text-gray-600">
-              Esta estatística não é suportada por jogadores. Selecione uma métrica de jogadores (ex.: Gols,
-              Assistências, Passes…) para ver o gráfico.
-            </div>
-          ) : (
-            <div className="h-[300px] sm:h-[340px] md:h-[360px]">
-              <Bar data={playerChart.data} options={playerChart.options as any} />
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Player Stats Tables by Club */}
       {orderedClubs.map((clubRow) => {
         const clubPlayers = players.filter((p) => p.clubId === clubRow.clubId);
@@ -904,7 +610,7 @@ export default function MatchDetails() {
                   : (orderedClubs.find((c) => c.clubId === clubRow.clubId) as any) || null
               }
               minMatches={0}
-              searchTerm={playerQuery}
+              searchTerm=""
               initialSortKey={sortKey as keyof PlayerStats}
               initialSortOrder={sortOrder}
               pageSize={50}
