@@ -250,21 +250,24 @@ export default function MatchDetails() {
 
       const results = await Promise.all(
         targets.map(async (c) => {
-          const { data } = await api.get<{
-            ClubOverall?: ClubOverallRow;
-            PlayoffAchievements?: PlayoffAchievementDto[];
-            clubOverall?: ClubOverallRow;
-            playoffAchievements?: PlayoffAchievementDto[];
-          }>(`/api/Clubs/${c.clubId}/overall-and-playoffs`);
-          return { clubId: c.clubId, data };
+          // Fetch both endpoints in parallel for each club
+          const [overallRes, playoffsRes] = await Promise.all([
+            api.get<ClubOverallRow[]>(`/api/Clubs/${c.clubId}/overall`),
+            api.get<{ clubId: number; achievements: PlayoffAchievementDto[] }[]>(`/api/Clubs/${c.clubId}/playoffs`),
+          ]);
+
+          const overall = overallRes.data?.[0] ?? null;
+          const playoffsBlock = playoffsRes.data?.find((x) => x.clubId === c.clubId) ?? playoffsRes.data?.[0];
+          const playoffs = playoffsBlock?.achievements ?? [];
+
+          return { clubId: c.clubId, overall, playoffs };
         })
       );
 
       setOverallCache((prev) => {
         const next = new Map(prev);
         for (const r of results) {
-          const o = r.data.ClubOverall ?? r.data.clubOverall;
-          if (o) next.set(r.clubId, o);
+          if (r.overall) next.set(r.clubId, r.overall);
         }
         return next;
       });
@@ -272,8 +275,7 @@ export default function MatchDetails() {
       setPlayoffsCache((prev) => {
         const next = new Map(prev);
         for (const r of results) {
-          const p = r.data.PlayoffAchievements ?? r.data.playoffAchievements ?? [];
-          next.set(r.clubId, p);
+          next.set(r.clubId, r.playoffs);
         }
         return next;
       });

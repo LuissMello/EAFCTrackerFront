@@ -23,6 +23,28 @@ interface GoalLink {
   goalIndex: number;
   assistPlayerId: number | null;
   preAssistPlayerId: number | null;
+  // Names from API (for read-only display)
+  scorerName?: string;
+  assistName?: string;
+  preAssistName?: string;
+}
+
+interface ApiGoal {
+  matchGoalLinkId: number;
+  matchId: number;
+  clubId: number;
+  scorerPlayerEntityId: number;
+  scorerName: string;
+  assistPlayerEntityId: number | null;
+  assistName: string | null;
+  preAssistPlayerEntityId: number | null;
+  preAssistName: string | null;
+}
+
+interface ApiGoalsResponse {
+  matchId: number;
+  totalGoals: number;
+  goals: ApiGoal[];
 }
 
 const FALLBACK_LOGO = "https://via.placeholder.com/96?text=Logo";
@@ -33,6 +55,7 @@ const crestUrl = (id?: string | null) =>
 
 export function GoalLinkingSection({
   matchId,
+  clubId,
   clubName,
   clubCrestAssetId,
   players,
@@ -40,6 +63,7 @@ export function GoalLinkingSection({
   const [goalLinks, setGoalLinks] = useState<GoalLink[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Helper to get display name (proName with fallback to playerName)
@@ -73,10 +97,43 @@ export function GoalLinkingSection({
     return rows;
   }, [players]);
 
-  // Initialize goal links on mount
+  // Fetch existing goal links or initialize from player data
   useEffect(() => {
-    setGoalLinks(initialGoalLinks);
-  }, [initialGoalLinks]);
+    const fetchExistingGoals = async () => {
+      setLoading(true);
+      try {
+        const { data } = await api.get<ApiGoalsResponse>(`/api/Matches/${matchId}/goals`);
+
+        // Filter goals for this club only
+        const clubGoals = data.goals.filter((g) => g.clubId === clubId);
+
+        if (clubGoals.length > 0) {
+          // Map API response to GoalLink format
+          const existingLinks: GoalLink[] = clubGoals.map((g, index) => ({
+            scorerPlayerId: g.scorerPlayerEntityId,
+            goalIndex: index + 1,
+            assistPlayerId: g.assistPlayerEntityId,
+            preAssistPlayerId: g.preAssistPlayerEntityId,
+            scorerName: g.scorerName,
+            assistName: g.assistName ?? undefined,
+            preAssistName: g.preAssistName ?? undefined,
+          }));
+          setGoalLinks(existingLinks);
+          setSaved(true);
+        } else {
+          // No existing data, use initial links from player stats
+          setGoalLinks(initialGoalLinks);
+        }
+      } catch {
+        // API error (e.g., 404) - use initial links
+        setGoalLinks(initialGoalLinks);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchExistingGoals();
+  }, [matchId, clubId, initialGoalLinks]);
 
   // Players with at least one assist (base list, will be filtered per row)
   const playersWithAssists = useMemo(
@@ -172,8 +229,9 @@ export function GoalLinkingSection({
   }, [players]);
 
   const formatScorerName = (goal: GoalLink) => {
+    // Use API name if available (read-only mode), otherwise lookup from players
     const player = players.find((p) => p.playerId === goal.scorerPlayerId);
-    const name = player ? getDisplayName(player) : "Desconhecido";
+    const name = goal.scorerName || (player ? getDisplayName(player) : "Desconhecido");
 
     if (hasMultipleGoals) {
       const playerGoals = player?.totalGoals ?? 1;
@@ -183,6 +241,35 @@ export function GoalLinkingSection({
     }
     return name;
   };
+
+  // Get display name for assist/pre-assist (uses API name if available)
+  const getAssistDisplayName = (goal: GoalLink, type: "assist" | "preAssist"): string => {
+    if (type === "assist") {
+      if (goal.assistName) return goal.assistName;
+      return getPlayerDisplayName(goal.assistPlayerId);
+    } else {
+      if (goal.preAssistName) return goal.preAssistName;
+      return getPlayerDisplayName(goal.preAssistPlayerId);
+    }
+  };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="bg-white shadow-sm rounded-xl p-4 border">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <img
+            src={crestUrl(clubCrestAssetId)}
+            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+            alt={`Escudo ${clubName}`}
+            className="w-6 h-6 rounded-full bg-white border"
+          />
+          {clubName} - Assistências
+        </h3>
+        <p className="text-sm text-gray-500">Carregando...</p>
+      </div>
+    );
+  }
 
   // No goals case
   if (goalLinks.length === 0) {
@@ -242,7 +329,7 @@ export function GoalLinkingSection({
                   <td className="p-2 text-center text-gray-400">←</td>
                   <td className="p-2">
                     {saved ? (
-                      <span>{getPlayerDisplayName(goal.assistPlayerId)}</span>
+                      <span>{getAssistDisplayName(goal, "assist")}</span>
                     ) : (
                       <select
                         value={goal.assistPlayerId ?? ""}
@@ -266,7 +353,7 @@ export function GoalLinkingSection({
                   <td className="p-2 text-center text-gray-400">←</td>
                   <td className="p-2">
                     {saved ? (
-                      <span>{getPlayerDisplayName(goal.preAssistPlayerId)}</span>
+                      <span>{getAssistDisplayName(goal, "preAssist")}</span>
                     ) : (
                       <select
                         value={goal.preAssistPlayerId ?? ""}

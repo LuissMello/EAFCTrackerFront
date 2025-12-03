@@ -127,51 +127,42 @@ const OverallSummaryCard: React.FC<Props> = ({
         setPo(playoffs ?? null);
     }, [playoffs]);
 
-    // busca no novo endpoint apenas se não veio por props
+    // busca nos endpoints separados apenas se não veio por props
     React.useEffect(() => {
-        let cancel = false;
+        // If data is provided via props, no need to fetch
         const needFetch = overall == null || playoffs == null;
-        if (!needFetch) return;
+        if (!needFetch) {
+            setLoading(false);
+            return;
+        }
+
+        let cancel = false;
 
         (async () => {
             try {
                 setLoading(true);
                 setError(null);
 
-                const { data } = await api.get(`/api/clubs/${clubId}/overall-and-playoffs`);
+                // Fetch both endpoints in parallel
+                const [overallRes, playoffsRes] = await Promise.all([
+                    api.get<ClubOverallRow[]>(`/api/Clubs/${clubId}/overall`),
+                    api.get<{ clubId: number; achievements: PlayoffAchievementDto[] }[]>(`/api/Clubs/${clubId}/playoffs`),
+                ]);
 
-                // Aceita ambos formatos:
-                // 1) { clubsOverall: ClubOverallRow[], clubsPlayoffAchievements: { clubId, achievements[] }[] }
-                // 2) { clubId, overall, playoffAchievements }
-                let nextOverall: ClubOverallRow | null = null;
-                let nextPlayoffs: PlayoffAchievementDto[] | null = null;
-
-                if (data?.clubsOverall || data?.clubsPlayoffAchievements) {
-                    nextOverall =
-                        (Array.isArray(data?.clubsOverall) ? data.clubsOverall.find((x: any) => x.clubId === clubId) : null) ??
-                        (Array.isArray(data?.clubsOverall) ? data.clubsOverall[0] : null) ??
-                        null;
-
-                    const block =
-                        Array.isArray(data?.clubsPlayoffAchievements)
-                            ? data.clubsPlayoffAchievements.find((x: any) => x.clubId === clubId)
-                            : null;
-
-                    nextPlayoffs = block?.achievements ?? [];
-                } else {
-                    // objeto direto
-                    nextOverall = data?.overall ?? null;
-                    nextPlayoffs = data?.playoffAchievements ?? [];
-                }
+                const nextOverall = overallRes.data?.[0] ?? null;
+                const playoffsBlock = playoffsRes.data?.find((x) => x.clubId === clubId) ?? playoffsRes.data?.[0];
+                const nextPlayoffs = playoffsBlock?.achievements ?? [];
 
                 if (!cancel) {
-                    if (overall == null) setO(nextOverall);
-                    if (playoffs == null) setPo(nextPlayoffs);
+                    setO(nextOverall);
+                    setPo(nextPlayoffs);
+                    setLoading(false);
                 }
             } catch (e: any) {
-                if (!cancel) setError(e?.message ?? "Falha ao carregar histórico do clube");
-            } finally {
-                if (!cancel) setLoading(false);
+                if (!cancel) {
+                    setError(e?.message ?? "Falha ao carregar histórico do clube");
+                    setLoading(false);
+                }
             }
         })();
 
