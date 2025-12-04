@@ -6,6 +6,7 @@ export interface PlayerStats {
   totalGoals: number;
   totalGoalsConceded: number;
   totalAssists: number;
+  totalPreAssists: number;
   totalShots: number;
   totalPassesMade: number;
   totalPassAttempts: number;
@@ -35,6 +36,8 @@ export interface ClubStats {
   totalGoals: number;
   totalGoalsConceded: number;
   totalAssists: number;
+  totalPreAssists: number;
+  avgPreAssists: number;
   totalShots: number;
   totalPassesMade: number;
   totalPassAttempts: number;

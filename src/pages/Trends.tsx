@@ -64,6 +64,7 @@ interface TopItemDto {
   clubId: number;
   goals: number;
   assists: number;
+  preAssists: number;
   matches: number;
   avgRating: number;
   mom: number;
@@ -612,6 +613,8 @@ export default function TrendsPage() {
                     <th className="p-2">Partidas</th>
                     <th className="p-2">Gols</th>
                     <th className="p-2">Assistências</th>
+                    <th className="p-2">Pré-Assist.</th>
+                    <th className="p-2">Partic.</th>
                     <th className="p-2">MOM</th>
                     <th className="p-2">Nota média</th>
                   </tr>
@@ -637,6 +640,8 @@ export default function TrendsPage() {
                         <td className="p-2">{t.matches}</td>
                         <td className="p-2">{t.goals}</td>
                         <td className="p-2">{t.assists}</td>
+                        <td className="p-2">{t.preAssists ?? 0}</td>
+                        <td className="p-2 font-medium">{(t.goals ?? 0) + (t.assists ?? 0) + (t.preAssists ?? 0)}</td>
                         <td className="p-2">{t.mom}</td>
                         <td className="p-2">{Number(t.avgRating).toFixed(2)}</td>
                       </tr>

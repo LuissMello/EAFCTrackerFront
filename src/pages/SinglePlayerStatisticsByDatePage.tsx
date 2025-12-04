@@ -169,6 +169,7 @@ function withAlpha(hex: string, alpha: number) {
 const CHART_COLORS = {
   goals: "#3B82F6",      // blue
   assists: "#10B981",    // emerald
+  preAssists: "#EC4899", // pink
   participations: "#8B5CF6", // violet
   passPercent: "#F59E0B", // amber
   tacklesAvg: "#EF4444", // red
@@ -201,6 +202,7 @@ type SummaryBox = {
   totalLosses: number;
   totalGoals: number;
   totalAssists: number;
+  totalPreAssists: number;
   totalPassesMade: number;
   totalPassAttempts: number;
   totalTacklesMade: number;
@@ -219,6 +221,7 @@ type PlayerDaySummary = {
   matches: number;
   goals: number;
   assists: number;
+  preAssists: number;
   shots: number;
   passesMade: number;
   passesAttempted: number;
@@ -239,6 +242,7 @@ type GameRow = {
   time: string | null;
   goals: number;
   assists: number;
+  preAssists: number;
   passesMade: number;
   passesAttempted: number;
   passPct: number;
@@ -270,6 +274,7 @@ function buildGameRows(baseItems: PlayerStats[]): GameRow[] {
 
     const goals = toNum(anyP.totalGoals ?? anyP.TotalGoals);
     const assists = toNum(anyP.totalAssists ?? anyP.TotalAssists);
+    const preAssists = toNum(anyP.totalPreAssists ?? anyP.TotalPreAssists);
     const passesMade = toNum(anyP.totalPassesMade ?? anyP.TotalPassesMade);
     const passesAttempted = toNum(anyP.totalPassAttempts ?? anyP.TotalPassAttempts);
     const tacklesMade = toNum(anyP.totalTacklesMade ?? anyP.TotalTacklesMade);
@@ -298,6 +303,7 @@ function buildGameRows(baseItems: PlayerStats[]): GameRow[] {
       time,
       goals,
       assists,
+      preAssists,
       passesMade,
       passesAttempted,
       passPct,
@@ -567,6 +573,7 @@ export default function PlayerStatisticsByPlayerPage() {
       const matches = Math.max(1, getMatchesPlayed(player));
       const goals = toNum((player as any).totalGoals ?? (player as any).TotalGoals);
       const assists = toNum((player as any).totalAssists ?? (player as any).TotalAssists);
+      const preAssists = toNum((player as any).totalPreAssists ?? (player as any).TotalPreAssists);
       const shots = toNum((player as any).totalShots ?? (player as any).TotalShots);
       const passesMade = toNum((player as any).totalPassesMade ?? (player as any).TotalPassesMade);
       const passesAttempted = toNum((player as any).totalPassAttempts ?? (player as any).TotalPassAttempts);
@@ -604,6 +611,7 @@ export default function PlayerStatisticsByPlayerPage() {
         matches,
         goals,
         assists,
+        preAssists,
         shots,
         passesMade,
         passesAttempted,
@@ -637,6 +645,7 @@ export default function PlayerStatisticsByPlayerPage() {
         const matches = Math.max(1, getMatchesPlayed(player));
         const goals = toNum((player as any).totalGoals ?? (player as any).TotalGoals);
         const assists = toNum((player as any).totalAssists ?? (player as any).TotalAssists);
+        const preAssists = toNum((player as any).totalPreAssists ?? (player as any).TotalPreAssists);
         const shots = toNum((player as any).totalShots ?? (player as any).TotalShots);
         const passesMade = toNum((player as any).totalPassesMade ?? (player as any).TotalPassesMade);
         const passesAttempted = toNum((player as any).totalPassAttempts ?? (player as any).TotalPassAttempts);
@@ -652,6 +661,7 @@ export default function PlayerStatisticsByPlayerPage() {
           matches,
           goals,
           assists,
+          preAssists,
           shots,
           passesMade,
           passesAttempted,
@@ -753,7 +763,8 @@ export default function PlayerStatisticsByPlayerPage() {
       labels,
       goals: createDatasetsForMetric("Gols", (d) => d.goals, CHART_COLORS.goals),
       assists: createDatasetsForMetric("Assistências", (d) => d.assists, CHART_COLORS.assists),
-      participations: createDatasetsForMetric("Participações", (d) => d.goals + d.assists, CHART_COLORS.participations),
+      preAssists: createDatasetsForMetric("Pré-Assistências", (d) => d.preAssists, CHART_COLORS.preAssists),
+      participations: createDatasetsForMetric("Participações", (d) => d.goals + d.assists + d.preAssists, CHART_COLORS.participations),
       passPercent: createDatasetsForMetric("Pass %", (d) => d.passPct, CHART_COLORS.passPercent),
       tacklesAvg: createDatasetsForMetric("Desarmes/Jogo", (d) => d.matches > 0 ? d.tacklesMade / d.matches : 0, CHART_COLORS.tacklesAvg),
       rating: createDatasetsForMetric("Nota Média", (d) => d.rating, CHART_COLORS.rating),
@@ -832,6 +843,7 @@ export default function PlayerStatisticsByPlayerPage() {
     let totalLosses = 0;
     let totalGoals = 0;
     let totalAssists = 0;
+    let totalPreAssists = 0;
     let totalPassesMade = 0;
     let totalPassAttempts = 0;
     let totalTacklesMade = 0;
@@ -851,6 +863,7 @@ export default function PlayerStatisticsByPlayerPage() {
 
       totalGoals += toNum(anyP.totalGoals ?? anyP.TotalGoals);
       totalAssists += toNum(anyP.totalAssists ?? anyP.TotalAssists);
+      totalPreAssists += toNum(anyP.totalPreAssists ?? anyP.TotalPreAssists);
       totalPassesMade += toNum(anyP.totalPassesMade ?? anyP.TotalPassesMade);
       totalPassAttempts += toNum(anyP.totalPassAttempts ?? anyP.TotalPassAttempts);
       totalTacklesMade += toNum(anyP.totalTacklesMade ?? anyP.TotalTacklesMade);
@@ -879,6 +892,7 @@ export default function PlayerStatisticsByPlayerPage() {
       totalLosses,
       totalGoals,
       totalAssists,
+      totalPreAssists,
       totalPassesMade,
       totalPassAttempts,
       totalTacklesMade,
@@ -898,8 +912,8 @@ export default function PlayerStatisticsByPlayerPage() {
     if (!selectedPlayerId || perDayForPlayer.length === 0) return null;
 
     const sorted = [...perDayForPlayer].sort((a, b) => {
-      const partA = a.goals + a.assists;
-      const partB = b.goals + b.assists;
+      const partA = a.goals + a.assists + a.preAssists;
+      const partB = b.goals + b.assists + b.preAssists;
       if (partB !== partA) return partB - partA;
       return b.rating - a.rating;
     });
@@ -919,6 +933,7 @@ export default function PlayerStatisticsByPlayerPage() {
 
         const goals = toNum(anyP.totalGoals ?? anyP.TotalGoals);
         const assists = toNum(anyP.totalAssists ?? anyP.TotalAssists);
+        const preAssists = toNum(anyP.totalPreAssists ?? anyP.TotalPreAssists);
         const passesMade = toNum(anyP.totalPassesMade ?? anyP.TotalPassesMade);
         const passesAttempted = toNum(anyP.totalPassAttempts ?? anyP.TotalPassAttempts);
         const tacklesMade = toNum(anyP.totalTacklesMade ?? anyP.TotalTacklesMade);
@@ -927,7 +942,7 @@ export default function PlayerStatisticsByPlayerPage() {
         const rating = toNum(anyP.avgRating ?? anyP.AvgRating ?? anyP.rating ?? anyP.Rating);
         const passPct = passesAttempted > 0 ? (passesMade * 100) / passesAttempted : 0;
         const tacklePct = tacklesAttempted > 0 ? (tacklesMade * 100) / tacklesAttempted : 0;
-        const participations = goals + assists;
+        const participations = goals + assists + preAssists;
 
         const rawDate = anyP.date ?? anyP.Date;
         let time: string | null = null;
@@ -981,6 +996,7 @@ export default function PlayerStatisticsByPlayerPage() {
         time: null,
         goals: d.goals,
         assists: d.assists,
+        preAssists: d.preAssists,
         passesMade: d.passesMade,
         passesAttempted: d.passesAttempted,
         passPct: d.passPct,
@@ -1007,6 +1023,14 @@ export default function PlayerStatisticsByPlayerPage() {
 
   const worstAssistsGames = useMemo(() => {
     return [...gamesForRanking].sort((a, b) => a.assists - b.assists || a.rating - b.rating).slice(0, 5);
+  }, [gamesForRanking]);
+
+  const bestPreAssistsGames = useMemo(() => {
+    return [...gamesForRanking].sort((a, b) => b.preAssists - a.preAssists || b.rating - a.rating).slice(0, 5);
+  }, [gamesForRanking]);
+
+  const worstPreAssistsGames = useMemo(() => {
+    return [...gamesForRanking].sort((a, b) => a.preAssists - b.preAssists || a.rating - b.rating).slice(0, 5);
   }, [gamesForRanking]);
 
   const bestTacklesGames = useMemo(() => {
@@ -1042,6 +1066,14 @@ export default function PlayerStatisticsByPlayerPage() {
     return [...dayRowsForRanking].sort((a, b) => a.assists - b.assists || a.rating - b.rating).slice(0, 5);
   }, [dayRowsForRanking]);
 
+  const bestPreAssistsDays = useMemo(() => {
+    return [...dayRowsForRanking].sort((a, b) => b.preAssists - a.preAssists || b.rating - a.rating).slice(0, 5);
+  }, [dayRowsForRanking]);
+
+  const worstPreAssistsDays = useMemo(() => {
+    return [...dayRowsForRanking].sort((a, b) => a.preAssists - b.preAssists || a.rating - b.rating).slice(0, 5);
+  }, [dayRowsForRanking]);
+
   const bestTacklesDays = useMemo(() => {
     return [...dayRowsForRanking]
       .sort((a, b) => b.tacklesMade - a.tacklesMade || b.tacklePct - a.tacklePct)
@@ -1068,6 +1100,9 @@ export default function PlayerStatisticsByPlayerPage() {
 
   const topAssistsList = useDaysRanking ? bestAssistsDays : bestAssistsGames;
   const worstAssistsList = useDaysRanking ? worstAssistsDays : worstAssistsGames;
+
+  const topPreAssistsList = useDaysRanking ? bestPreAssistsDays : bestPreAssistsGames;
+  const worstPreAssistsList = useDaysRanking ? worstPreAssistsDays : worstPreAssistsGames;
 
   const topTacklesList = useDaysRanking ? bestTacklesDays : bestTacklesGames;
   const worstTacklesList = useDaysRanking ? worstTacklesDays : worstTacklesGames;
@@ -1285,11 +1320,11 @@ export default function PlayerStatisticsByPlayerPage() {
               </span>
             </div>
 
-            {/* Gols / Assistências */}
+            {/* Gols / Assistências / Pré-Assistências */}
             <div className="bg-white rounded-lg border px-3 py-2 flex flex-col gap-1">
-              <span className="text-xs uppercase tracking-wide text-gray-500">Gols &amp; Assistências</span>
+              <span className="text-xs uppercase tracking-wide text-gray-500">Gols, Assist. &amp; Pré-Assist.</span>
               <span className="text-sm">
-                Gols: <strong>{summary.totalGoals}</strong> — Ast: <strong>{summary.totalAssists}</strong>
+                G: <strong>{summary.totalGoals}</strong> — A: <strong>{summary.totalAssists}</strong> — PA: <strong>{summary.totalPreAssists}</strong>
               </span>
               <span className="text-xs text-gray-500">{summary.goalsPerGame.toFixed(2)} gol/jogo</span>
             </div>
@@ -1328,7 +1363,7 @@ export default function PlayerStatisticsByPlayerPage() {
             <div className="rounded-lg border bg-white p-3 flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wide text-gray-500">
-                  Melhor dia do jogador (part. = gols + assistências)
+                  Melhor dia do jogador (part. = gols + assist. + pré-assist.)
                 </span>
                 <DateBadge dateISO={bestDay.date.slice(0, 10)} colorMap={dateColorMap} />
               </div>
@@ -1340,7 +1375,7 @@ export default function PlayerStatisticsByPlayerPage() {
                   G/A: <strong>{bestDay.goals}</strong> / <strong>{bestDay.assists}</strong>
                 </span>
                 <span>
-                  Participações: <strong>{bestDay.goals + bestDay.assists}</strong>
+                  Participações: <strong>{bestDay.goals + bestDay.assists + bestDay.preAssists}</strong>
                 </span>
                 <span>
                   Passes: <strong>{bestDay.passesMade}</strong> / {bestDay.passesAttempted} (
@@ -1369,21 +1404,20 @@ export default function PlayerStatisticsByPlayerPage() {
           {hasRankingData && (
             <>
               {/* TOP 5 */}
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {/* Gols */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="mb-2">
                     <span className="text-xs font-semibold text-gray-700">
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM GOLS" : "TOP 5 JOGOS EM GOLS"}
                     </span>
-                    <span className={modeBadgeClass}>{modeLabel}</span>
                   </div>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs table-fixed">
                     <thead className="text-[11px] text-gray-500">
                       <tr>
-                        <th className="text-left pb-1">Data/Hora</th>
-                        <th className="text-right pb-1">Gols</th>
-                        <th className="text-right pb-1">Nota</th>
+                        <th className="text-left pb-1 w-[45%]">Data/Hora</th>
+                        <th className="text-right pb-1 w-[25%]">Gols</th>
+                        <th className="text-right pb-1 w-[30%]">Nota</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1411,18 +1445,17 @@ export default function PlayerStatisticsByPlayerPage() {
 
                 {/* Assistências */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="mb-2">
                     <span className="text-xs font-semibold text-gray-700">
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM ASSISTÊNCIAS" : "TOP 5 JOGOS EM ASSISTÊNCIAS"}
                     </span>
-                    <span className={modeBadgeClass}>{modeLabel}</span>
                   </div>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs table-fixed">
                     <thead className="text-[11px] text-gray-500">
                       <tr>
-                        <th className="text-left pb-1">Data/Hora</th>
-                        <th className="text-right pb-1">Ast</th>
-                        <th className="text-right pb-1">Nota</th>
+                        <th className="text-left pb-1 w-[45%]">Data/Hora</th>
+                        <th className="text-right pb-1 w-[25%]">Ast</th>
+                        <th className="text-right pb-1 w-[30%]">Nota</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1448,20 +1481,57 @@ export default function PlayerStatisticsByPlayerPage() {
                   </table>
                 </div>
 
+                {/* Pré-Assistências */}
+                <div className="border rounded-xl bg-white shadow-sm p-4">
+                  <div className="mb-2">
+                    <span className="text-xs font-semibold text-gray-700">
+                      {useDaysRanking ? "TOP 5 MELHORES DIAS EM PRÉ-ASSIST." : "TOP 5 JOGOS EM PRÉ-ASSIST."}
+                    </span>
+                  </div>
+                  <table className="w-full text-xs table-fixed">
+                    <thead className="text-[11px] text-gray-500">
+                      <tr>
+                        <th className="text-left pb-1 w-[45%]">Data/Hora</th>
+                        <th className="text-right pb-1 w-[25%]">Pré-Ast</th>
+                        <th className="text-right pb-1 w-[30%]">Nota</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topPreAssistsList.map((g) => (
+                        <tr key={`tpa-${g.id}`} className="hover:bg-gray-50">
+                          <td className="py-0.5 pr-2">
+                            {g.dateISO ? (
+                              <>
+                                <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
+                                {g.time && !useDaysRanking && (
+                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                )}
+                              </>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td className="py-0.5 text-right">{g.preAssists}</td>
+                          <td className="py-0.5 text-right text-gray-600">{g.rating.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
                 {/* Desarmes */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="mb-2">
                     <span className="text-xs font-semibold text-gray-700">
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM DESARMES" : "TOP 5 JOGOS EM DESARMES"}
                     </span>
-                    <span className={modeBadgeClass}>{modeLabel}</span>
                   </div>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs table-fixed">
                     <thead className="text-[11px] text-gray-500">
                       <tr>
-                        <th className="text-left pb-1">Data/Hora</th>
-                        <th className="text-right pb-1">Des.</th>
-                        <th className="text-right pb-1">% Des.</th>
+                        <th className="text-left pb-1 w-[45%]">Data/Hora</th>
+                        <th className="text-right pb-1 w-[25%]">Des.</th>
+                        <th className="text-right pb-1 w-[30%]">% Des.</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1489,18 +1559,17 @@ export default function PlayerStatisticsByPlayerPage() {
 
                 {/* Passes */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="mb-2">
                     <span className="text-xs font-semibold text-gray-700">
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM PASSES" : "TOP 5 JOGOS EM PASSES"}
                     </span>
-                    <span className={modeBadgeClass}>{modeLabel}</span>
                   </div>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs table-fixed">
                     <thead className="text-[11px] text-gray-500">
                       <tr>
-                        <th className="text-left pb-1">Data/Hora</th>
-                        <th className="text-right pb-1">Passes C/T</th>
-                        <th className="text-right pb-1">% Passe</th>
+                        <th className="text-left pb-1 w-[40%]">Data/Hora</th>
+                        <th className="text-right pb-1 w-[30%]">Passes C/T</th>
+                        <th className="text-right pb-1 w-[30%]">% Passe</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1530,21 +1599,20 @@ export default function PlayerStatisticsByPlayerPage() {
               </div>
 
               {/* PIORES 5 */}
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {/* Gols */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="mb-2">
                     <span className="text-xs font-semibold text-gray-700">
                       {useDaysRanking ? "PIORES 5 DIAS EM GOLS" : "PIORES 5 JOGOS EM GOLS"}
                     </span>
-                    <span className={modeBadgeClass}>{modeLabel}</span>
                   </div>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs table-fixed">
                     <thead className="text-[11px] text-gray-500">
                       <tr>
-                        <th className="text-left pb-1">Data/Hora</th>
-                        <th className="text-right pb-1">Gols</th>
-                        <th className="text-right pb-1">Nota</th>
+                        <th className="text-left pb-1 w-[45%]">Data/Hora</th>
+                        <th className="text-right pb-1 w-[25%]">Gols</th>
+                        <th className="text-right pb-1 w-[30%]">Nota</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1572,18 +1640,17 @@ export default function PlayerStatisticsByPlayerPage() {
 
                 {/* Assistências */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="mb-2">
                     <span className="text-xs font-semibold text-gray-700">
                       {useDaysRanking ? "PIORES 5 DIAS EM ASSISTÊNCIAS" : "PIORES 5 JOGOS EM ASSISTÊNCIAS"}
                     </span>
-                    <span className={modeBadgeClass}>{modeLabel}</span>
                   </div>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs table-fixed">
                     <thead className="text-[11px] text-gray-500">
                       <tr>
-                        <th className="text-left pb-1">Data/Hora</th>
-                        <th className="text-right pb-1">Ast</th>
-                        <th className="text-right pb-1">Nota</th>
+                        <th className="text-left pb-1 w-[45%]">Data/Hora</th>
+                        <th className="text-right pb-1 w-[25%]">Ast</th>
+                        <th className="text-right pb-1 w-[30%]">Nota</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1609,20 +1676,57 @@ export default function PlayerStatisticsByPlayerPage() {
                   </table>
                 </div>
 
+                {/* Pré-Assistências */}
+                <div className="border rounded-xl bg-white shadow-sm p-4">
+                  <div className="mb-2">
+                    <span className="text-xs font-semibold text-gray-700">
+                      {useDaysRanking ? "PIORES 5 DIAS EM PRÉ-ASSIST." : "PIORES 5 JOGOS EM PRÉ-ASSIST."}
+                    </span>
+                  </div>
+                  <table className="w-full text-xs table-fixed">
+                    <thead className="text-[11px] text-gray-500">
+                      <tr>
+                        <th className="text-left pb-1 w-[45%]">Data/Hora</th>
+                        <th className="text-right pb-1 w-[25%]">Pré-Ast</th>
+                        <th className="text-right pb-1 w-[30%]">Nota</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {worstPreAssistsList.map((g) => (
+                        <tr key={`wpa-${g.id}`} className="hover:bg-gray-50">
+                          <td className="py-0.5 pr-2">
+                            {g.dateISO ? (
+                              <>
+                                <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
+                                {g.time && !useDaysRanking && (
+                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                )}
+                              </>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td className="py-0.5 text-right">{g.preAssists}</td>
+                          <td className="py-0.5 text-right text-gray-600">{g.rating.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
                 {/* Desarmes */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="mb-2">
                     <span className="text-xs font-semibold text-gray-700">
                       {useDaysRanking ? "PIORES 5 DIAS EM DESARMES" : "PIORES 5 JOGOS EM DESARMES"}
                     </span>
-                    <span className={modeBadgeClass}>{modeLabel}</span>
                   </div>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs table-fixed">
                     <thead className="text-[11px] text-gray-500">
                       <tr>
-                        <th className="text-left pb-1">Data/Hora</th>
-                        <th className="text-right pb-1">Des.</th>
-                        <th className="text-right pb-1">% Des.</th>
+                        <th className="text-left pb-1 w-[45%]">Data/Hora</th>
+                        <th className="text-right pb-1 w-[25%]">Des.</th>
+                        <th className="text-right pb-1 w-[30%]">% Des.</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1650,18 +1754,17 @@ export default function PlayerStatisticsByPlayerPage() {
 
                 {/* Passes */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="mb-2">
                     <span className="text-xs font-semibold text-gray-700">
                       {useDaysRanking ? "PIORES 5 DIAS EM PASSES" : "PIORES 5 JOGOS EM PASSES"}
                     </span>
-                    <span className={modeBadgeClass}>{modeLabel}</span>
                   </div>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs table-fixed">
                     <thead className="text-[11px] text-gray-500">
                       <tr>
-                        <th className="text-left pb-1">Data/Hora</th>
-                        <th className="text-right pb-1">Passes C/T</th>
-                        <th className="text-right pb-1">% Passe</th>
+                        <th className="text-left pb-1 w-[40%]">Data/Hora</th>
+                        <th className="text-right pb-1 w-[30%]">Passes C/T</th>
+                        <th className="text-right pb-1 w-[30%]">% Passe</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1717,6 +1820,7 @@ export default function PlayerStatisticsByPlayerPage() {
                   <th className="px-3 py-2 text-right">Jogos</th>
                   <th className="px-3 py-2 text-right">Gols</th>
                   <th className="px-3 py-2 text-right">Assist.</th>
+                  <th className="px-3 py-2 text-right">Pré-Assist.</th>
                   <th className="px-3 py-2 text-right">Passes (C/T)</th>
                   <th className="px-3 py-2 text-right">% Passes</th>
                   <th className="px-3 py-2 text-right">Desarmes (C/T)</th>
@@ -1747,6 +1851,7 @@ export default function PlayerStatisticsByPlayerPage() {
                       <td className="px-3 py-2 text-right">{d.matches}</td>
                       <td className="px-3 py-2 text-right">{d.goals}</td>
                       <td className="px-3 py-2 text-right">{d.assists}</td>
+                      <td className="px-3 py-2 text-right">{d.preAssists}</td>
                       <td className="px-3 py-2 text-right">
                         {d.passesMade} / {d.passesAttempted}
                       </td>
@@ -1804,10 +1909,27 @@ export default function PlayerStatisticsByPlayerPage() {
                   </div>
                 </div>
 
+                {/* Pré-Assistências */}
+                <div className="bg-white border rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">Pré-Assistências</span>
+                    <span
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: CHART_COLORS.preAssists }}
+                    />
+                  </div>
+                  <div className="h-48">
+                    <Line
+                      data={{ labels: chartDataForPlayer.labels, datasets: chartDataForPlayer.preAssists }}
+                      options={chartOptionsDefault}
+                    />
+                  </div>
+                </div>
+
                 {/* Participações */}
                 <div className="bg-white border rounded-xl p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Participações (G+A)</span>
+                    <span className="text-sm font-medium text-gray-700">Participações (G+A+PA)</span>
                     <span
                       className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: CHART_COLORS.participations }}
@@ -1902,7 +2024,7 @@ export default function PlayerStatisticsByPlayerPage() {
             <div className="rounded-lg border bg-white p-3 flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wide text-gray-500">
-                  Melhor jogo do dia (part. = gols + assistências)
+                  Melhor jogo do dia (part. = gols + assist. + pré-assist.)
                 </span>
                 {bestGameOfDay.time && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-slate-100 border border-slate-300 text-slate-800">

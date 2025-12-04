@@ -386,10 +386,11 @@ export default function PlayerStatisticsByDatePage() {
         playerName: string;
         goals: BestPerMetric;
         assists: BestPerMetric;
+        preAssists: BestPerMetric;     // pré-assistências
         passPct: BestPerMetric;
         tacklePct: BestPerMetric;
         tackles: BestPerMetric;        // número de tackles certos
-        participations: BestPerMetric; // (gols + assistências) / jogos
+        participations: BestPerMetric; // (gols + assistências + pré-assistências) / jogos
         saves: BestPerMetric;
         rating: BestPerMetric;
     };
@@ -406,8 +407,9 @@ export default function PlayerStatisticsByDatePage() {
 
                 const goals = toNum((p as any).totalGoals ?? (p as any).TotalGoals);
                 const assists = toNum((p as any).totalAssists ?? (p as any).TotalAssists);
+                const preAssists = toNum((p as any).totalPreAssists ?? (p as any).TotalPreAssists);
                 const matches = Math.max(1, getMatchesPlayed(p));
-                const participationsVal = (goals + assists) / matches;
+                const participationsVal = (goals + assists + preAssists) / matches;
                 const passPct = getPassPct(p as any);
                 const tacklePct = getTacklePct(p as any);
                 const tacklesCount = getSuccessfulTackles(p as any); // tackles certos
@@ -420,6 +422,7 @@ export default function PlayerStatisticsByDatePage() {
                     playerName: name,
                     goals: { date: d.date, value: goals },
                     assists: { date: d.date, value: assists },
+                    preAssists: { date: d.date, value: preAssists },
                     passPct: { date: d.date, value: passPct },
                     tacklePct: { date: d.date, value: tacklePct },
                     tackles: { date: d.date, value: tacklesCount },
@@ -444,6 +447,7 @@ export default function PlayerStatisticsByDatePage() {
                 curBest.playerName = name;
                 curBest.goals = pickBest(curBest.goals, goals);
                 curBest.assists = pickBest(curBest.assists, assists);
+                curBest.preAssists = pickBest(curBest.preAssists, preAssists);
                 curBest.passPct = pickBest(curBest.passPct, passPct);
                 curBest.tacklePct = pickBest(curBest.tacklePct, tacklePct);
                 curBest.tackles = pickBest(curBest.tackles, tacklesCount);
@@ -457,6 +461,7 @@ export default function PlayerStatisticsByDatePage() {
                 curWorst.playerName = name;
                 curWorst.goals = pickWorst(curWorst.goals, goals);
                 curWorst.assists = pickWorst(curWorst.assists, assists);
+                curWorst.preAssists = pickWorst(curWorst.preAssists, preAssists);
                 curWorst.passPct = pickWorst(curWorst.passPct, passPct);
                 curWorst.tacklePct = pickWorst(curWorst.tacklePct, tacklePct);
                 curWorst.tackles = pickWorst(curWorst.tackles, tacklesCount);
@@ -710,26 +715,27 @@ export default function PlayerStatisticsByDatePage() {
                             <thead className="bg-gray-50">
                                 <tr>
                                     <th className="px-3 py-2 text-left">Jogador</th>
-                                    <th className="px-3 py-2">Gols</th>
-                                    <th className="px-3 py-2">Assistências</th>
-                                    <th className="px-3 py-2">Passe (%)</th>
-                                    <th className="px-3 py-2">Desarme (%)</th>
-                                    <th className="px-3 py-2">
+                                    <th className="px-3 py-2 text-center">Gols</th>
+                                    <th className="px-3 py-2 text-center">Assistências</th>
+                                    <th className="px-3 py-2 text-center">Pré-Assist.</th>
+                                    <th className="px-3 py-2 text-center">Passe (%)</th>
+                                    <th className="px-3 py-2 text-center">Desarme (%)</th>
+                                    <th className="px-3 py-2 text-center">
                                         Tackles certos
                                         <Info title="Número de desarmes/tackles bem sucedidos no dia" />
                                     </th>
-                                    <th className="px-3 py-2">
+                                    <th className="px-3 py-2 text-center">
                                         Participações
-                                        <Info title="(Gols + Assistências) / Jogos do dia" />
+                                        <Info title="(Gols + Assistências + Pré-Assist.) / Jogos do dia" />
                                     </th>
-                                    <th className="px-3 py-2">Defesas</th>
-                                    <th className="px-3 py-2">Nota</th>
+                                    <th className="px-3 py-2 text-center">Defesas</th>
+                                    <th className="px-3 py-2 text-center">Nota</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {bestDayPerPlayer.length === 0 && (
                                     <tr>
-                                        <td colSpan={9} className="px-3 py-3 text-center text-gray-600">
+                                        <td colSpan={10} className="px-3 py-3 text-center text-gray-600">
                                             Nenhum jogador no período.
                                         </td>
                                     </tr>
@@ -737,35 +743,39 @@ export default function PlayerStatisticsByDatePage() {
                                 {bestDayPerPlayer.map((r) => (
                                     <tr key={r.playerId} className="hover:bg-gray-50">
                                         <td className="px-3 py-2 text-left">{r.playerName}</td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.goals.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.goals.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.assists.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.assists.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
+                                            {r.preAssists.value}{" "}
+                                            <DateBadge className="ml-1" dateISO={r.preAssists.date} colorMap={dateColorMap} />
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
                                             {r.passPct.value.toFixed(1)}%{" "}
                                             <DateBadge className="ml-1" dateISO={r.passPct.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.tacklePct.value.toFixed(1)}%{" "}
                                             <DateBadge className="ml-1" dateISO={r.tacklePct.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.tackles.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.tackles.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.participations.value.toFixed(2)}{" "}
                                             <DateBadge className="ml-1" dateISO={r.participations.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.saves.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.saves.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {Number(r.rating.value).toFixed(2)}{" "}
                                             <DateBadge className="ml-1" dateISO={r.rating.date} colorMap={dateColorMap} />
                                         </td>
@@ -788,26 +798,27 @@ export default function PlayerStatisticsByDatePage() {
                             <thead className="bg-gray-50">
                                 <tr>
                                     <th className="px-3 py-2 text-left">Jogador</th>
-                                    <th className="px-3 py-2">Gols</th>
-                                    <th className="px-3 py-2">Assistências</th>
-                                    <th className="px-3 py-2">Passe (%)</th>
-                                    <th className="px-3 py-2">Desarme (%)</th>
-                                    <th className="px-3 py-2">
+                                    <th className="px-3 py-2 text-center">Gols</th>
+                                    <th className="px-3 py-2 text-center">Assistências</th>
+                                    <th className="px-3 py-2 text-center">Pré-Assist.</th>
+                                    <th className="px-3 py-2 text-center">Passe (%)</th>
+                                    <th className="px-3 py-2 text-center">Desarme (%)</th>
+                                    <th className="px-3 py-2 text-center">
                                         Tackles certos
                                         <Info title="Número de desarmes/tackles bem sucedidos no dia" />
                                     </th>
-                                    <th className="px-3 py-2">
+                                    <th className="px-3 py-2 text-center">
                                         Participações
-                                        <Info title="(Gols + Assistências) / Jogos do dia" />
+                                        <Info title="(Gols + Assistências + Pré-Assist.) / Jogos do dia" />
                                     </th>
-                                    <th className="px-3 py-2">Defesas</th>
-                                    <th className="px-3 py-2">Nota</th>
+                                    <th className="px-3 py-2 text-center">Defesas</th>
+                                    <th className="px-3 py-2 text-center">Nota</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {worstDayPerPlayer.length === 0 && (
                                     <tr>
-                                        <td colSpan={9} className="px-3 py-3 text-center text-gray-600">
+                                        <td colSpan={10} className="px-3 py-3 text-center text-gray-600">
                                             Nenhum jogador no período.
                                         </td>
                                     </tr>
@@ -815,35 +826,39 @@ export default function PlayerStatisticsByDatePage() {
                                 {worstDayPerPlayer.map((r) => (
                                     <tr key={r.playerId} className="hover:bg-gray-50">
                                         <td className="px-3 py-2 text-left">{r.playerName}</td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.goals.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.goals.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.assists.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.assists.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
+                                            {r.preAssists.value}{" "}
+                                            <DateBadge className="ml-1" dateISO={r.preAssists.date} colorMap={dateColorMap} />
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
                                             {r.passPct.value.toFixed(1)}%{" "}
                                             <DateBadge className="ml-1" dateISO={r.passPct.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.tacklePct.value.toFixed(1)}%{" "}
                                             <DateBadge className="ml-1" dateISO={r.tacklePct.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.tackles.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.tackles.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.participations.value.toFixed(2)}{" "}
                                             <DateBadge className="ml-1" dateISO={r.participations.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {r.saves.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.saves.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             {Number(r.rating.value).toFixed(2)}{" "}
                                             <DateBadge className="ml-1" dateISO={r.rating.date} colorMap={dateColorMap} />
                                         </td>

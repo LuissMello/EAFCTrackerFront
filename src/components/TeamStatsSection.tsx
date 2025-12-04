@@ -91,8 +91,8 @@ export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }
     },
     {
       id: "goals",
-      label: "Gols / Assist.",
-      value: `${int.format(clubStats.totalGoals)} / ${int.format(clubStats.totalAssists)}`,
+      label: "Gols / Assist. / Pré-Assist.",
+      value: `${int.format(clubStats.totalGoals)} / ${int.format(clubStats.totalAssists)} / ${int.format(clubStats.totalPreAssists ?? 0)}`,
     },
     {
       id: "shots",
