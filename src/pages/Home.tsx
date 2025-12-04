@@ -5,76 +5,77 @@ import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
 import { PlugZap } from "lucide-react";
 import { GiGoalKeeper } from "react-icons/gi";
+import { crestUrl, divisionCrestUrl, FALLBACK_LOGO } from "../config/urls.ts";
 
 /* ======================
    Tipos
 ====================== */
 interface ClubDetailsDto {
-    name?: string | null;
-    clubId?: number | null;
-    regionId?: number | null;
-    teamId?: number | null;
-    stadName?: string | null;
-    kitId?: string | null;
-    customKitId?: string | null;
-    customAwayKitId?: string | null;
-    customThirdKitId?: string | null;
-    customKeeperKitId?: string | null;
-    kitColor1?: string | number | null;
-    kitColor2?: string | number | null;
-    kitColor3?: string | number | null;
-    kitColor4?: string | number | null;
-    kitAColor1?: string | number | null;
-    kitAColor2?: string | number | null;
-    kitAColor3?: string | number | null;
-    kitAColor4?: string | number | null;
-    kitThrdColor1?: string | number | null;
-    kitThrdColor2?: string | number | null;
-    kitThrdColor3?: string | number | null;
-    kitThrdColor4?: string | number | null;
-    dCustomKit?: string | null;
-    crestColor?: string | null;
-    crestAssetId?: string | null;
-    selectedKitType?: string | null;
-    team?: string | null;
+  name?: string | null;
+  clubId?: number | null;
+  regionId?: number | null;
+  teamId?: number | null;
+  stadName?: string | null;
+  kitId?: string | null;
+  customKitId?: string | null;
+  customAwayKitId?: string | null;
+  customThirdKitId?: string | null;
+  customKeeperKitId?: string | null;
+  kitColor1?: string | number | null;
+  kitColor2?: string | number | null;
+  kitColor3?: string | number | null;
+  kitColor4?: string | number | null;
+  kitAColor1?: string | number | null;
+  kitAColor2?: string | number | null;
+  kitAColor3?: string | number | null;
+  kitAColor4?: string | number | null;
+  kitThrdColor1?: string | number | null;
+  kitThrdColor2?: string | number | null;
+  kitThrdColor3?: string | number | null;
+  kitThrdColor4?: string | number | null;
+  dCustomKit?: string | null;
+  crestColor?: string | null;
+  crestAssetId?: string | null;
+  selectedKitType?: string | null;
+  team?: string | null;
 
-    // PascalCase aliases
-    Name?: string | null;
-    StadName?: string | null;
-    CrestAssetId?: string | null;
-    TeamId?: number | null;
+  // PascalCase aliases
+  Name?: string | null;
+  StadName?: string | null;
+  CrestAssetId?: string | null;
+  TeamId?: number | null;
 
-    currentDivision?: number | null;
+  currentDivision?: number | null;
 }
 
 interface ClubMatchSummaryDto {
-    redCards: number;
-    hadHatTrick: boolean;
-    hatTrickPlayerNames: Array<string | null>;
-    goalkeeperPlayerName?: string | null;
-    manOfTheMatchPlayerName?: string | null;
-    disconnected: boolean;
+  redCards: number;
+  hadHatTrick: boolean;
+  hatTrickPlayerNames: Array<string | null>;
+  goalkeeperPlayerName?: string | null;
+  manOfTheMatchPlayerName?: string | null;
+  disconnected: boolean;
 }
 
 interface MatchResultDto {
-    matchId: number;
-    timestamp: string | number | null;
+  matchId: number;
+  timestamp: string | number | null;
 
-    clubAName: string;
-    clubAGoals: number;
-    clubARedCards?: number | null;
-    clubAPlayerCount?: number | null;
-    clubADetails?: ClubDetailsDto | null;
-    clubASummary?: ClubMatchSummaryDto | null;
+  clubAName: string;
+  clubAGoals: number;
+  clubARedCards?: number | null;
+  clubAPlayerCount?: number | null;
+  clubADetails?: ClubDetailsDto | null;
+  clubASummary?: ClubMatchSummaryDto | null;
 
-    clubBName: string;
-    clubBGoals: number;
-    clubBRedCards?: number | null;
-    clubBPlayerCount?: number | null;
-    clubBDetails?: ClubDetailsDto | null;
-    clubBSummary?: ClubMatchSummaryDto | null;
+  clubBName: string;
+  clubBGoals: number;
+  clubBRedCards?: number | null;
+  clubBPlayerCount?: number | null;
+  clubBDetails?: ClubDetailsDto | null;
+  clubBSummary?: ClubMatchSummaryDto | null;
 
-    resultText?: string | null;
+  resultText?: string | null;
 }
 
 type MatchTypeFilter = "All" | "League" | "Playoff";
@@ -83,188 +84,188 @@ type RedCardFilter = "all" | "none" | "1plus" | "2plus";
 
 /** Payload paginado (back) */
 interface PagedResult<T> {
-    page: number;
-    pageSize: number;
-    totalCount: number;
-    totalPages: number;
-    hasPrevious: boolean;
-    hasNext: boolean;
-    items: T[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
+  items: T[];
 }
 
 /* ======================
    Helpers
 ====================== */
 const fmtDateTime = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" });
-const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
 
-const FALLBACK_LOGO = "https://via.placeholder.com/96?text=Logo";
 const AVATAR_PX = 40;
 
-function asPositiveIntString(v: unknown): string | null {
-    if (v === null || v === undefined) return null;
-    const n = Number(v);
-    if (!Number.isFinite(n)) return null;
-    const i = Math.trunc(n);
-    return i > 0 ? String(i) : null;
-}
-
-const divisionCrestUrl = (division?: string | number | null) => {
-    const n = asPositiveIntString(division);
-    return n ? `https://media.contentapi.ea.com/content/dam/eacom/fc/pro-clubs/divisioncrest${n}.png` : null;
-};
-
-function crestUrl(crestAssetId?: string | null) {
-    if (!crestAssetId) return FALLBACK_LOGO;
-    return `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${crestAssetId}.png`;
-}
-
 function toHex(dec: string | number | null | undefined): string | null {
-    if (dec === null || dec === undefined) return null;
-    if (typeof dec === "string") {
-        const s = dec.trim();
-        if (/^#?[0-9a-fA-F]{6}$/.test(s)) return s.startsWith("#") ? s : `#${s}`;
-        const n = Number(s);
-        if (!Number.isNaN(n)) return `#${n.toString(16).padStart(6, "0").toUpperCase()}`;
-        return null;
-    }
-    if (typeof dec === "number") return `#${dec.toString(16).padStart(6, "0").toUpperCase()}`;
+  if (dec === null || dec === undefined) return null;
+  if (typeof dec === "string") {
+    const s = dec.trim();
+    if (/^#?[0-9a-fA-F]{6}$/.test(s)) return s.startsWith("#") ? s : `#${s}`;
+    const n = Number(s);
+    if (!Number.isNaN(n)) return `#${n.toString(16).padStart(6, "0").toUpperCase()}`;
     return null;
+  }
+  if (typeof dec === "number") return `#${dec.toString(16).padStart(6, "0").toUpperCase()}`;
+  return null;
 }
 
 /** 🔒 Timestamp robusto */
 function parseTimestamp(ts?: string | number | null): Date | null {
-    if (ts == null) return null;
-    if (typeof ts === "number") {
-        const d = new Date(ts);
-        return Number.isFinite(d.getTime()) ? d : null;
-    }
-    const raw = String(ts).trim();
-    if (!raw) return null;
-    // adiciona Z se vier sem timezone, ex: "2025-10-29T12:34:56"
-    const needsZ = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/.test(raw);
-    const d = new Date(needsZ ? `${raw}Z` : raw);
+  if (ts == null) return null;
+  if (typeof ts === "number") {
+    const d = new Date(ts);
     return Number.isFinite(d.getTime()) ? d : null;
+  }
+  const raw = String(ts).trim();
+  if (!raw) return null;
+  // adiciona Z se vier sem timezone, ex: "2025-10-29T12:34:56"
+  const needsZ = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/.test(raw);
+  const d = new Date(needsZ ? `${raw}Z` : raw);
+  return Number.isFinite(d.getTime()) ? d : null;
 }
 
 function formatDateSafe(ts?: string | number | null, fallback = "—"): string {
-    const d = parseTimestamp(ts);
-    return d ? fmtDateTime.format(d) : fallback;
+  const d = parseTimestamp(ts);
+  return d ? fmtDateTime.format(d) : fallback;
 }
 
 function timeValue(ts?: string | number | null, whenInvalid = -Infinity) {
-    const d = parseTimestamp(ts);
-    return d ? d.getTime() : whenInvalid;
+  const d = parseTimestamp(ts);
+  return d ? d.getTime() : whenInvalid;
 }
 
 /** Normalização do payload (paged vs array; camelCase vs PascalCase) */
 type PagedLike<T> = {
-    items?: T[]; Items?: T[];
-    totalCount?: number; TotalCount?: number;
-    totalPages?: number; TotalPages?: number;
-    page?: number; Page?: number;
-    pageSize?: number; PageSize?: number;
-    hasNext?: boolean; HasNext?: boolean;
-    hasPrevious?: boolean; HasPrevious?: boolean;
+  items?: T[];
+  Items?: T[];
+  totalCount?: number;
+  TotalCount?: number;
+  totalPages?: number;
+  TotalPages?: number;
+  page?: number;
+  Page?: number;
+  pageSize?: number;
+  PageSize?: number;
+  hasNext?: boolean;
+  HasNext?: boolean;
+  hasPrevious?: boolean;
+  HasPrevious?: boolean;
 };
 
 function coercePaged<T>(data: any): {
-    items: T[];
-    page: number;
-    pageSize: number;
-    totalCount: number;
-    totalPages: number;
-    hasNext: boolean;
-    hasPrevious: boolean;
-    isPaged: boolean;
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+  isPaged: boolean;
 } {
-    if (Array.isArray(data)) {
-        const items = data as T[];
-        return {
-            items,
-            page: 1,
-            pageSize: items.length,
-            totalCount: items.length,
-            totalPages: items.length ? 1 : 0,
-            hasNext: false,
-            hasPrevious: false,
-            isPaged: false,
-        };
-    }
-    const obj = (data ?? {}) as PagedLike<T>;
-    const items = (obj.items ?? obj.Items ?? []) as T[];
+  if (Array.isArray(data)) {
+    const items = data as T[];
+    return {
+      items,
+      page: 1,
+      pageSize: items.length,
+      totalCount: items.length,
+      totalPages: items.length ? 1 : 0,
+      hasNext: false,
+      hasPrevious: false,
+      isPaged: false,
+    };
+  }
+  const obj = (data ?? {}) as PagedLike<T>;
+  const items = (obj.items ?? obj.Items ?? []) as T[];
 
-    const alt = (data?.data ?? data?.Data);
-    const finalItems =
-        Array.isArray(items) && items.length ? items :
-            (Array.isArray(alt) ? (alt as T[]) : []);
+  const alt = data?.data ?? data?.Data;
+  const finalItems = Array.isArray(items) && items.length ? items : Array.isArray(alt) ? (alt as T[]) : [];
 
-    const page = obj.page ?? obj.Page ?? 1;
-    const pageSize = obj.pageSize ?? obj.PageSize ?? finalItems.length;
-    const totalCount = obj.totalCount ?? obj.TotalCount ?? finalItems.length;
-    const totalPages = obj.totalPages ?? obj.TotalPages ?? (finalItems.length ? 1 : 0);
-    const hasNext = obj.hasNext ?? obj.HasNext ?? (page < totalPages);
-    const hasPrevious = obj.hasPrevious ?? obj.HasPrevious ?? (page > 1);
+  const page = obj.page ?? obj.Page ?? 1;
+  const pageSize = obj.pageSize ?? obj.PageSize ?? finalItems.length;
+  const totalCount = obj.totalCount ?? obj.TotalCount ?? finalItems.length;
+  const totalPages = obj.totalPages ?? obj.TotalPages ?? (finalItems.length ? 1 : 0);
+  const hasNext = obj.hasNext ?? obj.HasNext ?? page < totalPages;
+  const hasPrevious = obj.hasPrevious ?? obj.HasPrevious ?? page > 1;
 
-    const isPaged = !!(obj.items ?? obj.Items ?? alt);
+  const isPaged = !!(obj.items ?? obj.Items ?? alt);
 
-    return { items: finalItems, page, pageSize, totalCount, totalPages, hasNext, hasPrevious, isPaged };
+  return { items: finalItems, page, pageSize, totalCount, totalPages, hasNext, hasPrevious, isPaged };
 }
 
 /* ======================
    UI
 ====================== */
 function Skeleton({ className = "" }: { className?: string }) {
-    return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
+  return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
 }
 
-function Badge({ color = "gray", children }: { color?: "gray" | "green" | "red" | "amber"; children: React.ReactNode }) {
-    const palette: Record<string, string> = {
-        gray: "bg-gray-50 border-gray-200 text-gray-600",
-        green: "bg-green-50 border-green-200 text-green-700",
-        red: "bg-red-50 border-red-200 text-red-700",
-        amber: "bg-amber-50 border-amber-200 text-amber-700",
-    };
-    return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${palette[color]}`}>{children}</span>;
+function Badge({
+  color = "gray",
+  children,
+}: {
+  color?: "gray" | "green" | "red" | "amber";
+  children: React.ReactNode;
+}) {
+  const palette: Record<string, string> = {
+    gray: "bg-gray-50 border-gray-200 text-gray-600",
+    green: "bg-green-50 border-green-200 text-green-700",
+    red: "bg-red-50 border-red-200 text-red-700",
+    amber: "bg-amber-50 border-amber-200 text-amber-700",
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${palette[color]}`}>
+      {children}
+    </span>
+  );
 }
 
 function OutcomeBadge({ a, b }: { a: number; b: number }) {
-    if (a > b) return <Badge color="green">Vitória</Badge>;
-    if (a < b) return <Badge color="red">Derrota</Badge>;
-    return <Badge color="amber">Empate</Badge>;
+  if (a > b) return <Badge color="green">Vitória</Badge>;
+  if (a < b) return <Badge color="red">Derrota</Badge>;
+  return <Badge color="amber">Empate</Badge>;
 }
 
 function ToolbarSeparator() {
-    return <div className="hidden sm:block w-px self-stretch bg-gray-200" />;
+  return <div className="hidden sm:block w-px self-stretch bg-gray-200" />;
 }
 
 function Segmented({ value, onChange }: { value: MatchTypeFilter; onChange: (v: MatchTypeFilter) => void }) {
-    const opts: { v: MatchTypeFilter; label: string }[] = [
-        { v: "All", label: "Todos" },
-        { v: "League", label: "Liga" },
-        { v: "Playoff", label: "Playoff" },
-    ];
-    return (
-        <div role="tablist" aria-label="Tipo de partida" className="inline-flex rounded-xl border bg-white p-1">
-            {opts.map((o) => (
-                <button
-                    key={o.v}
-                    role="tab"
-                    aria-selected={value === o.v}
-                    onClick={() => onChange(o.v)}
-                    className={`px-3 py-1.5 rounded-lg text-sm transition ${value === o.v ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                >
-                    {o.label}
-                </button>
-            ))}
-        </div>
-    );
+  const opts: { v: MatchTypeFilter; label: string }[] = [
+    { v: "All", label: "Todos" },
+    { v: "League", label: "Liga" },
+    { v: "Playoff", label: "Playoff" },
+  ];
+  return (
+    <div role="tablist" aria-label="Tipo de partida" className="inline-flex rounded-xl border bg-white p-1">
+      {opts.map((o) => (
+        <button
+          key={o.v}
+          role="tab"
+          aria-selected={value === o.v}
+          onClick={() => onChange(o.v)}
+          className={`px-3 py-1.5 rounded-lg text-sm transition ${
+            value === o.v ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 const PersonIcon = ({ className = "" }: { className?: string }) => (
-    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden className={className}>
-        <path fill="currentColor" d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z" />
-    </svg>
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden className={className}>
+    <path
+      fill="currentColor"
+      d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"
+    />
+  </svg>
 );
 
 /* ======================
@@ -274,1281 +275,1432 @@ type JerseyPattern = "plain" | "hoops" | "stripes" | "sash" | "halves" | "quarte
 const KNOWN_TEMPLATES: Record<string, JerseyPattern> = {};
 
 function guessPattern(details?: ClubDetailsDto | null): JerseyPattern {
-    const txt =
-        ((details?.customKitId || details?.kitId) ?? "") +
-        "|" +
-        ((details?.kitId) ?? "") +
-        "|" +
-        (details?.dCustomKit ?? (details as any)?.DCustomKit ?? "");
+  const txt =
+    ((details?.customKitId || details?.kitId) ?? "") +
+    "|" +
+    (details?.kitId ?? "") +
+    "|" +
+    (details?.dCustomKit ?? (details as any)?.DCustomKit ?? "");
 
-    for (const key of Object.keys(KNOWN_TEMPLATES)) {
-        if (txt.includes(key)) return KNOWN_TEMPLATES[key];
-    }
-    const hasC4 = !!(details?.kitColor4 ?? (details as any)?.KitColor4);
-    const hint = txt.toLowerCase();
-    if (hint.includes("sash")) return "sash";
-    if (hint.includes("stripe")) return "stripes";
-    if (hint.includes("hoop")) return "hoops";
-    if (hint.includes("half")) return "halves";
-    if (hint.includes("quarter")) return "quarters";
-    return hasC4 ? "hoops" : "plain";
+  for (const key of Object.keys(KNOWN_TEMPLATES)) {
+    if (txt.includes(key)) return KNOWN_TEMPLATES[key];
+  }
+  const hasC4 = !!(details?.kitColor4 ?? (details as any)?.KitColor4);
+  const hint = txt.toLowerCase();
+  if (hint.includes("sash")) return "sash";
+  if (hint.includes("stripe")) return "stripes";
+  if (hint.includes("hoop")) return "hoops";
+  if (hint.includes("half")) return "halves";
+  if (hint.includes("quarter")) return "quarters";
+  return hasC4 ? "hoops" : "plain";
 }
 
 function KitJersey({
-    colors,
-    pattern = "plain",
-    sizePx = AVATAR_PX,
-    className = "",
-    title = "Mini camisa",
+  colors,
+  pattern = "plain",
+  sizePx = AVATAR_PX,
+  className = "",
+  title = "Mini camisa",
 }: {
-    colors: Array<string | number | null | undefined>;
-    pattern?: JerseyPattern;
-    sizePx?: number;
-    className?: string;
-    title?: string;
+  colors: Array<string | number | null | undefined>;
+  pattern?: JerseyPattern;
+  sizePx?: number;
+  className?: string;
+  title?: string;
 }) {
-    const raw = useId();
-    const uidRef = useRef(`jersey-${raw.replace(/[^a-zA-Z0-9_-]/g, "")}-${Math.random().toString(36).slice(2, 7)}`);
-    const uid = uidRef.current;
+  const raw = useId();
+  const uidRef = useRef(`jersey-${raw.replace(/[^a-zA-Z0-9_-]/g, "")}-${Math.random().toString(36).slice(2, 7)}`);
+  const uid = uidRef.current;
 
-    const idBody = `${uid}-body`;
-    const idSlL = `${uid}-slL`;
-    const idSlR = `${uid}-slR`;
-    const needsSleeveClips = pattern === "hoops" || pattern === "stripes" || pattern === "sash";
+  const idBody = `${uid}-body`;
+  const idSlL = `${uid}-slL`;
+  const idSlR = `${uid}-slR`;
+  const needsSleeveClips = pattern === "hoops" || pattern === "stripes" || pattern === "sash";
 
-    const [c1, c2, c3, c4] = [
-        toHex(colors[0]) ?? "#9CA3AF",
-        toHex(colors[1]) ?? undefined,
-        toHex(colors[2]) ?? "#111827",
-        toHex(colors[3]) ?? undefined,
-    ];
+  const [c1, c2, c3, c4] = [
+    toHex(colors[0]) ?? "#9CA3AF",
+    toHex(colors[1]) ?? undefined,
+    toHex(colors[2]) ?? "#111827",
+    toHex(colors[3]) ?? undefined,
+  ];
 
-    const body = c1;
-    const sleeves = c2 ?? body;
-    const collar = c3!;
-    const accent = c4 ?? sleeves;
+  const body = c1;
+  const sleeves = c2 ?? body;
+  const collar = c3!;
+  const accent = c4 ?? sleeves;
 
-    const bodyX = 20, bodyY = 18, bodyW = 24, bodyH = 34;
-    const slLy1 = 18, slLy2 = 32;
+  const bodyX = 20,
+    bodyY = 18,
+    bodyW = 24,
+    bodyH = 34;
+  const slLy1 = 18,
+    slLy2 = 32;
 
-    const renderHoops = () => {
-        const stripeCount = 5;
-        const gap = 2;
-        const h = (bodyH - (stripeCount - 1) * gap) / stripeCount;
-        const rows: JSX.Element[] = [];
-        for (let i = 0; i < stripeCount; i++) {
-            const y = bodyY + i * (h + gap);
-            rows.push(<rect key={`b-${i}`} x={bodyX} y={y} width={bodyW} height={h} fill={accent} />);
-        }
-        return <g clipPath={`url(#${idBody})`}>{rows}</g>;
-    };
+  const renderHoops = () => {
+    const stripeCount = 5;
+    const gap = 2;
+    const h = (bodyH - (stripeCount - 1) * gap) / stripeCount;
+    const rows: JSX.Element[] = [];
+    for (let i = 0; i < stripeCount; i++) {
+      const y = bodyY + i * (h + gap);
+      rows.push(<rect key={`b-${i}`} x={bodyX} y={y} width={bodyW} height={h} fill={accent} />);
+    }
+    return <g clipPath={`url(#${idBody})`}>{rows}</g>;
+  };
 
-    const renderStripes = () => {
-        const stripeCount = 6;
-        const gap = 1.5;
-        const w = (bodyW - (stripeCount - 1) * gap) / stripeCount;
-        const cols: JSX.Element[] = [];
-        for (let i = 0; i < stripeCount; i++) {
-            const x = bodyX + i * (w + gap);
-            cols.push(<rect key={`bcol-${i}`} x={x} y={bodyY} width={w} height={bodyH} fill={accent} />);
-        }
-        return <g clipPath={`url(#${idBody})`}>{cols}</g>;
-    };
+  const renderStripes = () => {
+    const stripeCount = 6;
+    const gap = 1.5;
+    const w = (bodyW - (stripeCount - 1) * gap) / stripeCount;
+    const cols: JSX.Element[] = [];
+    for (let i = 0; i < stripeCount; i++) {
+      const x = bodyX + i * (w + gap);
+      cols.push(<rect key={`bcol-${i}`} x={x} y={bodyY} width={w} height={bodyH} fill={accent} />);
+    }
+    return <g clipPath={`url(#${idBody})`}>{cols}</g>;
+  };
 
-    const renderSash = () => (
-        <>
-            <polygon points="16,18 24,18 48,52 40,52" fill={accent} opacity={0.95} />
-        </>
-    );
+  const renderSash = () => (
+    <>
+      <polygon points="16,18 24,18 48,52 40,52" fill={accent} opacity={0.95} />
+    </>
+  );
 
-    const renderHalves = () => (
-        <>
-            <rect x={20} y={18} width={bodyW / 2} height={bodyH} rx={0} fill={body} />
-            <rect x={20 + bodyW / 2} y={18} width={bodyW / 2} height={bodyH} rx={0} fill={accent} />
-        </>
-    );
+  const renderHalves = () => (
+    <>
+      <rect x={20} y={18} width={bodyW / 2} height={bodyH} rx={0} fill={body} />
+      <rect x={20 + bodyW / 2} y={18} width={bodyW / 2} height={bodyH} rx={0} fill={accent} />
+    </>
+  );
 
-    const renderQuarters = () => (
-        <>
-            <rect x={20} y={18} width={bodyW / 2} height={bodyH / 2} fill={body} />
-            <rect x={20 + bodyW / 2} y={18} width={bodyW / 2} height={bodyH / 2} fill={accent} />
-            <rect x={20} y={18 + bodyH / 2} width={bodyW / 2} height={bodyH / 2} fill={accent} />
-            <rect x={20 + bodyW / 2} y={18 + bodyH / 2} width={bodyW / 2} height={bodyH / 2} fill={body} />
-        </>
-    );
+  const renderQuarters = () => (
+    <>
+      <rect x={20} y={18} width={bodyW / 2} height={bodyH / 2} fill={body} />
+      <rect x={20 + bodyW / 2} y={18} width={bodyW / 2} height={bodyH / 2} fill={accent} />
+      <rect x={20} y={18 + bodyH / 2} width={bodyW / 2} height={bodyH / 2} fill={accent} />
+      <rect x={20 + bodyW / 2} y={18 + bodyH / 2} width={bodyW / 2} height={bodyH / 2} fill={body} />
+    </>
+  );
 
-    return (
-        <svg
-            width={sizePx}
-            height={sizePx}
-            viewBox="0 0 64 64"
-            className={className}
-            role="img"
-            aria-label={title}
-            preserveAspectRatio="xMidYMid meet"
-            style={{ overflow: "visible", display: "block" }}
-        >
-            <defs>
-                <clipPath id={idBody}>
-                    <rect x={20} y={18} width={24} height={34} rx={4} />
-                </clipPath>
-                {needsSleeveClips && (
-                    <>
-                        <clipPath id={idSlL}>
-                            <polygon points="20,18 12,22 12,32 20,28" />
-                        </clipPath>
-                        <clipPath id={idSlR}>
-                            <polygon points="44,18 52,22 52,32 44,28" />
-                        </clipPath>
-                    </>
-                )}
-            </defs>
+  return (
+    <svg
+      width={sizePx}
+      height={sizePx}
+      viewBox="0 0 64 64"
+      className={className}
+      role="img"
+      aria-label={title}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ overflow: "visible", display: "block" }}
+    >
+      <defs>
+        <clipPath id={idBody}>
+          <rect x={20} y={18} width={24} height={34} rx={4} />
+        </clipPath>
+        {needsSleeveClips && (
+          <>
+            <clipPath id={idSlL}>
+              <polygon points="20,18 12,22 12,32 20,28" />
+            </clipPath>
+            <clipPath id={idSlR}>
+              <polygon points="44,18 52,22 52,32 44,28" />
+            </clipPath>
+          </>
+        )}
+      </defs>
 
-            {/* mangas */}
-            <polygon points="20,18 12,22 12,32 20,28" fill={sleeves} />
-            <polygon points="44,18 52,22 52,32 44,28" fill={sleeves} />
+      {/* mangas */}
+      <polygon points="20,18 12,22 12,32 20,28" fill={sleeves} />
+      <polygon points="44,18 52,22 52,32 44,28" fill={sleeves} />
 
-            {/* tronco */}
-            <rect x={20} y={18} width={24} height={34} rx={4} fill={body} />
+      {/* tronco */}
+      <rect x={20} y={18} width={24} height={34} rx={4} fill={body} />
 
-            {pattern === "hoops" && renderHoops()}
-            {pattern === "stripes" && renderStripes()}
-            {pattern === "sash" && renderSash()}
-            {pattern === "halves" && renderHalves()}
-            {pattern === "quarters" && renderQuarters()}
+      {pattern === "hoops" && renderHoops()}
+      {pattern === "stripes" && renderStripes()}
+      {pattern === "sash" && renderSash()}
+      {pattern === "halves" && renderHalves()}
+      {pattern === "quarters" && renderQuarters()}
 
-            {/* gola + contornos */}
-            <polygon points="28,14 32,20 36,14" fill={collar} />
-            <rect x={20} y={18} width={24} height={34} rx={4} fill="none" stroke="rgba(0,0,0,0.15)" />
-            <polyline points="20,18 12,22 12,32 20,28" fill="none" stroke="rgba(0,0,0,0.15)" />
-            <polyline points="44,18 52,22 52,32 44,28" fill="none" stroke="rgba(0,0,0,0.15)" />
-        </svg>
-    );
+      {/* gola + contornos */}
+      <polygon points="28,14 32,20 36,14" fill={collar} />
+      <rect x={20} y={18} width={24} height={34} rx={4} fill="none" stroke="rgba(0,0,0,0.15)" />
+      <polyline points="20,18 12,22 12,32 20,28" fill="none" stroke="rgba(0,0,0,0.15)" />
+      <polyline points="44,18 52,22 52,32 44,28" fill="none" stroke="rgba(0,0,0,0.15)" />
+    </svg>
+  );
 }
 
 /* ======================
    Novo: Card de Resumo
 ====================== */
-function Chip({
-    children,
-    className = "",
-    title,
-}: {
-    children: React.ReactNode;
-    className?: string;
-    title?: string;
-}) {
-    return (
-        <span
-            title={title}
-            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[12px] ${className}`}
-        >
-            {children}
-        </span>
-    );
+function Chip({ children, className = "", title }: { children: React.ReactNode; className?: string; title?: string }) {
+  return (
+    <span
+      title={title}
+      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[12px] ${className}`}
+    >
+      {children}
+    </span>
+  );
 }
 
 function SummaryItem({
-    title,
-    redCards,
-    hatTrickNames,
-    goalkeeperName,
-    motmName,
-    disconnected,
-    align = "left",
+  title,
+  redCards,
+  hatTrickNames,
+  goalkeeperName,
+  motmName,
+  disconnected,
+  align = "left",
 }: {
-    title: string;
-    redCards?: number | null;
-    hatTrickNames?: Array<string | null>;
-    goalkeeperName?: string | null;
-    motmName?: string | null;
-    disconnected?: boolean;
-    align?: "left" | "right";
+  title: string;
+  redCards?: number | null;
+  hatTrickNames?: Array<string | null>;
+  goalkeeperName?: string | null;
+  motmName?: string | null;
+  disconnected?: boolean;
+  align?: "left" | "right";
 }) {
-    const reds = typeof redCards === "number" ? redCards : 0;
-    const textAlign = align === "right" ? "text-left sm:text-right" : "text-left";
-    const dir = align === "right" ? "justify-start sm:justify-end" : "justify-start";
-    const hatList = (hatTrickNames ?? []).filter((n): n is string => !!n);
+  const reds = typeof redCards === "number" ? redCards : 0;
+  const textAlign = align === "right" ? "text-left sm:text-right" : "text-left";
+  const dir = align === "right" ? "justify-start sm:justify-end" : "justify-start";
+  const hatList = (hatTrickNames ?? []).filter((n): n is string => !!n);
 
-    return (
-        <div className={`flex flex-col gap-1 ${textAlign}`}>
-            <div className={`flex ${dir} gap-2 flex-wrap items-center`}>
-                <Chip
-                    title={`Cartões vermelhos: ${reds}`}
-                    className={`${reds > 0 ? "bg-red-50 border-red-200 text-red-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
-                >
-                    <span role="img" aria-label="Cartão vermelho" title="Cartão vermelho" className={`inline-block leading-none ${reds > 0 ? "" : "opacity-60"}`} style={{ fontSize: 14 }}>🟥</span>
-                    <span className="tabular-nums">{reds}</span>
-                </Chip>
+  return (
+    <div className={`flex flex-col gap-1 ${textAlign}`}>
+      <div className={`flex ${dir} gap-2 flex-wrap items-center`}>
+        <Chip
+          title={`Cartões vermelhos: ${reds}`}
+          className={`${
+            reds > 0 ? "bg-red-50 border-red-200 text-red-700" : "bg-gray-50 border-gray-200 text-gray-400"
+          }`}
+        >
+          <span
+            role="img"
+            aria-label="Cartão vermelho"
+            title="Cartão vermelho"
+            className={`inline-block leading-none ${reds > 0 ? "" : "opacity-60"}`}
+            style={{ fontSize: 14 }}
+          >
+            🟥
+          </span>
+          <span className="tabular-nums">{reds}</span>
+        </Chip>
 
-                {hatList.length === 0 ? (
-                    <Chip className="bg-gray-50 border-gray-200 text-gray-400" title="Sem hat-trick">
-                        <span role="img" aria-label="Hat-trick" title="Hat-trick" className="inline-block leading-none opacity-60" style={{ fontSize: 14 }}>🎩</span>
-                        <span>—</span>
-                    </Chip>
-                ) : (
-                    hatList.map((name, i) => (
-                        <Chip key={`${name}-${i}`} className="bg-green-50 border-green-200 text-green-700" title={`Hat-trick: ${name}`}>
-                            <span role="img" aria-label="Hat-trick" title="Hat-trick" className="inline-block leading-none" style={{ fontSize: 14 }}>🎩</span>
-                            <span className="truncate max-w-[180px]">{name}</span>
-                        </Chip>
-                    ))
-                )}
+        {hatList.length === 0 ? (
+          <Chip className="bg-gray-50 border-gray-200 text-gray-400" title="Sem hat-trick">
+            <span
+              role="img"
+              aria-label="Hat-trick"
+              title="Hat-trick"
+              className="inline-block leading-none opacity-60"
+              style={{ fontSize: 14 }}
+            >
+              🎩
+            </span>
+            <span>—</span>
+          </Chip>
+        ) : (
+          hatList.map((name, i) => (
+            <Chip
+              key={`${name}-${i}`}
+              className="bg-green-50 border-green-200 text-green-700"
+              title={`Hat-trick: ${name}`}
+            >
+              <span
+                role="img"
+                aria-label="Hat-trick"
+                title="Hat-trick"
+                className="inline-block leading-none"
+                style={{ fontSize: 14 }}
+              >
+                🎩
+              </span>
+              <span className="truncate max-w-[180px]">{name}</span>
+            </Chip>
+          ))
+        )}
 
-                <Chip
-                    className={`${goalkeeperName ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
-                    title={goalkeeperName ? `Goleiro: ${goalkeeperName}` : "Goleiro não identificado"}
-                >
-                    <GiGoalKeeper size={14} className={goalkeeperName ? "text-blue-700" : "text-gray-400"} aria-label="Goleiro" />
-                    <span className="truncate max-w-[180px]">{goalkeeperName ?? "—"}</span>
-                </Chip>
+        <Chip
+          className={`${
+            goalkeeperName ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-400"
+          }`}
+          title={goalkeeperName ? `Goleiro: ${goalkeeperName}` : "Goleiro não identificado"}
+        >
+          <GiGoalKeeper size={14} className={goalkeeperName ? "text-blue-700" : "text-gray-400"} aria-label="Goleiro" />
+          <span className="truncate max-w-[180px]">{goalkeeperName ?? "—"}</span>
+        </Chip>
 
-                <Chip
-                    className={`${motmName ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-50 border-gray-200 text-gray-400"}`}
-                    title={motmName ? `Man of the Match: ${motmName}` : "Sem Man of the Match"}
-                >
-                    <span role="img" aria-label="Man of the Match" title="Man of the Match" className={`${motmName ? "" : "opacity-60"} inline-block leading-none`} style={{ fontSize: 14 }}>🏆</span>
-                    <span className="truncate max-w-[180px]">{motmName ?? "—"}</span>
-                </Chip>
+        <Chip
+          className={`${
+            motmName ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-50 border-gray-200 text-gray-400"
+          }`}
+          title={motmName ? `Man of the Match: ${motmName}` : "Sem Man of the Match"}
+        >
+          <span
+            role="img"
+            aria-label="Man of the Match"
+            title="Man of the Match"
+            className={`${motmName ? "" : "opacity-60"} inline-block leading-none`}
+            style={{ fontSize: 14 }}
+          >
+            🏆
+          </span>
+          <span className="truncate max-w-[180px]">{motmName ?? "—"}</span>
+        </Chip>
 
-                {disconnected && (
-                    <Chip className="bg-red-50 border-red-200 text-red-700" title="Clube desconectou">
-                        <PlugZap size={14} className="text-red-600" />
-                    </Chip>
-                )}
-            </div>
-        </div>
-    );
+        {disconnected && (
+          <Chip className="bg-red-50 border-red-200 text-red-700" title="Clube desconectou">
+            <PlugZap size={14} className="text-red-600" />
+          </Chip>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function SummaryCard({ m }: { m: MatchResultDto }) {
-    const a = m.clubASummary;
-    const b = m.clubBSummary;
-    return (
-        <div className="mt-3 p-3 sm:p-4 rounded-lg border bg-white/70">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
-                <SummaryItem
-                    title={m.clubAName}
-                    redCards={a?.redCards ?? m.clubARedCards ?? 0}
-                    hatTrickNames={a?.hatTrickPlayerNames}
-                    goalkeeperName={a?.goalkeeperPlayerName ?? null}
-                    motmName={a?.manOfTheMatchPlayerName ?? null}
-                    disconnected={a?.disconnected === true}
-                    align="left"
-                />
-                <SummaryItem
-                    title={m.clubBName}
-                    redCards={b?.redCards ?? m.clubBRedCards ?? 0}
-                    hatTrickNames={b?.hatTrickPlayerNames}
-                    goalkeeperName={b?.goalkeeperPlayerName ?? null}
-                    motmName={b?.manOfTheMatchPlayerName ?? null}
-                    disconnected={b?.disconnected === true}
-                    align="right"
-                />
-            </div>
-        </div>
-    );
+  const a = m.clubASummary;
+  const b = m.clubBSummary;
+  return (
+    <div className="mt-3 p-3 sm:p-4 rounded-lg border bg-white/70">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
+        <SummaryItem
+          title={m.clubAName}
+          redCards={a?.redCards ?? m.clubARedCards ?? 0}
+          hatTrickNames={a?.hatTrickPlayerNames}
+          goalkeeperName={a?.goalkeeperPlayerName ?? null}
+          motmName={a?.manOfTheMatchPlayerName ?? null}
+          disconnected={a?.disconnected === true}
+          align="left"
+        />
+        <SummaryItem
+          title={m.clubBName}
+          redCards={b?.redCards ?? m.clubBRedCards ?? 0}
+          hatTrickNames={b?.hatTrickPlayerNames}
+          goalkeeperName={b?.goalkeeperPlayerName ?? null}
+          motmName={b?.manOfTheMatchPlayerName ?? null}
+          disconnected={b?.disconnected === true}
+          align="right"
+        />
+      </div>
+    </div>
+  );
 }
 
 /* ======================
    Filtros/perspectiva
 ====================== */
-function perspectiveForByNameOrTeam(
-    m: MatchResultDto,
-    myClubName?: string | null,
-    myTeamIdNum?: number
-) {
-    if (typeof myTeamIdNum === "number" && Number.isFinite(myTeamIdNum)) {
-        if (m.clubADetails?.teamId === myTeamIdNum || m.clubADetails?.TeamId === myTeamIdNum)
-            return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
-        if (m.clubBDetails?.teamId === myTeamIdNum || m.clubBDetails?.TeamId === myTeamIdNum)
-            return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
-    }
-    const name = (myClubName ?? "").toLowerCase();
-    if (name) {
-        if ((m.clubAName ?? "").toLowerCase() === name) return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
-        if ((m.clubBName ?? "").toLowerCase() === name) return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
-    }
-    return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+function perspectiveForByNameOrTeam(m: MatchResultDto, myClubName?: string | null, myTeamIdNum?: number) {
+  if (typeof myTeamIdNum === "number" && Number.isFinite(myTeamIdNum)) {
+    if (m.clubADetails?.teamId === myTeamIdNum || m.clubADetails?.TeamId === myTeamIdNum)
+      return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+    if (m.clubBDetails?.teamId === myTeamIdNum || m.clubBDetails?.TeamId === myTeamIdNum)
+      return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
+  }
+  const name = (myClubName ?? "").toLowerCase();
+  if (name) {
+    if ((m.clubAName ?? "").toLowerCase() === name)
+      return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+    if ((m.clubBName ?? "").toLowerCase() === name)
+      return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
+  }
+  return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
 }
 
 function perspectiveForSelected(
-    m: MatchResultDto,
-    selectedClubIds: number[],
-    fallbackClubName?: string | null,
-    fallbackTeamId?: number
+  m: MatchResultDto,
+  selectedClubIds: number[],
+  fallbackClubName?: string | null,
+  fallbackTeamId?: number
 ) {
-    const aId = m.clubADetails?.clubId ?? null;
-    const bId = m.clubBDetails?.clubId ?? null;
+  const aId = m.clubADetails?.clubId ?? null;
+  const bId = m.clubBDetails?.clubId ?? null;
 
-    if (aId && selectedClubIds.includes(Number(aId))) {
-        return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
-    }
-    if (bId && selectedClubIds.includes(Number(bId))) {
-        return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
-    }
+  if (aId && selectedClubIds.includes(Number(aId))) {
+    return { myGoals: m.clubAGoals, oppGoals: m.clubBGoals, isMineA: true };
+  }
+  if (bId && selectedClubIds.includes(Number(bId))) {
+    return { myGoals: m.clubBGoals, oppGoals: m.clubAGoals, isMineA: false };
+  }
 
-    return perspectiveForByNameOrTeam(m, fallbackClubName, fallbackTeamId);
+  return perspectiveForByNameOrTeam(m, fallbackClubName, fallbackTeamId);
 }
 
 /* ======================
    Card de partida
 ====================== */
 function MatchCard({
-    m,
-    matchType,
-    selectedClubIds,
-    fallbackClubName,
-    fallbackTeamId,
+  m,
+  matchType,
+  selectedClubIds,
+  fallbackClubName,
+  fallbackTeamId,
 }: {
-    m: MatchResultDto;
-    matchType: MatchTypeFilter;
-    selectedClubIds: number[];
-    fallbackClubName?: string | null;
-    fallbackTeamId?: number;
+  m: MatchResultDto;
+  matchType: MatchTypeFilter;
+  selectedClubIds: number[];
+  fallbackClubName?: string | null;
+  fallbackTeamId?: number;
 }) {
-    const patternA = guessPattern(m.clubADetails);
-    const patternB = guessPattern(m.clubBDetails);
+  const patternA = guessPattern(m.clubADetails);
+  const patternB = guessPattern(m.clubBDetails);
 
-    const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
-    const outcome = p.myGoals === p.oppGoals ? "draw" : p.myGoals > p.oppGoals ? "win" : "loss";
-    const borderClass = outcome === "win" ? "border-green-200" : outcome === "loss" ? "border-red-200" : "border-gray-200";
+  const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
+  const outcome = p.myGoals === p.oppGoals ? "draw" : p.myGoals > p.oppGoals ? "win" : "loss";
+  const borderClass =
+    outcome === "win" ? "border-green-200" : outcome === "loss" ? "border-red-200" : "border-gray-200";
 
-    const stadiumName =
-        m.clubADetails?.stadName ?? m.clubADetails?.StadName ?? m.clubADetails?.name ?? m.clubADetails?.Name ?? m.clubAName;
+  const stadiumName =
+    m.clubADetails?.stadName ?? m.clubADetails?.StadName ?? m.clubADetails?.name ?? m.clubADetails?.Name ?? m.clubAName;
 
-    const divA = m.clubADetails?.currentDivision ?? null;
-    const divB = m.clubBDetails?.currentDivision ?? null;
-    const divAUrl = divisionCrestUrl(divA);
-    const divBUrl = divisionCrestUrl(divB);
+  const divA = m.clubADetails?.currentDivision ?? null;
+  const divB = m.clubBDetails?.currentDivision ?? null;
+  const divAUrl = divisionCrestUrl(divA);
+  const divBUrl = divisionCrestUrl(divB);
 
-    const crestA =
-        m.clubADetails?.team.toString() ??
-        m.clubADetails?.team.toString() ??
-        null;
+  const crestA = m.clubADetails?.team.toString() ?? m.clubADetails?.team.toString() ?? null;
 
-    const crestB =
-        m.clubBDetails?.team.toString() ??
-        m.clubBDetails?.team.toString() ??
-        null;
+  const crestB = m.clubBDetails?.team.toString() ?? m.clubBDetails?.team.toString() ?? null;
 
-    return (
-        <Link
-            to={`/match/${m.matchId}?matchType=${matchType}`}
-            className={`block bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 border transition shadow-sm hover:shadow ${borderClass}`}
-            title="Ver detalhes da partida"
-        >
-            {/* Topo: data + selos */}
-            <div className="flex items-center justify-between gap-2">
-                <div className="text-xs text-gray-500">
-                    <span className="hidden sm:inline">{formatDateSafe(m.timestamp)}</span>
-                    <span className="sm:hidden">{formatDateSafe(m.timestamp)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <OutcomeBadge a={p.myGoals} b={p.oppGoals} />
-                </div>
+  return (
+    <Link
+      to={`/match/${m.matchId}?matchType=${matchType}`}
+      className={`block bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 border transition shadow-sm hover:shadow ${borderClass}`}
+      title="Ver detalhes da partida"
+    >
+      {/* Topo: data + selos */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs text-gray-500">
+          <span className="hidden sm:inline">{formatDateSafe(m.timestamp)}</span>
+          <span className="sm:hidden">{formatDateSafe(m.timestamp)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <OutcomeBadge a={p.myGoals} b={p.oppGoals} />
+        </div>
+      </div>
+
+      {/* DESKTOP */}
+      <div className="hidden sm:grid items-center justify-center grid-cols-[auto_auto_auto] sm:gap-6 sm:max-w-[820px] sm:mx-auto mt-2">
+        {/* A */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-10 shrink-0">
+            <img
+              src={crestUrl(crestA)}
+              onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+              alt={`Escudo ${m.clubAName}`}
+              style={{ width: AVATAR_PX, height: AVATAR_PX }}
+              className="rounded-full object-contain bg-white border"
+              loading="lazy"
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="leading-tight font-medium sm:truncate" title={m.clubAName}>
+              {m.clubAName}
             </div>
-
-            {/* DESKTOP */}
-            <div className="hidden sm:grid items-center justify-center grid-cols-[auto_auto_auto] sm:gap-6 sm:max-w-[820px] sm:mx-auto mt-2">
-                {/* A */}
-                <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-10 shrink-0">
-                        <img
-                            src={crestUrl(crestA)}
-                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                            alt={`Escudo ${m.clubAName}`}
-                            style={{ width: AVATAR_PX, height: AVATAR_PX }}
-                            className="rounded-full object-contain bg-white border"
-                            loading="lazy"
-                        />
-                    </div>
-                    <div className="min-w-0">
-                        <div className="leading-tight font-medium sm:truncate" title={m.clubAName}>{m.clubAName}</div>
-                        <div className="flex items-center gap-2 mt-1">
-                            {divAUrl && (
-                                <img
-                                    src={divAUrl}
-                                    alt={`Divisão ${divA}`}
-                                    width={24}
-                                    height={24}
-                                    className="h-8 w-8 object-contain"
-                                    loading="lazy"
-                                />
-                            )}
-                            <div className="w-10 shrink-0 flex justify-center overflow-visible">
-                                <KitJersey
-                                    colors={[
-                                        m.clubADetails?.kitColor1 ?? (m.clubADetails as any)?.KitColor1,
-                                        m.clubADetails?.kitColor2 ?? (m.clubADetails as any)?.KitColor2,
-                                        m.clubADetails?.kitColor3 ?? (m.clubADetails as any)?.KitColor3,
-                                        m.clubADetails?.kitColor4 ?? (m.clubADetails as any)?.KitColor4,
-                                    ]}
-                                    pattern={patternA}
-                                    sizePx={AVATAR_PX}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Placar */}
-                <div className="justify-self-center place-self-center px-3 py-1 rounded bg-gray-50 font-semibold text-base sm:text-lg border text-center min-w-[72px]">
-                    <span className={`${p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubAGoals}</span>
-                    <span className="text-gray-400"> x </span>
-                    <span className={`${!p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubBGoals}</span>
-                </div>
-
-                {/* B */}
-                <div className="flex items-center gap-2 min-w-0 justify-end">
-                    <div className="w-10 shrink-0">
-                        <img
-                            src={crestUrl(crestB)}
-                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                            alt={`Escudo ${m.clubBName}`}
-                            style={{ width: AVATAR_PX, height: AVATAR_PX }}
-                            className="rounded-full object-contain bg-white border"
-                            loading="lazy"
-                        />
-                    </div>
-                    <div className="min-w-0 text-right">
-                        <div className="leading-tight font-medium sm:truncate" title={m.clubBName}>{m.clubBName}</div>
-                        <div className="flex items-center gap-2 mt-1 justify-end">
-                            {divBUrl && (
-                                <img
-                                    src={divBUrl}
-                                    alt={`Divisão ${divB}`}
-                                    width={24}
-                                    height={24}
-                                    className="h-8 w-8 object-contain"
-                                    loading="lazy"
-                                />
-                            )}
-                            <div className="w-10 shrink-0 flex justify-end overflow-visible">
-                                <KitJersey
-                                    colors={[
-                                        m.clubBDetails?.kitColor1 ?? (m.clubBDetails as any)?.KitColor1,
-                                        m.clubBDetails?.kitColor2 ?? (m.clubBDetails as any)?.KitColor2,
-                                        m.clubBDetails?.kitColor3 ?? (m.clubBDetails as any)?.KitColor3,
-                                        m.clubBDetails?.kitColor4 ?? (m.clubBDetails as any)?.KitColor4,
-                                    ]}
-                                    pattern={patternB}
-                                    sizePx={AVATAR_PX}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div className="flex items-center gap-2 mt-1">
+              {divAUrl && (
+                <img
+                  src={divAUrl}
+                  alt={`Divisão ${divA}`}
+                  width={24}
+                  height={24}
+                  className="h-8 w-8 object-contain"
+                  loading="lazy"
+                />
+              )}
+              <div className="w-10 shrink-0 flex justify-center overflow-visible">
+                <KitJersey
+                  colors={[
+                    m.clubADetails?.kitColor1 ?? (m.clubADetails as any)?.KitColor1,
+                    m.clubADetails?.kitColor2 ?? (m.clubADetails as any)?.KitColor2,
+                    m.clubADetails?.kitColor3 ?? (m.clubADetails as any)?.KitColor3,
+                    m.clubADetails?.kitColor4 ?? (m.clubADetails as any)?.KitColor4,
+                  ]}
+                  pattern={patternA}
+                  sizePx={AVATAR_PX}
+                />
+              </div>
             </div>
+          </div>
+        </div>
 
-            {/* MOBILE */}
-            <div className="sm:hidden mt-2 space-y-2">
-                {/* Linha 1: nomes + escudos */}
-                <div className="flex items-center justify-between gap-3">
-                    {/* A */}
-                    <div className="flex items-center gap-2 min-w-0">
-                        <img
-                            src={crestUrl(crestA)}
-                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                            alt={`Escudo ${m.clubAName}`}
-                            style={{ width: AVATAR_PX, height: AVATAR_PX }}
-                            className="rounded-full object-contain bg-white border shrink-0"
-                            loading="lazy"
-                        />
-                        <div className="min-w-0">
-                            <div className="font-medium leading-snug whitespace-normal break-words">{m.clubAName}</div>
-                            {divAUrl && (
-                                <div className="mt-1">
-                                    <img
-                                        src={divAUrl}
-                                        alt={`Divisão ${divA}`}
-                                        width={20}
-                                        height={20}
-                                        className="h-5 w-5 object-contain"
-                                        loading="lazy"
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
+        {/* Placar */}
+        <div className="justify-self-center place-self-center px-3 py-1 rounded bg-gray-50 font-semibold text-base sm:text-lg border text-center min-w-[72px]">
+          <span
+            className={`${
+              p.isMineA
+                ? p.myGoals > p.oppGoals
+                  ? "text-green-700"
+                  : p.myGoals < p.oppGoals
+                  ? "text-red-700"
+                  : ""
+                : ""
+            }`}
+          >
+            {m.clubAGoals}
+          </span>
+          <span className="text-gray-400"> x </span>
+          <span
+            className={`${
+              !p.isMineA
+                ? p.myGoals > p.oppGoals
+                  ? "text-green-700"
+                  : p.myGoals < p.oppGoals
+                  ? "text-red-700"
+                  : ""
+                : ""
+            }`}
+          >
+            {m.clubBGoals}
+          </span>
+        </div>
 
-                    {/* B */}
-                    <div className="flex items-center gap-2 min-w-0">
-                        <div className="min-w-0 text-right">
-                            <div className="font-medium leading-snug whitespace-normal break-words">{m.clubBName}</div>
-                            {divBUrl && (
-                                <div className="mt-1 flex justify-end">
-                                    <img
-                                        src={divBUrl}
-                                        alt={`Divisão ${divB}`}
-                                        width={20}
-                                        height={20}
-                                        className="h-5 w-5 object-contain"
-                                        loading="lazy"
-                                    />
-                                </div>
-                            )}
-                        </div>
-                        <img
-                            src={crestUrl(crestB)}
-                            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                            alt={`Escudo ${m.clubBName}`}
-                            style={{ width: AVATAR_PX, height: AVATAR_PX }}
-                            className="rounded-full object-contain bg-white border shrink-0"
-                            loading="lazy"
-                        />
-                    </div>
-                </div>
-
-                {/* Camisas */}
-                <div className="flex items-start justify-between">
-                    <div className="flex flex-col items-start gap-1">
-                        <KitJersey
-                            colors={[
-                                m.clubADetails?.kitColor1 ?? (m.clubADetails as any)?.KitColor1,
-                                m.clubADetails?.kitColor2 ?? (m.clubADetails as any)?.KitColor2,
-                                m.clubADetails?.kitColor3 ?? (m.clubADetails as any)?.KitColor3,
-                                m.clubADetails?.kitColor4 ?? (m.clubADetails as any)?.KitColor4,
-                            ]}
-                            pattern={guessPattern(m.clubADetails)}
-                            sizePx={AVATAR_PX}
-                        />
-                    </div>
-
-                    <div className="flex flex-col items-end gap-1">
-                        <KitJersey
-                            colors={[
-                                m.clubBDetails?.kitColor1 ?? (m.clubBDetails as any)?.KitColor1,
-                                m.clubBDetails?.kitColor2 ?? (m.clubBDetails as any)?.KitColor2,
-                                m.clubBDetails?.kitColor3 ?? (m.clubBDetails as any)?.KitColor3,
-                                m.clubBDetails?.kitColor4 ?? (m.clubBDetails as any)?.KitColor4,
-                            ]}
-                            pattern={guessPattern(m.clubBDetails)}
-                            sizePx={AVATAR_PX}
-                        />
-                    </div>
-                </div>
-
-                {/* Placar centralizado */}
-                <div className="mt-1 px-3 py-2 rounded-lg bg-gray-50 font-semibold text-lg border text-center mx-auto w-40">
-                    <span className={`${p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubAGoals}</span>
-                    <span className="text-gray-400"> x </span>
-                    <span className={`${!p.isMineA ? (p.myGoals > p.oppGoals ? "text-green-700" : p.myGoals < p.oppGoals ? "text-red-700" : "") : ""}`}>{m.clubBGoals}</span>
-                </div>
+        {/* B */}
+        <div className="flex items-center gap-2 min-w-0 justify-end">
+          <div className="w-10 shrink-0">
+            <img
+              src={crestUrl(crestB)}
+              onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+              alt={`Escudo ${m.clubBName}`}
+              style={{ width: AVATAR_PX, height: AVATAR_PX }}
+              className="rounded-full object-contain bg-white border"
+              loading="lazy"
+            />
+          </div>
+          <div className="min-w-0 text-right">
+            <div className="leading-tight font-medium sm:truncate" title={m.clubBName}>
+              {m.clubBName}
             </div>
-
-            {/* Contagem de jogadores */}
-            <div className="mt-3 flex items-center justify-center gap-3 text-base sm:text-sm">
-                <div className="inline-flex items-center gap-1">
-                    <PersonIcon className="text-gray-700" />
-                    <span className="font-semibold tabular-nums">{m.clubAPlayerCount ?? "-"}</span>
-                </div>
-                <span className="text-gray-400">-</span>
-                <div className="inline-flex items-center gap-1">
-                    <span className="font-semibold tabular-nums">{m.clubBPlayerCount ?? "-"}</span>
-                    <PersonIcon className="text-gray-700" />
-                </div>
+            <div className="flex items-center gap-2 mt-1 justify-end">
+              {divBUrl && (
+                <img
+                  src={divBUrl}
+                  alt={`Divisão ${divB}`}
+                  width={24}
+                  height={24}
+                  className="h-8 w-8 object-contain"
+                  loading="lazy"
+                />
+              )}
+              <div className="w-10 shrink-0 flex justify-end overflow-visible">
+                <KitJersey
+                  colors={[
+                    m.clubBDetails?.kitColor1 ?? (m.clubBDetails as any)?.KitColor1,
+                    m.clubBDetails?.kitColor2 ?? (m.clubBDetails as any)?.KitColor2,
+                    m.clubBDetails?.kitColor3 ?? (m.clubBDetails as any)?.KitColor3,
+                    m.clubBDetails?.kitColor4 ?? (m.clubBDetails as any)?.KitColor4,
+                  ]}
+                  pattern={patternB}
+                  sizePx={AVATAR_PX}
+                />
+              </div>
             </div>
+          </div>
+        </div>
+      </div>
 
-            {/* Estádio */}
-            <div className="mt-2 text-xs sm:text-sm text-gray-600 text-center font-medium">
-                {stadiumName || "Estádio não informado"}
+      {/* MOBILE */}
+      <div className="sm:hidden mt-2 space-y-2">
+        {/* Linha 1: nomes + escudos */}
+        <div className="flex items-center justify-between gap-3">
+          {/* A */}
+          <div className="flex items-center gap-2 min-w-0">
+            <img
+              src={crestUrl(crestA)}
+              onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+              alt={`Escudo ${m.clubAName}`}
+              style={{ width: AVATAR_PX, height: AVATAR_PX }}
+              className="rounded-full object-contain bg-white border shrink-0"
+              loading="lazy"
+            />
+            <div className="min-w-0">
+              <div className="font-medium leading-snug whitespace-normal break-words">{m.clubAName}</div>
+              {divAUrl && (
+                <div className="mt-1">
+                  <img
+                    src={divAUrl}
+                    alt={`Divisão ${divA}`}
+                    width={20}
+                    height={20}
+                    className="h-5 w-5 object-contain"
+                    loading="lazy"
+                  />
+                </div>
+              )}
             </div>
+          </div>
 
-            {/* Resumo */}
-            <SummaryCard m={m} />
-        </Link>
-    );
+          {/* B */}
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="min-w-0 text-right">
+              <div className="font-medium leading-snug whitespace-normal break-words">{m.clubBName}</div>
+              {divBUrl && (
+                <div className="mt-1 flex justify-end">
+                  <img
+                    src={divBUrl}
+                    alt={`Divisão ${divB}`}
+                    width={20}
+                    height={20}
+                    className="h-5 w-5 object-contain"
+                    loading="lazy"
+                  />
+                </div>
+              )}
+            </div>
+            <img
+              src={crestUrl(crestB)}
+              onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+              alt={`Escudo ${m.clubBName}`}
+              style={{ width: AVATAR_PX, height: AVATAR_PX }}
+              className="rounded-full object-contain bg-white border shrink-0"
+              loading="lazy"
+            />
+          </div>
+        </div>
+
+        {/* Camisas */}
+        <div className="flex items-start justify-between">
+          <div className="flex flex-col items-start gap-1">
+            <KitJersey
+              colors={[
+                m.clubADetails?.kitColor1 ?? (m.clubADetails as any)?.KitColor1,
+                m.clubADetails?.kitColor2 ?? (m.clubADetails as any)?.KitColor2,
+                m.clubADetails?.kitColor3 ?? (m.clubADetails as any)?.KitColor3,
+                m.clubADetails?.kitColor4 ?? (m.clubADetails as any)?.KitColor4,
+              ]}
+              pattern={guessPattern(m.clubADetails)}
+              sizePx={AVATAR_PX}
+            />
+          </div>
+
+          <div className="flex flex-col items-end gap-1">
+            <KitJersey
+              colors={[
+                m.clubBDetails?.kitColor1 ?? (m.clubBDetails as any)?.KitColor1,
+                m.clubBDetails?.kitColor2 ?? (m.clubBDetails as any)?.KitColor2,
+                m.clubBDetails?.kitColor3 ?? (m.clubBDetails as any)?.KitColor3,
+                m.clubBDetails?.kitColor4 ?? (m.clubBDetails as any)?.KitColor4,
+              ]}
+              pattern={guessPattern(m.clubBDetails)}
+              sizePx={AVATAR_PX}
+            />
+          </div>
+        </div>
+
+        {/* Placar centralizado */}
+        <div className="mt-1 px-3 py-2 rounded-lg bg-gray-50 font-semibold text-lg border text-center mx-auto w-40">
+          <span
+            className={`${
+              p.isMineA
+                ? p.myGoals > p.oppGoals
+                  ? "text-green-700"
+                  : p.myGoals < p.oppGoals
+                  ? "text-red-700"
+                  : ""
+                : ""
+            }`}
+          >
+            {m.clubAGoals}
+          </span>
+          <span className="text-gray-400"> x </span>
+          <span
+            className={`${
+              !p.isMineA
+                ? p.myGoals > p.oppGoals
+                  ? "text-green-700"
+                  : p.myGoals < p.oppGoals
+                  ? "text-red-700"
+                  : ""
+                : ""
+            }`}
+          >
+            {m.clubBGoals}
+          </span>
+        </div>
+      </div>
+
+      {/* Contagem de jogadores */}
+      <div className="mt-3 flex items-center justify-center gap-3 text-base sm:text-sm">
+        <div className="inline-flex items-center gap-1">
+          <PersonIcon className="text-gray-700" />
+          <span className="font-semibold tabular-nums">{m.clubAPlayerCount ?? "-"}</span>
+        </div>
+        <span className="text-gray-400">-</span>
+        <div className="inline-flex items-center gap-1">
+          <span className="font-semibold tabular-nums">{m.clubBPlayerCount ?? "-"}</span>
+          <PersonIcon className="text-gray-700" />
+        </div>
+      </div>
+
+      {/* Estádio */}
+      <div className="mt-2 text-xs sm:text-sm text-gray-600 text-center font-medium">
+        {stadiumName || "Estádio não informado"}
+      </div>
+
+      {/* Resumo */}
+      <SummaryCard m={m} />
+    </Link>
+  );
 }
 
 /* ======================
    Select de Divisões
 ====================== */
 function DivisionsSelect({
-    value,
-    onChange,
-    className = "",
+  value,
+  onChange,
+  className = "",
 }: {
-    value: number | null;
-    onChange: (v: number | null) => void;
-    className?: string;
+  value: number | null;
+  onChange: (v: number | null) => void;
+  className?: string;
 }) {
-    const [open, setOpen] = React.useState(false);
-    const ref = React.useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement | null>(null);
 
-    React.useEffect(() => {
-        const onClick = (e: MouseEvent) => {
-            if (!ref.current) return;
-            if (!ref.current.contains(e.target as Node)) setOpen(false);
-        };
-        document.addEventListener("mousedown", onClick);
-        return () => document.removeEventListener("mousedown", onClick);
-    }, []);
+  React.useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
 
-    const selectedUrl = divisionCrestUrl(value);
+  const selectedUrl = divisionCrestUrl(value);
 
-    const baseBtn =
-        "inline-flex items-center gap-2 border rounded-lg px-2 py-2 bg-white hover:bg-gray-50";
+  const baseBtn = "inline-flex items-center gap-2 border rounded-lg px-2 py-2 bg-white hover:bg-gray-50";
 
-    return (
-        <div ref={ref} className={`relative ${className}`}>
-            <button
-                type="button"
-                aria-haspopup="listbox"
-                aria-expanded={open}
-                onClick={() => setOpen((o) => !o)}
-                className={baseBtn}
-                title="Filtrar por divisão do adversário"
-            >
-                {selectedUrl ? (
-                    <img
-                        src={selectedUrl}
-                        alt={value ? `Divisão ${value}` : "Todos"}
-                        width={28}
-                        height={28}
-                        className="h-7 w-7 object-contain"
-                        loading="lazy"
-                    />
-                ) : (
-                    <span className="text-gray-600">Todos</span>
-                )}
-                <span className="text-gray-400">▾</span>
-            </button>
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={baseBtn}
+        title="Filtrar por divisão do adversário"
+      >
+        {selectedUrl ? (
+          <img
+            src={selectedUrl}
+            alt={value ? `Divisão ${value}` : "Todos"}
+            width={28}
+            height={28}
+            className="h-7 w-7 object-contain"
+            loading="lazy"
+          />
+        ) : (
+          <span className="text-gray-600">Todos</span>
+        )}
+        <span className="text-gray-400">▾</span>
+      </button>
 
-            {open && (
-                <div
-                    role="listbox"
-                    className="absolute z-30 mt-1 w-[260px] rounded-lg border bg-white p-2 shadow-lg"
+      {open && (
+        <div role="listbox" className="absolute z-30 mt-1 w-[260px] rounded-lg border bg-white p-2 shadow-lg">
+          {/* Opção: Todos */}
+          <button
+            role="option"
+            aria-selected={!value}
+            className={`w-full text-left px-2 py-2 rounded hover:bg-gray-50 ${!value ? "bg-gray-50" : ""}`}
+            onClick={() => {
+              onChange(null);
+              setOpen(false);
+            }}
+          >
+            Todos
+          </button>
+
+          <div className="mt-1 grid grid-cols-3 gap-2">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
+              const url = divisionCrestUrl(n);
+              return (
+                <button
+                  key={n}
+                  role="option"
+                  aria-selected={value === n}
+                  className={`flex items-center justify-center rounded border p-2 hover:bg-gray-50 ${
+                    value === n ? "ring-2 ring-gray-300" : ""
+                  }`}
+                  onClick={() => {
+                    onChange(n);
+                    setOpen(false);
+                  }}
+                  title={`Divisão ${n}`}
                 >
-                    {/* Opção: Todos */}
-                    <button
-                        role="option"
-                        aria-selected={!value}
-                        className={`w-full text-left px-2 py-2 rounded hover:bg-gray-50 ${!value ? "bg-gray-50" : ""
-                            }`}
-                        onClick={() => {
-                            onChange(null);
-                            setOpen(false);
-                        }}
-                    >
-                        Todos
-                    </button>
-
-                    <div className="mt-1 grid grid-cols-3 gap-2">
-                        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
-                            const url = divisionCrestUrl(n);
-                            return (
-                                <button
-                                    key={n}
-                                    role="option"
-                                    aria-selected={value === n}
-                                    className={`flex items-center justify-center rounded border p-2 hover:bg-gray-50 ${value === n ? "ring-2 ring-gray-300" : ""
-                                        }`}
-                                    onClick={() => {
-                                        onChange(n);
-                                        setOpen(false);
-                                    }}
-                                    title={`Divisão ${n}`}
-                                >
-                                    {url ? (
-                                        <img
-                                            src={url}
-                                            alt={`Divisão ${n}`}
-                                            width={32}
-                                            height={32}
-                                            className="h-8 w-8 object-contain"
-                                            loading="lazy"
-                                        />
-                                    ) : (
-                                        <span className="text-sm">D{n}</span>
-                                    )}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
+                  {url ? (
+                    <img
+                      src={url}
+                      alt={`Divisão ${n}`}
+                      width={32}
+                      height={32}
+                      className="h-8 w-8 object-contain"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="text-sm">D{n}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
-    );
+      )}
+    </div>
+  );
 }
 
 /* ======================
    Página
 ====================== */
 export default function Home() {
-    const { club } = useClub();
+  const { club } = useClub();
 
-    const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-    const initialOppDiv = (() => {
-        const v = searchParams.get("oppdiv");
-        const n = v ? Number(v) : NaN;
-        return Number.isFinite(n) && n >= 1 && n <= 10 ? n : null;
-    })();
-    const [opponentDivision, setOpponentDivision] = useState<number | null>(initialOppDiv);
+  const initialOppDiv = (() => {
+    const v = searchParams.get("oppdiv");
+    const n = v ? Number(v) : NaN;
+    return Number.isFinite(n) && n >= 1 && n <= 10 ? n : null;
+  })();
+  const [opponentDivision, setOpponentDivision] = useState<number | null>(initialOppDiv);
 
-    // Seleção múltipla da URL (?clubIds=1,2,3) ou single (contexto/clubId)
-    const selectedClubIds: number[] = useMemo(() => {
-        const raw = searchParams.get("clubIds");
-        if (raw && raw.trim().length) {
-            return raw.split(",").map(s => parseInt(s, 10)).filter(n => !Number.isNaN(n));
+  // Seleção múltipla da URL (?clubIds=1,2,3) ou single (contexto/clubId)
+  const selectedClubIds: number[] = useMemo(() => {
+    const raw = searchParams.get("clubIds");
+    if (raw && raw.trim().length) {
+      return raw
+        .split(",")
+        .map((s) => parseInt(s, 10))
+        .filter((n) => !Number.isNaN(n));
+    }
+    const single = searchParams.get("clubId");
+    if (single && !Number.isNaN(parseInt(single, 10))) return [parseInt(single, 10)];
+    if (club?.clubId) return [club.clubId];
+    return [];
+  }, [searchParams, club?.clubId]);
+
+  const fallbackClubName = club?.clubName ?? null;
+  const fallbackTeamId = (club as any)?.teamId as number | undefined;
+
+  const [results, setResults] = useState<MatchResultDto[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [search, setSearch] = useState(searchParams.get("q") ?? "");
+  const [matchType, setMatchType] = useState<MatchTypeFilter>((searchParams.get("type") as MatchTypeFilter) || "All");
+  const [sortKey, setSortKey] = useState<SortKey>(() => {
+    const v = (searchParams.get("sort") || "recent").toLowerCase();
+    if (v === "goals" || v === "gf" || v === "goalsfor") return "gf";
+    if (v === "ga" || v === "goalsagainst") return "ga";
+    if (v === "oldest") return "oldest";
+    return "recent";
+  });
+
+  const initialRc = (() => {
+    const v = searchParams.get("rc");
+    if (v === "none") return "none" as RedCardFilter;
+    if (v === "1" || v === "1plus") return "1plus" as RedCardFilter;
+    if (v === "2" || v === "2plus") return "2plus" as RedCardFilter;
+    return "all" as RedCardFilter;
+  })();
+  const [redFilter, setRedFilter] = useState<RedCardFilter>(initialRc);
+
+  const initialOpp = (() => {
+    const v = searchParams.get("opp");
+    const n = v ? Number(v) : NaN;
+    return Number.isFinite(n) && n >= 2 && n <= 11 ? n : null;
+  })();
+  const [opponentCount, setOpponentCount] = useState<number | null>(initialOpp);
+
+  /** Paginação server-side */
+  const initialPage = Math.max(1, Number(searchParams.get("page") ?? 1) || 1);
+  const initialSize = (() => {
+    const n = Number(searchParams.get("size") ?? 30) || 30;
+    return Math.min(Math.max(n, 10), 200);
+  })();
+  const [page, setPage] = useState<number>(initialPage);
+  const [pageSize, setPageSize] = useState<number>(initialSize);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(0);
+  const [hasNext, setHasNext] = useState<boolean>(false);
+  const [hasPrev, setHasPrev] = useState<boolean>(false);
+  const [isServerPaged, setIsServerPaged] = useState<boolean>(false);
+
+  // Modo multi-clubes usa "mostrar mais"
+  const [visible, setVisible] = useState(30);
+
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "/") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Persistir filtros na URL (inclui paginação)
+  useEffect(() => {
+    const rcParam = redFilter === "all" ? undefined : redFilter === "none" ? "none" : redFilter === "1plus" ? "1" : "2";
+
+    const oppParam = opponentCount ? String(opponentCount) : undefined;
+    const oppDivParam = opponentDivision ? String(opponentDivision) : undefined;
+
+    const next = new URLSearchParams(searchParams.toString());
+
+    if (search) next.set("q", search);
+    else next.delete("q");
+    if (matchType !== "All") next.set("type", matchType);
+    else next.delete("type");
+    if (sortKey !== "recent") next.set("sort", sortKey);
+    else next.delete("sort");
+    if (rcParam) next.set("rc", rcParam);
+    else next.delete("rc");
+    if (oppParam) next.set("opp", oppParam);
+    else next.delete("opp");
+    if (oppDivParam) next.set("oppdiv", oppDivParam);
+    else next.delete("oppdiv");
+
+    next.set("page", String(page));
+    next.set("size", String(pageSize));
+
+    const prevStr = searchParams.toString();
+    const nextStr = next.toString();
+    if (nextStr !== prevStr) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [
+    search,
+    matchType,
+    sortKey,
+    redFilter,
+    opponentCount,
+    opponentDivision,
+    page,
+    pageSize,
+    searchParams,
+    setSearchParams,
+  ]);
+
+  // Reset page quando trocar seleção/filtros que afetam a chamada
+  useEffect(() => {
+    setPage(1);
+  }, [selectedClubIds.join(","), matchType, opponentCount]);
+
+  // Carregar resultados
+  useEffect(() => {
+    let mounted = true;
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        setResults([]);
+
+        if (selectedClubIds.length === 0) {
+          if (mounted) setLoading(false);
+          return;
         }
-        const single = searchParams.get("clubId");
-        if (single && !Number.isNaN(parseInt(single, 10))) return [parseInt(single, 10)];
-        if (club?.clubId) return [club.clubId];
-        return [];
-    }, [searchParams, club?.clubId]);
 
-    const fallbackClubName = club?.clubName ?? null;
-    const fallbackTeamId = (club as any)?.teamId as number | undefined;
+        const baseParams: any = {};
+        if (matchType !== "All") baseParams.matchType = matchType;
+        if (opponentCount) baseParams.opponentCount = opponentCount;
 
-    const [results, setResults] = useState<MatchResultDto[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+        if (selectedClubIds.length === 1) {
+          // Paginação no servidor
+          const id = selectedClubIds[0];
+          const params = {
+            ...baseParams,
+            // aliases comuns
+            page,
+            pageNumber: page,
+            pageIndex: page - 1, // back 0-based?
+            size: pageSize,
+            pageSize,
+            limit: pageSize,
+          };
 
-    const [search, setSearch] = useState(searchParams.get("q") ?? "");
-    const [matchType, setMatchType] = useState<MatchTypeFilter>((searchParams.get("type") as MatchTypeFilter) || "All");
-    const [sortKey, setSortKey] = useState<SortKey>(() => {
-        const v = (searchParams.get("sort") || "recent").toLowerCase();
-        if (v === "goals" || v === "gf" || v === "goalsfor") return "gf";
-        if (v === "ga" || v === "goalsagainst") return "ga";
-        if (v === "oldest") return "oldest";
-        return "recent";
-    });
+          const { data } = await api.get<PagedResult<MatchResultDto> | MatchResultDto[]>(
+            `/api/clubs/${id}/matches/results`,
+            { params, signal: (controller as any).signal }
+          );
 
-    const initialRc = (() => {
-        const v = searchParams.get("rc");
-        if (v === "none") return "none" as RedCardFilter;
-        if (v === "1" || v === "1plus") return "1plus" as RedCardFilter;
-        if (v === "2" || v === "2plus") return "2plus" as RedCardFilter;
-        return "all" as RedCardFilter;
-    })();
-    const [redFilter, setRedFilter] = useState<RedCardFilter>(initialRc);
+          if (!mounted) return;
 
-    const initialOpp = (() => {
-        const v = searchParams.get("opp");
-        const n = v ? Number(v) : NaN;
-        return Number.isFinite(n) && n >= 2 && n <= 11 ? n : null;
-    })();
-    const [opponentCount, setOpponentCount] = useState<number | null>(initialOpp);
+          const norm = coercePaged<MatchResultDto>(data);
 
-    /** Paginação server-side */
-    const initialPage = Math.max(1, Number(searchParams.get("page") ?? 1) || 1);
-    const initialSize = (() => {
-        const n = Number(searchParams.get("size") ?? 30) || 30;
-        return Math.min(Math.max(n, 10), 200);
-    })();
-    const [page, setPage] = useState<number>(initialPage);
-    const [pageSize, setPageSize] = useState<number>(initialSize);
-    const [totalCount, setTotalCount] = useState<number>(0);
-    const [totalPages, setTotalPages] = useState<number>(0);
-    const [hasNext, setHasNext] = useState<boolean>(false);
-    const [hasPrev, setHasPrev] = useState<boolean>(false);
-    const [isServerPaged, setIsServerPaged] = useState<boolean>(false);
+          setIsServerPaged(norm.isPaged);
+          setResults(norm.items);
+          setTotalCount(norm.totalCount);
+          setTotalPages(norm.totalPages);
+          setHasNext(norm.hasNext);
+          setHasPrev(norm.hasPrevious);
 
-    // Modo multi-clubes usa "mostrar mais"
-    const [visible, setVisible] = useState(30);
-
-    const searchRef = useRef<HTMLInputElement | null>(null);
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === "/") {
-                e.preventDefault();
-                searchRef.current?.focus();
-            }
-        };
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, []);
-
-    // Persistir filtros na URL (inclui paginação)
-    useEffect(() => {
-        const rcParam =
-            redFilter === "all" ? undefined :
-                redFilter === "none" ? "none" :
-                    redFilter === "1plus" ? "1" : "2";
-
-        const oppParam = opponentCount ? String(opponentCount) : undefined;
-        const oppDivParam = opponentDivision ? String(opponentDivision) : undefined;
-
-        const next = new URLSearchParams(searchParams.toString());
-
-        if (search) next.set("q", search); else next.delete("q");
-        if (matchType !== "All") next.set("type", matchType); else next.delete("type");
-        if (sortKey !== "recent") next.set("sort", sortKey); else next.delete("sort");
-        if (rcParam) next.set("rc", rcParam); else next.delete("rc");
-        if (oppParam) next.set("opp", oppParam); else next.delete("opp");
-        if (oppDivParam) next.set("oppdiv", oppDivParam); else next.delete("oppdiv");
-
-        next.set("page", String(page));
-        next.set("size", String(pageSize));
-
-        const prevStr = searchParams.toString();
-        const nextStr = next.toString();
-        if (nextStr !== prevStr) {
-            setSearchParams(next, { replace: true });
+          // se vier array puro
+          if (!norm.isPaged) {
+            setVisible(Math.max(30, Math.min(norm.items.length, pageSize)));
+          }
+          return;
         }
-    }, [
-        search,
-        matchType,
-        sortKey,
-        redFilter,
-        opponentCount,
-        opponentDivision,
-        page,
-        pageSize,
-        searchParams,
-        setSearchParams
-    ]);
 
-    // Reset page quando trocar seleção/filtros que afetam a chamada
-    useEffect(() => {
-        setPage(1);
-    }, [selectedClubIds.join(","), matchType, opponentCount]);
-
-    // Carregar resultados
-    useEffect(() => {
-        let mounted = true;
-        const controller = new AbortController();
-
-        (async () => {
-            try {
-                setLoading(true);
-                setError(null);
-                setResults([]);
-
-                if (selectedClubIds.length === 0) {
-                    if (mounted) setLoading(false);
-                    return;
-                }
-
-                const baseParams: any = {};
-                if (matchType !== "All") baseParams.matchType = matchType;
-                if (opponentCount) baseParams.opponentCount = opponentCount;
-
-                if (selectedClubIds.length === 1) {
-                    // Paginação no servidor
-                    const id = selectedClubIds[0];
-                    const params = {
-                        ...baseParams,
-                        // aliases comuns
-                        page,
-                        pageNumber: page,
-                        pageIndex: page - 1, // back 0-based?
-                        size: pageSize,
-                        pageSize,
-                        limit: pageSize,
-                    };
-
-                    const { data } = await api.get<PagedResult<MatchResultDto> | MatchResultDto[]>(
-                        `/api/clubs/${id}/matches/results`,
-                        { params, signal: (controller as any).signal }
-                    );
-
-                    if (!mounted) return;
-
-                    const norm = coercePaged<MatchResultDto>(data);
-
-                    setIsServerPaged(norm.isPaged);
-                    setResults(norm.items);
-                    setTotalCount(norm.totalCount);
-                    setTotalPages(norm.totalPages);
-                    setHasNext(norm.hasNext);
-                    setHasPrev(norm.hasPrevious);
-
-                    // se vier array puro
-                    if (!norm.isPaged) {
-                        setVisible(Math.max(30, Math.min(norm.items.length, pageSize)));
-                    }
-                    return;
-                }
-
-                // Múltiplos clubes → busca paralela e merge (sem paginação no servidor)
-                const reqs = selectedClubIds.map((id) =>
-                    api.get<MatchResultDto[] | PagedResult<MatchResultDto>>(
-                        `/api/clubs/${id}/matches/results`,
-                        { params: baseParams, signal: (controller as any).signal }
-                    )
-                        .then(r => {
-                            const c = coercePaged<MatchResultDto>(r.data);
-                            return c.items;
-                        })
-                        .catch(() => [])
-                );
-
-                const arrays = await Promise.all(reqs);
-                if (!mounted) return;
-
-                const merged = ([] as MatchResultDto[]).concat(...arrays);
-                const byId = new Map<number, MatchResultDto>();
-                for (const m of merged) {
-                    if (!byId.has(m.matchId)) byId.set(m.matchId, m);
-                }
-                const unique = Array.from(byId.values());
-
-                setIsServerPaged(false);
-                setResults(unique);
-                setTotalCount(unique.length);
-                setTotalPages(Math.ceil(unique.length / Math.max(visible, 1)) || 1);
-                setHasNext(false);
-                setHasPrev(false);
-                setVisible(30);
-            } catch (err: any) {
-                if (mounted) setError(err?.message ?? "Erro ao carregar resultados");
-            } finally {
-                if (mounted) setLoading(false);
-            }
-        })();
-
-        return () => {
-            mounted = false;
-            controller.abort();
-        };
-    }, [selectedClubIds.join(","), matchType, opponentCount, page, pageSize]);
-
-    // Filtros/ordenação em memória (sobre itens carregados)
-    const filtered = useMemo(() => {
-        const term = search.trim().toLowerCase();
-
-        const byText = (m: MatchResultDto) =>
-            term ? `${m.clubAName} ${m.clubBName}`.toLowerCase().includes(term) : true;
-
-        const byReds = (m: MatchResultDto) => {
-            const redsA = m.clubASummary?.redCards ?? (m.clubARedCards ?? 0);
-            const redsB = m.clubBSummary?.redCards ?? (m.clubBRedCards ?? 0);
-            const reds = redsA + redsB;
-            if (redFilter === "none") return reds === 0;
-            if (redFilter === "1plus") return reds >= 1;
-            if (redFilter === "2plus") return reds >= 2;
-            return true;
-        };
-
-        const byOppCount = (m: MatchResultDto) => {
-            if (!opponentCount) return true;
-            const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
-            const opp = p.isMineA ? (m.clubBPlayerCount ?? null) : (m.clubAPlayerCount ?? null);
-            return opp === opponentCount;
-        };
-
-        const byOppDivision = (m: MatchResultDto) => {
-            if (!opponentDivision) return true;
-            const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
-            const oppDiv = p.isMineA ? m.clubBDetails?.currentDivision : m.clubADetails?.currentDivision;
-            return oppDiv === opponentDivision;
-        };
-
-        const base = results.filter((m) => byText(m) && byReds(m) && byOppCount(m) && byOppDivision(m));
-
-        const sorted = [...base].sort((a, b) => {
-            if (sortKey === "recent") {
-                const ta = timeValue(a.timestamp, -Infinity);
-                const tb = timeValue(b.timestamp, -Infinity);
-                return tb - ta;
-            }
-            if (sortKey === "oldest") {
-                const ta = timeValue(a.timestamp, +Infinity);
-                const tb = timeValue(b.timestamp, +Infinity);
-                return ta - tb;
-            }
-
-            if (sortKey === "gf" || sortKey === "ga") {
-                const pa = perspectiveForSelected(a, selectedClubIds, fallbackClubName, fallbackTeamId);
-                const pb = perspectiveForSelected(b, selectedClubIds, fallbackClubName, fallbackTeamId);
-                const va = sortKey === "gf" ? pa.myGoals : pa.oppGoals;
-                const vb = sortKey === "gf" ? pb.myGoals : pb.oppGoals;
-                if (vb !== va) return vb - va;
-                const ta = timeValue(a.timestamp, -Infinity);
-                const tb = timeValue(b.timestamp, -Infinity);
-                return tb - ta;
-            }
-
-            const ta = timeValue(a.timestamp, -Infinity);
-            const tb = timeValue(b.timestamp, -Infinity);
-            return tb - ta;
-        });
-
-        return sorted;
-    }, [
-        results,
-        search,
-        sortKey,
-        redFilter,
-        opponentCount,
-        opponentDivision,
-        selectedClubIds.join(","),
-        fallbackClubName,
-        fallbackTeamId
-    ]);
-
-    // Resumo
-    const summary = useMemo(() => {
-        const s = filtered.reduce(
-            (acc, m) => {
-                const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
-                acc.jogos++;
-                acc.golsPro += p.myGoals;
-                acc.golsContra += p.oppGoals;
-                if (p.myGoals > p.oppGoals) acc.v++;
-                else if (p.myGoals < p.oppGoals) acc.d++;
-                else acc.e++;
-                const redsA = m.clubASummary?.redCards ?? (m.clubARedCards ?? 0);
-                const redsB = m.clubBSummary?.redCards ?? (m.clubBRedCards ?? 0);
-                acc.cartoes += redsA + redsB;
-                return acc;
-            },
-            { jogos: 0, v: 0, e: 0, d: 0, golsPro: 0, golsContra: 0, cartoes: 0 }
+        // Múltiplos clubes → busca paralela e merge (sem paginação no servidor)
+        const reqs = selectedClubIds.map((id) =>
+          api
+            .get<MatchResultDto[] | PagedResult<MatchResultDto>>(`/api/clubs/${id}/matches/results`, {
+              params: baseParams,
+              signal: (controller as any).signal,
+            })
+            .then((r) => {
+              const c = coercePaged<MatchResultDto>(r.data);
+              return c.items;
+            })
+            .catch(() => [])
         );
-        return { ...s, saldo: s.golsPro - s.golsContra };
-    }, [filtered, selectedClubIds.join(","), fallbackClubName, fallbackTeamId]);
 
-    const hasSelection = selectedClubIds.length > 0;
-    const hasResults = filtered.length > 0;
+        const arrays = await Promise.all(reqs);
+        if (!mounted) return;
 
-    const refresh = useCallback(() => {
-        if (hasSelection) {
-            const ev = new Event("visibilitychange");
-            document.dispatchEvent(ev);
+        const merged = ([] as MatchResultDto[]).concat(...arrays);
+        const byId = new Map<number, MatchResultDto>();
+        for (const m of merged) {
+          if (!byId.has(m.matchId)) byId.set(m.matchId, m);
         }
-    }, [hasSelection]);
+        const unique = Array.from(byId.values());
 
-    const headerRight = hasSelection
-        ? (selectedClubIds.length > 1
-            ? <>Clubes atuais: <span className="font-medium">{selectedClubIds.join(", ")}</span></>
-            : <>Clube atual: <span className="font-medium">{selectedClubIds[0]}</span></>)
-        : <>Selecione clubes no topo para carregar os resultados.</>;
+        setIsServerPaged(false);
+        setResults(unique);
+        setTotalCount(unique.length);
+        setTotalPages(Math.ceil(unique.length / Math.max(visible, 1)) || 1);
+        setHasNext(false);
+        setHasPrev(false);
+        setVisible(30);
+      } catch (err: any) {
+        if (mounted) setError(err?.message ?? "Erro ao carregar resultados");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
 
-    // Paginação server-side
-    const goTo = (p: number) => setPage(Math.max(1, Math.min(totalPages || 1, p)));
-    const next = () => hasNext && setPage(p => p + 1);
-    const prev = () => hasPrev && setPage(p => Math.max(1, p - 1));
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
+  }, [selectedClubIds.join(","), matchType, opponentCount, page, pageSize]);
 
-    const PageControls = () => {
-        if (!isServerPaged || selectedClubIds.length !== 1) return null;
-        return (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
-                <div className="flex items-center gap-2 text-sm">
-                    <span className="text-gray-600">Itens por página:</span>
-                    <select
-                        className="border rounded-lg px-2 py-2"
-                        value={pageSize}
-                        onChange={(e) => {
-                            const n = Number(e.target.value);
-                            setPageSize(Math.min(Math.max(n, 10), 200));
-                            setPage(1); // reset
-                        }}
-                    >
-                        {[10, 20, 30, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                </div>
-                <div className="text-sm text-gray-600">
-                    Página <span className="font-semibold">{totalPages ? page : 0}</span> de <span className="font-semibold">{totalPages}</span> — {totalCount} partidas
-                </div>
-                <div className="flex items-center gap-2">
-                    <button className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50" onClick={() => goTo(1)} disabled={!hasPrev}>« Primeira</button>
-                    <button className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50" onClick={prev} disabled={!hasPrev}>‹ Anterior</button>
-                    <button className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50" onClick={next} disabled={!hasNext}>Próxima ›</button>
-                    <button className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50" onClick={() => goTo(totalPages)} disabled={!hasNext}>Última »</button>
-                </div>
-            </div>
-        );
+  // Filtros/ordenação em memória (sobre itens carregados)
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    const byText = (m: MatchResultDto) => (term ? `${m.clubAName} ${m.clubBName}`.toLowerCase().includes(term) : true);
+
+    const byReds = (m: MatchResultDto) => {
+      const redsA = m.clubASummary?.redCards ?? m.clubARedCards ?? 0;
+      const redsB = m.clubBSummary?.redCards ?? m.clubBRedCards ?? 0;
+      const reds = redsA + redsB;
+      if (redFilter === "none") return reds === 0;
+      if (redFilter === "1plus") return reds >= 1;
+      if (redFilter === "2plus") return reds >= 2;
+      return true;
     };
 
-    return (
-        <div className="p-4 max-w-5xl mx-auto">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
-                <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold">Resultados das Partidas</h1>
-                    <p className="text-sm text-gray-600">{headerRight}</p>
-                </div>
+    const byOppCount = (m: MatchResultDto) => {
+      if (!opponentCount) return true;
+      const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
+      const opp = p.isMineA ? m.clubBPlayerCount ?? null : m.clubAPlayerCount ?? null;
+      return opp === opponentCount;
+    };
 
-                {hasResults && (
-                    <div className="flex items-center flex-wrap gap-2 text-xs">
-                        <Badge color="green">V: <span className="tabular-nums ml-1">{summary.v}</span></Badge>
-                        <Badge color="amber">E: <span className="tabular-nums ml-1">{summary.e}</span></Badge>
-                        <Badge color="red">D: <span className="tabular-nums ml-1">{summary.d}</span></Badge>
-                        <Badge>GP: <span className="tabular-nums ml-1">{summary.golsPro}</span></Badge>
-                        <Badge>GC: <span className="tabular-nums ml-1">{summary.golsContra}</span></Badge>
-                        <Badge color={summary.saldo >= 0 ? "green" : "red"}>Saldo: <span className="tabular-nums ml-1">{summary.saldo}</span></Badge>
-                        <Badge color={summary.cartoes > 0 ? "red" : "gray"}>Verm.: <span className="tabular-nums ml-1">{summary.cartoes}</span></Badge>
-                    </div>
-                )}
-            </div>
+    const byOppDivision = (m: MatchResultDto) => {
+      if (!opponentDivision) return true;
+      const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
+      const oppDiv = p.isMineA ? m.clubBDetails?.currentDivision : m.clubADetails?.currentDivision;
+      return oppDiv === opponentDivision;
+    };
 
-            {/* Toolbar */}
-            <div className="sticky top-0 z-20 -mx-4 px-4 py-3 bg-white/80 backdrop-blur border-b">
-                <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <Segmented value={matchType} onChange={setMatchType} />
-                        <ToolbarSeparator />
+    const base = results.filter((m) => byText(m) && byReds(m) && byOppCount(m) && byOppDivision(m));
 
-                        <div className="relative">
-                            <input
-                                ref={searchRef}
-                                id="search"
-                                type="text"
-                                placeholder="Buscar clube A ou B (atalho: /)"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="border rounded-lg pl-9 pr-8 py-2 w-72 max-w-[90vw]"
-                            />
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
-                            {search && (
-                                <button
-                                    aria-label="Limpar busca"
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
-                                    onClick={() => setSearch("")}
-                                >×</button>
-                            )}
-                        </div>
+    const sorted = [...base].sort((a, b) => {
+      if (sortKey === "recent") {
+        const ta = timeValue(a.timestamp, -Infinity);
+        const tb = timeValue(b.timestamp, -Infinity);
+        return tb - ta;
+      }
+      if (sortKey === "oldest") {
+        const ta = timeValue(a.timestamp, +Infinity);
+        const tb = timeValue(b.timestamp, +Infinity);
+        return ta - tb;
+      }
 
-                        {/* Filtro vermelhos */}
-                        <div className="flex items-center gap-2 text-sm">
-                            <span className="text-gray-600">Vermelhos:</span>
-                            <select className="border rounded-lg px-2 py-2" value={redFilter} onChange={(e) => setRedFilter(e.target.value as RedCardFilter)}>
-                                <option value="all">Todos</option>
-                                <option value="none">Nenhum</option>
-                                <option value="1plus">1+</option>
-                                <option value="2plus">2+</option>
-                            </select>
-                        </div>
+      if (sortKey === "gf" || sortKey === "ga") {
+        const pa = perspectiveForSelected(a, selectedClubIds, fallbackClubName, fallbackTeamId);
+        const pb = perspectiveForSelected(b, selectedClubIds, fallbackClubName, fallbackTeamId);
+        const va = sortKey === "gf" ? pa.myGoals : pa.oppGoals;
+        const vb = sortKey === "gf" ? pb.myGoals : pb.oppGoals;
+        if (vb !== va) return vb - va;
+        const ta = timeValue(a.timestamp, -Infinity);
+        const tb = timeValue(b.timestamp, -Infinity);
+        return tb - ta;
+      }
 
-                        {/* Filtro por quantidade do adversário */}
-                        <div className="flex items-center gap-2 text-sm">
-                            <span className="text-gray-600">Adversário (jogadores):</span>
-                            <select
-                                className="border rounded-lg px-2 py-2"
-                                value={opponentCount ?? ""}
-                                onChange={(e) => {
-                                    const v = e.target.value;
-                                    if (v === "") setOpponentCount(null);
-                                    else {
-                                        const n = Number(v);
-                                        setOpponentCount(n >= 2 && n <= 11 ? n : null);
-                                    }
-                                }}
-                            >
-                                <option value="">Todos</option>
-                                {Array.from({ length: 10 }, (_, i) => i + 2).map((n) => (
-                                    <option key={n} value={n}>{n}</option>
-                                ))}
-                            </select>
-                        </div>
+      const ta = timeValue(a.timestamp, -Infinity);
+      const tb = timeValue(b.timestamp, -Infinity);
+      return tb - ta;
+    });
 
-                        {/* Filtro por divisão do adversário */}
-                        <div className="flex items-center gap-2 text-sm">
-                            <span className="text-gray-600">Adversário (divisão):</span>
-                            <DivisionsSelect
-                                value={opponentDivision}
-                                onChange={setOpponentDivision}
-                            />
-                        </div>
+    return sorted;
+  }, [
+    results,
+    search,
+    sortKey,
+    redFilter,
+    opponentCount,
+    opponentDivision,
+    selectedClubIds.join(","),
+    fallbackClubName,
+    fallbackTeamId,
+  ]);
 
-                        {/* Ordenação */}
-                        <div className="flex items-center gap-2 text-sm">
-                            <span className="text-gray-600">Ordenar:</span>
-                            <select className="border rounded-lg px-2 py-2" value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
-                                <option value="recent">Mais recentes</option>
-                                <option value="oldest">Mais antigas</option>
-                                <option value="gf">Mais gols feitos</option>
-                                <option value="ga">Mais gols recebidos</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <button className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50" onClick={refresh}>
-                            Atualizar
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Estados */}
-            {loading && (
-                <div className="grid gap-3 mt-4">
-                    <Skeleton className="h-20" />
-                    <Skeleton className="h-20" />
-                    <Skeleton className="h-20" />
-                </div>
-            )}
-
-            {error && (
-                <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center justify-between">
-                    <span>{error}</span>
-                    <button className="px-3 py-1.5 rounded-lg border bg-white hover:bg-red-50" onClick={refresh}>Tentar novamente</button>
-                </div>
-            )}
-
-            {!loading && !error && hasSelection && filtered.length === 0 && (
-                <div className="mt-4 p-3 bg-gray-50 border rounded text-gray-700">
-                    Nenhum resultado encontrado.
-                    <ul className="list-disc ml-5 mt-2 text-sm text-gray-600">
-                        <li>Verifique a grafia dos clubes.</li>
-                        <li>Altere o tipo (Todos/Liga/Playoff).</li>
-                        <li>Ajuste os filtros de cartões, jogadores ou divisão.</li>
-                    </ul>
-                </div>
-            )}
-
-            {!hasSelection && (
-                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
-                    Selecione clubes no menu (botão “Clubes”) para começar.
-                </div>
-            )}
-
-            {/* Info de contagem */}
-            {isServerPaged && selectedClubIds.length === 1 ? (
-                <div className="mt-6 text-xs text-gray-500 text-center">
-                    Exibindo {filtered.length} de {totalCount} partidas (página {totalPages ? page : 0}/{totalPages}).
-                </div>
-            ) : (
-                filtered.length > 0 && (
-                    <div className="mt-6 text-xs text-gray-500 text-center">
-                        Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.
-                    </div>
-                )
-            )}
-
-            {/* Lista */}
-            <div className="mt-4 grid gap-2">
-                {(isServerPaged && selectedClubIds.length === 1 ? filtered : filtered.slice(0, visible)).map((m) => (
-                    <MatchCard
-                        key={m.matchId}
-                        m={m}
-                        matchType={matchType}
-                        selectedClubIds={selectedClubIds}
-                        fallbackClubName={fallbackClubName ?? undefined}
-                        fallbackTeamId={fallbackTeamId}
-                    />
-                ))}
-            </div>
-
-            {/* Paginação */}
-            {isServerPaged && selectedClubIds.length === 1 ? (
-                <PageControls />
-            ) : (
-                filtered.length > 0 && visible < filtered.length && (
-                    <div className="flex justify-center mt-4">
-                        <button className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50" onClick={() => setVisible((v) => v + 30)}>
-                            Mostrar mais ({Math.min(filtered.length - visible, 30)})
-                        </button>
-                    </div>
-                )
-            )}
-
-            {/* Rodapé de contagem */}
-            {isServerPaged && selectedClubIds.length === 1 ? (
-                <div className="mt-6 text-xs text-gray-500 text-center">
-                    Página {totalPages ? page : 0} de {totalPages} — {totalCount} partidas.
-                </div>
-            ) : (
-                filtered.length > 0 && (
-                    <div className="mt-6 text-xs text-gray-500 text-center">
-                        Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.
-                    </div>
-                )
-            )}
-        </div>
+  // Resumo
+  const summary = useMemo(() => {
+    const s = filtered.reduce(
+      (acc, m) => {
+        const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
+        acc.jogos++;
+        acc.golsPro += p.myGoals;
+        acc.golsContra += p.oppGoals;
+        if (p.myGoals > p.oppGoals) acc.v++;
+        else if (p.myGoals < p.oppGoals) acc.d++;
+        else acc.e++;
+        const redsA = m.clubASummary?.redCards ?? m.clubARedCards ?? 0;
+        const redsB = m.clubBSummary?.redCards ?? m.clubBRedCards ?? 0;
+        acc.cartoes += redsA + redsB;
+        return acc;
+      },
+      { jogos: 0, v: 0, e: 0, d: 0, golsPro: 0, golsContra: 0, cartoes: 0 }
     );
+    return { ...s, saldo: s.golsPro - s.golsContra };
+  }, [filtered, selectedClubIds.join(","), fallbackClubName, fallbackTeamId]);
+
+  const hasSelection = selectedClubIds.length > 0;
+  const hasResults = filtered.length > 0;
+
+  const refresh = useCallback(() => {
+    if (hasSelection) {
+      const ev = new Event("visibilitychange");
+      document.dispatchEvent(ev);
+    }
+  }, [hasSelection]);
+
+  const headerRight = hasSelection ? (
+    selectedClubIds.length > 1 ? (
+      <>
+        Clubes atuais: <span className="font-medium">{selectedClubIds.join(", ")}</span>
+      </>
+    ) : (
+      <>
+        Clube atual: <span className="font-medium">{selectedClubIds[0]}</span>
+      </>
+    )
+  ) : (
+    <>Selecione clubes no topo para carregar os resultados.</>
+  );
+
+  // Paginação server-side
+  const goTo = (p: number) => setPage(Math.max(1, Math.min(totalPages || 1, p)));
+  const next = () => hasNext && setPage((p) => p + 1);
+  const prev = () => hasPrev && setPage((p) => Math.max(1, p - 1));
+
+  const PageControls = () => {
+    if (!isServerPaged || selectedClubIds.length !== 1) return null;
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-gray-600">Itens por página:</span>
+          <select
+            className="border rounded-lg px-2 py-2"
+            value={pageSize}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              setPageSize(Math.min(Math.max(n, 10), 200));
+              setPage(1); // reset
+            }}
+          >
+            {[10, 20, 30, 50, 100, 200].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="text-sm text-gray-600">
+          Página <span className="font-semibold">{totalPages ? page : 0}</span> de{" "}
+          <span className="font-semibold">{totalPages}</span> — {totalCount} partidas
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => goTo(1)}
+            disabled={!hasPrev}
+          >
+            « Primeira
+          </button>
+          <button
+            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+            onClick={prev}
+            disabled={!hasPrev}
+          >
+            ‹ Anterior
+          </button>
+          <button
+            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+            onClick={next}
+            disabled={!hasNext}
+          >
+            Próxima ›
+          </button>
+          <button
+            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => goTo(totalPages)}
+            disabled={!hasNext}
+          >
+            Última »
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="p-4 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold">Resultados das Partidas</h1>
+          <p className="text-sm text-gray-600">{headerRight}</p>
+        </div>
+
+        {hasResults && (
+          <div className="flex items-center flex-wrap gap-2 text-xs">
+            <Badge color="green">
+              V: <span className="tabular-nums ml-1">{summary.v}</span>
+            </Badge>
+            <Badge color="amber">
+              E: <span className="tabular-nums ml-1">{summary.e}</span>
+            </Badge>
+            <Badge color="red">
+              D: <span className="tabular-nums ml-1">{summary.d}</span>
+            </Badge>
+            <Badge>
+              GP: <span className="tabular-nums ml-1">{summary.golsPro}</span>
+            </Badge>
+            <Badge>
+              GC: <span className="tabular-nums ml-1">{summary.golsContra}</span>
+            </Badge>
+            <Badge color={summary.saldo >= 0 ? "green" : "red"}>
+              Saldo: <span className="tabular-nums ml-1">{summary.saldo}</span>
+            </Badge>
+            <Badge color={summary.cartoes > 0 ? "red" : "gray"}>
+              Verm.: <span className="tabular-nums ml-1">{summary.cartoes}</span>
+            </Badge>
+          </div>
+        )}
+      </div>
+
+      {/* Toolbar */}
+      <div className="sticky top-0 z-20 -mx-4 px-4 py-3 bg-white/80 backdrop-blur border-b">
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Segmented value={matchType} onChange={setMatchType} />
+            <ToolbarSeparator />
+
+            <div className="relative">
+              <input
+                ref={searchRef}
+                id="search"
+                type="text"
+                placeholder="Buscar clube A ou B (atalho: /)"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="border rounded-lg pl-9 pr-8 py-2 w-72 max-w-[90vw]"
+              />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
+              {search && (
+                <button
+                  aria-label="Limpar busca"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                  onClick={() => setSearch("")}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            {/* Filtro vermelhos */}
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-600">Vermelhos:</span>
+              <select
+                className="border rounded-lg px-2 py-2"
+                value={redFilter}
+                onChange={(e) => setRedFilter(e.target.value as RedCardFilter)}
+              >
+                <option value="all">Todos</option>
+                <option value="none">Nenhum</option>
+                <option value="1plus">1+</option>
+                <option value="2plus">2+</option>
+              </select>
+            </div>
+
+            {/* Filtro por quantidade do adversário */}
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-600">Adversário (jogadores):</span>
+              <select
+                className="border rounded-lg px-2 py-2"
+                value={opponentCount ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "") setOpponentCount(null);
+                  else {
+                    const n = Number(v);
+                    setOpponentCount(n >= 2 && n <= 11 ? n : null);
+                  }
+                }}
+              >
+                <option value="">Todos</option>
+                {Array.from({ length: 10 }, (_, i) => i + 2).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filtro por divisão do adversário */}
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-600">Adversário (divisão):</span>
+              <DivisionsSelect value={opponentDivision} onChange={setOpponentDivision} />
+            </div>
+
+            {/* Ordenação */}
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-600">Ordenar:</span>
+              <select
+                className="border rounded-lg px-2 py-2"
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+              >
+                <option value="recent">Mais recentes</option>
+                <option value="oldest">Mais antigas</option>
+                <option value="gf">Mais gols feitos</option>
+                <option value="ga">Mais gols recebidos</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50" onClick={refresh}>
+              Atualizar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Estados */}
+      {loading && (
+        <div className="grid gap-3 mt-4">
+          <Skeleton className="h-20" />
+          <Skeleton className="h-20" />
+          <Skeleton className="h-20" />
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center justify-between">
+          <span>{error}</span>
+          <button className="px-3 py-1.5 rounded-lg border bg-white hover:bg-red-50" onClick={refresh}>
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && hasSelection && filtered.length === 0 && (
+        <div className="mt-4 p-3 bg-gray-50 border rounded text-gray-700">
+          Nenhum resultado encontrado.
+          <ul className="list-disc ml-5 mt-2 text-sm text-gray-600">
+            <li>Verifique a grafia dos clubes.</li>
+            <li>Altere o tipo (Todos/Liga/Playoff).</li>
+            <li>Ajuste os filtros de cartões, jogadores ou divisão.</li>
+          </ul>
+        </div>
+      )}
+
+      {!hasSelection && (
+        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
+          Selecione clubes no menu (botão “Clubes”) para começar.
+        </div>
+      )}
+
+      {/* Info de contagem */}
+      {isServerPaged && selectedClubIds.length === 1 ? (
+        <div className="mt-6 text-xs text-gray-500 text-center">
+          Exibindo {filtered.length} de {totalCount} partidas (página {totalPages ? page : 0}/{totalPages}).
+        </div>
+      ) : (
+        filtered.length > 0 && (
+          <div className="mt-6 text-xs text-gray-500 text-center">
+            Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.
+          </div>
+        )
+      )}
+
+      {/* Lista */}
+      <div className="mt-4 grid gap-2">
+        {(isServerPaged && selectedClubIds.length === 1 ? filtered : filtered.slice(0, visible)).map((m) => (
+          <MatchCard
+            key={m.matchId}
+            m={m}
+            matchType={matchType}
+            selectedClubIds={selectedClubIds}
+            fallbackClubName={fallbackClubName ?? undefined}
+            fallbackTeamId={fallbackTeamId}
+          />
+        ))}
+      </div>
+
+      {/* Paginação */}
+      {isServerPaged && selectedClubIds.length === 1 ? (
+        <PageControls />
+      ) : (
+        filtered.length > 0 &&
+        visible < filtered.length && (
+          <div className="flex justify-center mt-4">
+            <button
+              className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
+              onClick={() => setVisible((v) => v + 30)}
+            >
+              Mostrar mais ({Math.min(filtered.length - visible, 30)})
+            </button>
+          </div>
+        )
+      )}
+
+      {/* Rodapé de contagem */}
+      {isServerPaged && selectedClubIds.length === 1 ? (
+        <div className="mt-6 text-xs text-gray-500 text-center">
+          Página {totalPages ? page : 0} de {totalPages} — {totalCount} partidas.
+        </div>
+      ) : (
+        filtered.length > 0 && (
+          <div className="mt-6 text-xs text-gray-500 text-center">
+            Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.
+          </div>
+        )
+      )}
+    </div>
+  );
 }

@@ -5,6 +5,7 @@ import { useClub } from "../hooks/useClub.tsx";
 import { PlayerStats, ClubStats } from "../types/stats";
 import { TeamStatsSection } from "../components/TeamStatsSection.tsx";
 import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
+import { API_ENDPOINTS } from "../config/urls.ts";
 
 export default function PlayerStatisticsPage() {
   const { club } = useClub();
@@ -114,7 +115,7 @@ export default function PlayerStatisticsPage() {
           if (oppPlayers !== "all") params.opponentCount = oppPlayers;
 
           const { data } = await api.get(
-            `https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/${singleId}/matches/statistics/limited`,
+            API_ENDPOINTS.CLUB_STATS(singleId),
             { params, signal: controller.signal }
           );
           setPlayers(data.players ?? []);
@@ -127,7 +128,7 @@ export default function PlayerStatisticsPage() {
           if (oppPlayers !== "all") params.opponentCount = oppPlayers;
 
           const { data } = await api.get(
-            "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs/grouped/matches/statistics/limited",
+            API_ENDPOINTS.CLUB_STATS_GROUPED,
             { params, signal: controller.signal }
           );
           setPlayers(data.players ?? []);

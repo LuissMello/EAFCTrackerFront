@@ -1,19 +1,13 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
+import { API_ENDPOINTS, crestUrl, FALLBACK_LOGO } from "../config/urls.ts";
 
 type ClubListItem = {
     clubId: number;
     name: string;
     crestAssetId?: string | null;
 };
-
-const FALLBACK_LOGO = "https://via.placeholder.com/32?text=%E2%9A%BD";
-
-function crestUrl(crestAssetId?: string | null) {
-    if (!crestAssetId) return FALLBACK_LOGO;
-    return `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${crestAssetId}.png`;
-}
 
 export default function ClubPicker() {
     const { club, setClub } = useClub();
@@ -41,7 +35,7 @@ export default function ClubPicker() {
             try {
                 setLoading(true);
                 setErr(null);
-                const { data } = await api.get<ClubListItem[]>("https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs");
+                const { data } = await api.get<ClubListItem[]>(API_ENDPOINTS.CLUBS);
                 if (!cancel) setClubs(data ?? []);
             } catch (e: any) {
                 if (!cancel) setErr(e?.message ?? "Erro ao carregar clubes");

@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { API_BASE_URL } from '../config/urls.ts';
 
 const api = axios.create({
-    baseURL: 'https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net', 
+    baseURL: API_BASE_URL,
 });
 
 export default api;

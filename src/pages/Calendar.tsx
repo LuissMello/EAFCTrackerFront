@@ -2,6 +2,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
+import { API_ENDPOINTS, crestUrl } from "../config/urls.ts";
 
 // ===== Tipos =====
 export interface CalendarDaySummaryDto {
@@ -73,7 +74,6 @@ function addMonths(d: Date, months: number) { return new Date(d.getFullYear(), d
 function addDays(d: Date, days: number) { const nd = new Date(d); nd.setDate(nd.getDate() + days); return nd; }
 function getGridStart(date: Date) { const first = startOfMonth(date); const dow = (first.getDay() + 6) % 7; const gridStart = new Date(first); gridStart.setDate(first.getDate() - dow); return gridStart; }
 function getWeekStart(d: Date) { const dow = (d.getDay() + 6) % 7; const ws = new Date(d); ws.setDate(d.getDate() - dow); return new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()); }
-const crestUrl = (id?: string | null) => id ? `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${id}.png` : null;
 
 // ===== UI =====
 function ResultPill({ r }: { r: "W" | "D" | "L" | "-" }) {
@@ -275,7 +275,7 @@ export default function CalendarPage() {
                 else params.clubId = selectedClubIds[0];
 
                 const { data } = await api.get<CalendarMonthDto>(
-                    "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Calendar",
+                    API_ENDPOINTS.CALENDAR,
                     { params }
                 );
                 monthCacheRef.current[k] = data;
@@ -311,7 +311,7 @@ export default function CalendarPage() {
                 else params.clubId = selectedClubIds[0];
 
                 const { data } = await api.get<CalendarDayDetailsDto>(
-                    "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/Calendar/day",
+                    API_ENDPOINTS.CALENDAR_DAY,
                     { params }
                 );
                 dayCacheRef.current[cacheKey] = data;

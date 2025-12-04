@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../services/api.ts";
+import { crestUrl, FALLBACK_LOGO } from "../config/urls.ts";
 
 interface PlayerRow {
   playerId: number;
@@ -46,12 +47,6 @@ interface ApiGoalsResponse {
   totalGoals: number;
   goals: ApiGoal[];
 }
-
-const FALLBACK_LOGO = "https://via.placeholder.com/96?text=Logo";
-const crestUrl = (id?: string | null) =>
-  id
-    ? `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${id}.png`
-    : FALLBACK_LOGO;
 
 export function GoalLinkingSection({
   matchId,

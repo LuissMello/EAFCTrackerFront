@@ -9,6 +9,7 @@
 } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
+import { API_ENDPOINTS } from "../config/urls.ts";
 
 // ===== Tipos =====
 export type ClubState = {
@@ -37,9 +38,6 @@ type ClubContextType = {
 };
 
 const ClubContext = createContext<ClubContextType | undefined>(undefined);
-
-// Endpoint para hidratar nome/crest quando só temos IDs
-const CLUBS_URL = "https://eafctracker-cvadcceuerbgegdj.brazilsouth-01.azurewebsites.net/api/clubs";
 
 function parseCsvIds(csv: string | null): number[] {
     if (!csv) return [];
@@ -123,7 +121,7 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
                 try {
                     const { data } = await api.get<
                         { clubId: number; name: string; crestAssetId?: string | null }[]
-                    >(CLUBS_URL);
+                    >(API_ENDPOINTS.CLUBS);
                     if (Array.isArray(data)) {
                         fetched = data
                             .filter((d) => missingIds.includes(d.clubId))
