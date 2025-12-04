@@ -1,5 +1,6 @@
 ﻿import React from "react";
 import api from "../services/api.ts";
+import { crestUrl, divisionCrestUrl, reputationTierUrl, FALLBACK_LOGO } from "../config/urls.ts";
 
 export type PlayoffAchievementDto = {
     seasonId: string;
@@ -50,12 +51,6 @@ type Props = {
 };
 
 /** ===== Helpers locais ===== */
-const FALLBACK_LOGO = "https://via.placeholder.com/96?text=Logo";
-const crestUrl = (id?: string | null) =>
-    id
-        ? `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${id}.png`
-        : FALLBACK_LOGO;
-
 const toNum = (s?: string | null) => {
     if (s === null || s === undefined) return 0;
     const n = Number(s);
@@ -64,19 +59,6 @@ const toNum = (s?: string | null) => {
 const asNonNegativeIntString = (s?: string | null) => {
     const n = Number(String(s ?? "").trim());
     return Number.isFinite(n) && n >= 0 ? String(Math.trunc(n)) : null;
-};
-const asPositiveIntString = (s?: string | null) => {
-    if (s == null) return null;
-    const n = Number(String(s).trim());
-    return Number.isFinite(n) && n > 0 ? String(Math.trunc(n)) : null;
-};
-const divisionCrestUrl = (division?: string | null) => {
-    const n = asPositiveIntString(division);
-    return n ? `https://media.contentapi.ea.com/content/dam/eacom/fc/pro-clubs/divisioncrest${n}.png` : null;
-};
-const reputationTierUrl = (tier?: string | null) => {
-    const n = Number(tier);
-    return `https://media.contentapi.ea.com/content/dam/eacom/fc/pro-clubs/reputation-tier${n}.png`;
 };
 const REPUTATION_LABELS: Record<string, string> = {
     "0": "Hometown Heroes",

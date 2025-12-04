@@ -7,6 +7,7 @@ import { TeamStatsSection } from "../components/TeamStatsSection.tsx";
 import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
 import { GoalLinkingSection } from "../components/GoalLinkingSection.tsx";
 import { ClubStats, PlayerStats } from "../types/stats.ts";
+import { crestUrl, FALLBACK_LOGO } from "../config/urls.ts";
 
 // ======================
 // Tipos (espelham /api/Matches/{matchId}/statistics)
@@ -95,12 +96,6 @@ interface FullMatchStatisticsDto {
 // ======================
 // Helpers
 // ======================
-const FALLBACK_LOGO = "https://via.placeholder.com/96?text=Logo";
-const crestUrl = (id?: string | null) =>
-  id
-    ? `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${id}.png`
-    : FALLBACK_LOGO;
-
 function fmt(value: number | undefined | null) {
   if (value === undefined || value === null) return "–";
   return Number.isInteger(value) ? String(value) : (Math.round((value as number) * 100) / 100).toFixed(2);

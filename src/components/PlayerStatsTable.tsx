@@ -137,6 +137,12 @@ export function PlayerStatsTable({
     const sorted = useMemo(() => {
         const cp = [...filtered];
         cp.sort((a, b) => {
+            // Handle computed "participations" column
+            if (sortKey === ("participations" as any)) {
+                const va = (Number(a.totalGoals) || 0) + (Number(a.totalAssists) || 0) + (Number(a.totalPreAssists) || 0);
+                const vb = (Number(b.totalGoals) || 0) + (Number(b.totalAssists) || 0) + (Number(b.totalPreAssists) || 0);
+                return sortOrder === "asc" ? va - vb : vb - va;
+            }
             const va = a[sortKey] as any;
             const vb = b[sortKey] as any;
             if (typeof va === "number" && typeof vb === "number") return sortOrder === "asc" ? va - vb : vb - va;
@@ -152,6 +158,7 @@ export function PlayerStatsTable({
         const keys: (keyof PlayerStats)[] = [
             "totalGoals",
             "totalAssists",
+            "totalPreAssists",
             "totalShots",
             "totalPassesMade",
             "totalTacklesMade",
@@ -162,8 +169,12 @@ export function PlayerStatsTable({
             "goalAccuracyPercent",
             "totalSaves",
         ];
-        const res = new Map<keyof PlayerStats, number>();
+        const res = new Map<keyof PlayerStats | "participations", number>();
         keys.forEach((k) => res.set(k, Math.max(1, ...filtered.map((p) => Number(p[k]) || 0))));
+        // Participations = goals + assists + preAssists
+        res.set("participations", Math.max(1, ...filtered.map((p) =>
+            (Number(p.totalGoals) || 0) + (Number(p.totalAssists) || 0) + (Number(p.totalPreAssists) || 0)
+        )));
         return res;
     }, [filtered]);
 
@@ -205,8 +216,10 @@ export function PlayerStatsTable({
     const allColumns = [
         { key: "proName", label: "Jogador", tooltip: "Nome do jogador" },
         { key: "matchesPlayed", label: "Partidas" },
+        { key: "participations", label: "Partic.", tooltip: "Participações em gols (Gols + Assistências + Pré-Assistências)" },
         { key: "totalGoals", label: "Gols" },
         { key: "totalAssists", label: "Assistências" },
+        { key: "totalPreAssists", label: "Pré-Assist", tooltip: "Passes que resultaram em assistências" },
         { key: "totalShots", label: "Chutes", tooltip: "Gols / Tentativas totais e % de conversão" },
         ...(hasGoalkeeperStats ? [{
             key: "totalSaves",
@@ -379,6 +392,24 @@ export function PlayerStatsTable({
                                                     />
                                                 </td>
                                             );
+                                        case "totalPreAssists":
+                                            return (
+                                                <td key={col.key} className="px-3 py-2">
+                                                    <CellBar
+                                                        value={p.totalPreAssists}
+                                                        max={maxByKey.get("totalPreAssists") || 1}
+                                                        format={(v) => int.format(v)}
+                                                    />
+                                                </td>
+                                            );
+                                        case "participations": {
+                                            const participations = (Number(p.totalGoals) || 0) + (Number(p.totalAssists) || 0) + (Number(p.totalPreAssists) || 0);
+                                            return (
+                                                <td key={col.key} className="px-3 py-2 font-medium">
+                                                    {int.format(participations)}
+                                                </td>
+                                            );
+                                        }
                                         case "totalShots":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">

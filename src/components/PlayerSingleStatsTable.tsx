@@ -72,8 +72,10 @@ export function PlayerSingleStatsTable({
                 <thead className="bg-gray-50">
                     <tr>
                         <th className="px-3 py-2 text-left">Horário</th>
+                        <th className="px-3 py-2 text-right">Partic.</th>
                         <th className="px-3 py-2 text-right">Gols</th>
                         <th className="px-3 py-2 text-right">Assist.</th>
+                        <th className="px-3 py-2 text-right">Pré-Assist.</th>
                         <th className="px-3 py-2 text-right">Chutes</th>
                         <th className="px-3 py-2 text-right">Passes (C/T)</th>
                         <th className="px-3 py-2 text-right">% Passes</th>
@@ -90,6 +92,8 @@ export function PlayerSingleStatsTable({
 
                         const goals = Number(p.totalGoals ?? p.TotalGoals ?? 0);
                         const assists = Number(p.totalAssists ?? p.TotalAssists ?? 0);
+                        const preAssists = Number(p.totalPreAssists ?? p.TotalPreAssists ?? 0);
+                        const participations = goals + assists + preAssists;
                         const shots = Number(p.totalShots ?? p.TotalShots ?? 0);
                         const passesMade = Number(p.totalPassesMade ?? p.TotalPassesMade ?? 0);
                         const passesAttempted = Number(p.totalPassAttempts ?? p.TotalPassAttempts ?? 0);
@@ -124,8 +128,10 @@ export function PlayerSingleStatsTable({
                                         "—"
                                     )}
                                 </td>
+                                <td className="px-3 py-2 text-right font-medium">{int.format(participations)}</td>
                                 <td className="px-3 py-2 text-right">{int.format(goals)}</td>
                                 <td className="px-3 py-2 text-right">{int.format(assists)}</td>
+                                <td className="px-3 py-2 text-right">{int.format(preAssists)}</td>
                                 <td className="px-3 py-2 text-right">{int.format(shots)}</td>
                                 <td className="px-3 py-2 text-right">
                                     {int.format(passesMade)} / {int.format(passesAttempted)}
