@@ -94,13 +94,24 @@ export function GoalLinkingSection({
 
   // Fetch existing goal links or initialize from player data
   useEffect(() => {
+    let cancelled = false;
+
     const fetchExistingGoals = async () => {
       setLoading(true);
       try {
         const { data } = await api.get<ApiGoalsResponse>(`/api/Matches/${matchId}/goals`);
 
-        // Filter goals for this club only
-        const clubGoals = data.goals.filter((g) => g.clubId === clubId);
+        if (cancelled) return;
+
+        // Filter goals for this club only (use Number() to ensure type match)
+        const numericClubId = Number(clubId);
+        let clubGoals = data.goals.filter((g) => Number(g.clubId) === numericClubId);
+
+        // If no goals for this club but API has goals, it might be from another club
+        // the user owns (e.g., viewing old match from different club). Use those goals.
+        if (clubGoals.length === 0 && data.goals.length > 0) {
+          clubGoals = data.goals;
+        }
 
         if (clubGoals.length > 0) {
           // Map API response to GoalLink format
@@ -118,16 +129,26 @@ export function GoalLinkingSection({
         } else {
           // No existing data, use initial links from player stats
           setGoalLinks(initialGoalLinks);
+          setSaved(false);
         }
       } catch {
         // API error (e.g., 404) - use initial links
-        setGoalLinks(initialGoalLinks);
+        if (!cancelled) {
+          setGoalLinks(initialGoalLinks);
+          setSaved(false);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     fetchExistingGoals();
+
+    return () => {
+      cancelled = true;
+    };
   }, [matchId, clubId, initialGoalLinks]);
 
   // Players with at least one assist (base list, will be filtered per row)
