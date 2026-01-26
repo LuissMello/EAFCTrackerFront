@@ -1,5 +1,5 @@
 // API Base URL
-export const API_BASE_URL = 'https://eafctracker2-hhahgrf9cdb9b5f4.brazilsouth-01.azurewebsites.net';
+export const API_BASE_URL = 'https://eafctracker.fly.dev';
 
 // API Endpoints
 export const API_ENDPOINTS = {
