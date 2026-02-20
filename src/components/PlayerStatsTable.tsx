@@ -99,6 +99,76 @@ function CellBar({
     );
 }
 
+/** 3 barras verticais (V/E/D) + label com valor absoluto e %: ex "3 (60,0%)" */
+function VerticalRecordBars({
+    wins,
+    ties,
+    losses,
+    int,
+    p1,
+}: {
+    wins: number;
+    ties: number;
+    losses: number;
+    int: Intl.NumberFormat;
+    p1: Intl.NumberFormat;
+}) {
+    const v = Math.max(0, Number(wins || 0));
+    const e = Math.max(0, Number(ties || 0));
+    const d = Math.max(0, Number(losses || 0));
+    const total = v + e + d;
+
+    const vPct = total ? (v / total) * 100 : 0;
+    const ePct = total ? (e / total) * 100 : 0;
+    const dPct = total ? (d / total) * 100 : 0;
+
+    const tooltip = `Vitórias/Empates/Derrotas: ${int.format(v)}/${int.format(e)}/${int.format(d)} (${p1.format(
+        vPct
+    )}% / ${p1.format(ePct)}% / ${p1.format(dPct)}%)`;
+
+    const Bar = ({ heightPct, className }: { heightPct: number; className: string }) => (
+        <div className="w-3 h-10 rounded-sm bg-gray-100 border border-gray-200 overflow-hidden flex items-end">
+            <div className={`w-full ${className}`} style={{ height: `${clamp(heightPct)}%` }} />
+        </div>
+    );
+
+    const Stat = ({
+        label,
+        abs,
+        pctValue,
+        barPct,
+        colorClass,
+    }: {
+        label: "V" | "E" | "D";
+        abs: number;
+        pctValue: number;
+        barPct: number;
+        colorClass: string;
+    }) => (
+        <div className="flex flex-col items-center">
+            <Bar heightPct={barPct} className={colorClass} />
+            <span className="text-[10px] leading-none mt-1 font-medium">{label}</span>
+            <span className="text-[10px] leading-none mt-1 text-gray-600">
+                {int.format(abs)} ({p1.format(pctValue)}%)
+            </span>
+        </div>
+    );
+
+    const content = (
+        <div className="flex items-end justify-center gap-3">
+            <Stat label="V" abs={v} pctValue={vPct} barPct={vPct} colorClass="bg-emerald-300" />
+            <Stat label="E" abs={e} pctValue={ePct} barPct={ePct} colorClass="bg-orange-300" />
+            <Stat label="D" abs={d} pctValue={dPct} barPct={dPct} colorClass="bg-red-300" />
+        </div>
+    );
+
+    return (
+        <Tooltip content={tooltip} wrapperClassName="block">
+            {content}
+        </Tooltip>
+    );
+}
+
 export function PlayerStatsTable({
     players,
     loading,
@@ -143,6 +213,26 @@ export function PlayerStatsTable({
                 const vb = (Number(b.totalGoals) || 0) + (Number(b.totalAssists) || 0) + (Number(b.totalPreAssists) || 0);
                 return sortOrder === "asc" ? va - vb : vb - va;
             }
+
+            // Handle computed "vedBars" column (V/E/D)
+            if (sortKey === ("vedBars" as any)) {
+                const vaW = Number(a.totalWins || 0);
+                const vaT = Number(a.totalDraws || 0);
+                const vaL = Number(a.totalLosses || 0);
+                const vaG = Number(a.matchesPlayed || 0);
+
+                const vbW = Number(b.totalWins || 0);
+                const vbT = Number(b.totalDraws || 0);
+                const vbL = Number(b.totalLosses || 0);
+                const vbG = Number(b.matchesPlayed || 0);
+
+                // vitórias desc, depois empates desc, depois derrotas asc, depois jogos desc
+                if (vaW !== vbW) return sortOrder === "asc" ? vaW - vbW : vbW - vaW;
+                if (vaT !== vbT) return sortOrder === "asc" ? vaT - vbT : vbT - vaT;
+                if (vaL !== vbL) return sortOrder === "asc" ? vaL - vbL : vbL - vaL;
+                return sortOrder === "asc" ? vaG - vbG : vbG - vaG;
+            }
+
             const va = a[sortKey] as any;
             const vb = b[sortKey] as any;
             if (typeof va === "number" && typeof vb === "number") return sortOrder === "asc" ? va - vb : vb - va;
@@ -163,7 +253,6 @@ export function PlayerStatsTable({
             "totalPassesMade",
             "totalTacklesMade",
             "avgRating",
-            "winPercent",
             "passAccuracyPercent",
             "tackleSuccessPercent",
             "goalAccuracyPercent",
@@ -172,9 +261,18 @@ export function PlayerStatsTable({
         const res = new Map<keyof PlayerStats | "participations", number>();
         keys.forEach((k) => res.set(k, Math.max(1, ...filtered.map((p) => Number(p[k]) || 0))));
         // Participations = goals + assists + preAssists
-        res.set("participations", Math.max(1, ...filtered.map((p) =>
-            (Number(p.totalGoals) || 0) + (Number(p.totalAssists) || 0) + (Number(p.totalPreAssists) || 0)
-        )));
+        res.set(
+            "participations",
+            Math.max(
+                1,
+                ...filtered.map(
+                    (p) =>
+                        (Number(p.totalGoals) || 0) +
+                        (Number(p.totalAssists) || 0) +
+                        (Number(p.totalPreAssists) || 0)
+                )
+            )
+        );
         return res;
     }, [filtered]);
 
@@ -221,19 +319,20 @@ export function PlayerStatsTable({
         { key: "totalAssists", label: "Assistências" },
         { key: "totalPreAssists", label: "Pré-Assist", tooltip: "Passes que resultaram em assistências" },
         { key: "totalShots", label: "Chutes", tooltip: "Gols / Tentativas totais e % de conversão" },
-        ...(hasGoalkeeperStats ? [{
-            key: "totalSaves",
-            label: "Defesas",
-            tooltip: "Defesas e Gols Sofridos do CLUBE no período: % = S / (S + Gc)",
-        }] : []),
+        ...(hasGoalkeeperStats
+            ? [
+                  {
+                      key: "totalSaves",
+                      label: "Defesas",
+                      tooltip: "Defesas e Gols Sofridos do CLUBE no período: % = S / (S + Gc)",
+                  },
+              ]
+            : []),
         { key: "totalPassesMade", label: "Passes", tooltip: "Completos / Tentados e %" },
-        {
-            key: "totalTacklesMade",
-            label: "Desarmes",
-            tooltip: "Desarmes certos / tentados e %",
-        },
-        { key: "record", label: "V/E/D", tooltip: "Vitórias / Empates / Derrotas" },
-        { key: "winPercent", label: "Win %" },
+        { key: "totalTacklesMade", label: "Desarmes", tooltip: "Desarmes certos / tentados e %" },
+
+        { key: "vedBars", label: "V/E/D", tooltip: "3 barras verticais: Vitórias / Empates / Derrotas (valor e %)" },
+
         { key: "totalMom", label: "MOM" },
         { key: "avgRating", label: "Nota" },
     ];
@@ -305,8 +404,7 @@ export function PlayerStatsTable({
 
                                 const isDisconnected = Boolean((p as any).disconnected);
                                 const isMotm = Number(p.totalMom || 0) > 0;
-                                const isGoalkeeper =
-                                    ((p as any).position?.toUpperCase?.() === "GK") || saves > 0;
+                                const isGoalkeeper = ((p as any).position?.toUpperCase?.() === "GK") || saves > 0;
                                 const hasRedCard = Number(p.totalRedCards || 0) > 0;
 
                                 const showHighlights = p.matchesPlayed === 1;
@@ -341,14 +439,22 @@ export function PlayerStatsTable({
                                             </Tooltip>
                                         )}
                                         {hasRedCard && (
-                                            <Tooltip content={`${int.format(p.totalRedCards)} Cartão${p.totalRedCards > 1 ? 'ões' : ''} Vermelho${p.totalRedCards > 1 ? 's' : ''}`}>
+                                            <Tooltip
+                                                content={`${int.format(p.totalRedCards)} Cartão${p.totalRedCards > 1 ? "ões" : ""} Vermelho${
+                                                    p.totalRedCards > 1 ? "s" : ""
+                                                }`}
+                                            >
                                                 <RectangleVertical size={16} className="text-red-700 fill-red-700" />
                                             </Tooltip>
                                         )}
                                     </span>
                                 ) : hasRedCard ? (
                                     <span className="inline-flex items-center gap-1 mr-2">
-                                        <Tooltip content={`${int.format(p.totalRedCards)} Cartão${p.totalRedCards > 1 ? 'ões' : ''} Vermelho${p.totalRedCards > 1 ? 's' : ''}`}>
+                                        <Tooltip
+                                            content={`${int.format(p.totalRedCards)} Cartão${p.totalRedCards > 1 ? "ões" : ""} Vermelho${
+                                                p.totalRedCards > 1 ? "s" : ""
+                                            }`}
+                                        >
                                             <RectangleVertical size={16} className="text-red-700 fill-red-700" />
                                         </Tooltip>
                                     </span>
@@ -375,21 +481,13 @@ export function PlayerStatsTable({
                                         case "totalGoals":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    <CellBar
-                                                        value={p.totalGoals}
-                                                        max={maxByKey.get("totalGoals") || 1}
-                                                        format={(v) => int.format(v)}
-                                                    />
+                                                    <CellBar value={p.totalGoals} max={maxByKey.get("totalGoals") || 1} format={(v) => int.format(v)} />
                                                 </td>
                                             );
                                         case "totalAssists":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    <CellBar
-                                                        value={p.totalAssists}
-                                                        max={maxByKey.get("totalAssists") || 1}
-                                                        format={(v) => int.format(v)}
-                                                    />
+                                                    <CellBar value={p.totalAssists} max={maxByKey.get("totalAssists") || 1} format={(v) => int.format(v)} />
                                                 </td>
                                             );
                                         case "totalPreAssists":
@@ -403,7 +501,8 @@ export function PlayerStatsTable({
                                                 </td>
                                             );
                                         case "participations": {
-                                            const participations = (Number(p.totalGoals) || 0) + (Number(p.totalAssists) || 0) + (Number(p.totalPreAssists) || 0);
+                                            const participations =
+                                                (Number(p.totalGoals) || 0) + (Number(p.totalAssists) || 0) + (Number(p.totalPreAssists) || 0);
                                             return (
                                                 <td key={col.key} className="px-3 py-2 font-medium">
                                                     {int.format(participations)}
@@ -476,25 +575,20 @@ export function PlayerStatsTable({
                                                 </td>
                                             );
                                         }
-                                        case "record":
+
+                                        case "vedBars":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.totalWins)}/{int.format(p.totalDraws)}/{int.format(p.totalLosses)}
-                                                </td>
-                                            );
-                                        case "winPercent":
-                                            return (
-                                                <td key={col.key} className="px-3 py-2">
-                                                    <CellBar
-                                                        value={p.winPercent}
-                                                        max={100}
-                                                        suffix="%"
-                                                        positive
-                                                        format={(v) => p1.format(v)}
-                                                        statType="winRate"
+                                                    <VerticalRecordBars
+                                                        wins={Number(p.totalWins || 0)}
+                                                        ties={Number(p.totalDraws || 0)}
+                                                        losses={Number(p.totalLosses || 0)}
+                                                        int={int}
+                                                        p1={p1}
                                                     />
                                                 </td>
                                             );
+
                                         case "totalMom":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
