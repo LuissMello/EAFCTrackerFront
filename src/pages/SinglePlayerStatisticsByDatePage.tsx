@@ -1,6 +1,6 @@
 ﻿// src/pages/PlayerStatisticsByPlayerPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { PlayerSingleStatsTable } from "../components/PlayerSingleStatsTable.tsx";
 import type { PlayerStats } from "../types/stats";
@@ -122,6 +122,73 @@ function buildDateColorMap(datesISODesc: string[]): Map<string, DateColor> {
   return map;
 }
 
+function RecordBar({ wins, draws, losses }: { wins: number; draws: number; losses: number }) {
+  const total = wins + draws + losses || 1;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex h-2 rounded-full overflow-hidden">
+        <div style={{ width: `${(wins / total) * 100}%` }} className="bg-green-500" />
+        <div style={{ width: `${(draws / total) * 100}%` }} className="bg-amber-400" />
+        <div style={{ width: `${(losses / total) * 100}%` }} className="bg-red-400" />
+      </div>
+      <div className="flex gap-3 text-[11px]">
+        <span className="text-green-700 font-semibold">V {wins}</span>
+        <span className="text-amber-600 font-semibold">E {draws}</span>
+        <span className="text-red-600 font-semibold">D {losses}</span>
+      </div>
+    </div>
+  );
+}
+
+function ChartCard({
+  label,
+  color,
+  datasets,
+  options,
+  labels,
+  decimals = 1,
+  showStats,
+}: {
+  label: string;
+  color: string;
+  datasets: any[];
+  options: any;
+  labels: string[];
+  decimals?: number;
+  showStats: boolean;
+}) {
+  const primaryData = (datasets[0]?.data ?? []) as (number | null)[];
+  const trend = showStats ? trendArrow(primaryData) : null;
+  const stats = showStats ? miniStats(primaryData, decimals) : null;
+
+  return (
+    <div className="bg-white border rounded-xl p-4 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span
+            className="inline-block w-8 h-1.5 rounded-full flex-shrink-0"
+            style={{ backgroundColor: color }}
+          />
+          <span className="text-sm font-medium text-gray-700">{label}</span>
+        </div>
+        {trend && (
+          <span className={`text-base font-bold leading-none ${trend.cls}`}>{trend.arrow}</span>
+        )}
+      </div>
+      <div className="h-56">
+        <Line data={{ labels, datasets }} options={options} />
+      </div>
+      {stats && (
+        <div className="mt-2 flex gap-3 text-[11px] text-gray-400 border-t pt-1.5">
+          <span>Mín: <span className="font-medium text-gray-500">{stats.min}</span></span>
+          <span>Méd: <span className="font-medium text-gray-500">{stats.avg}</span></span>
+          <span>Máx: <span className="font-medium text-gray-500">{stats.max}</span></span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const DateBadge: React.FC<{ dateISO: string; colorMap: Map<string, DateColor>; className?: string }> = ({
   dateISO,
   colorMap,
@@ -176,6 +243,8 @@ const CHART_COLORS = {
   rating: "#6366F1",     // indigo
 };
 
+const PLAYER_COMPARE_COLORS = ["#3B82F6", "#F97316"]; // blue, orange
+
 // Moving average for trendline
 function movingAvg(arr: number[], win = 3): number[] {
   if (!arr || arr.length === 0) return [];
@@ -187,6 +256,29 @@ function movingAvg(arr: number[], win = 3): number[] {
     out.push(i >= win - 1 ? sum / win : arr[i]);
   }
   return out;
+}
+
+function trendArrow(data: (number | null)[]): { arrow: string; cls: string } {
+  const vals = data.filter((v): v is number => v !== null && Number.isFinite(v));
+  if (vals.length < 4) return { arrow: "→", cls: "text-gray-400" };
+  const n = Math.max(1, Math.min(3, Math.floor(vals.length / 3)));
+  const first = vals.slice(0, n).reduce((a, b) => a + b, 0) / n;
+  const last = vals.slice(-n).reduce((a, b) => a + b, 0) / n;
+  const base = Math.abs(first) > 0.001 ? first : 1;
+  const diff = (last - first) / base;
+  if (diff > 0.05) return { arrow: "↑", cls: "text-green-500" };
+  if (diff < -0.05) return { arrow: "↓", cls: "text-red-400" };
+  return { arrow: "→", cls: "text-gray-400" };
+}
+
+function miniStats(data: (number | null)[], decimals = 1): { min: string; avg: string; max: string } | null {
+  const vals = data.filter((v): v is number => v !== null && Number.isFinite(v));
+  if (!vals.length) return null;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const fmt = (n: number) => n.toFixed(decimals);
+  return { min: fmt(min), avg: fmt(avg), max: fmt(max) };
 }
 
 type SimplePlayerOption = {
@@ -344,6 +436,8 @@ export default function PlayerStatisticsByPlayerPage() {
     return fmtYYYYMMDD(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   });
 
+  const [activeQuickRange, setActiveQuickRange] = useState<string | null>(null);
+
   const handleRangeChange = (start: string, end: string) => {
     setDateFrom(start);
     setDateTo(end);
@@ -358,18 +452,21 @@ export default function PlayerStatisticsByPlayerPage() {
     const start = new Date();
     start.setDate(end.getDate() - (nDays - 1));
     handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end));
+    setActiveQuickRange(`${nDays}d`);
   };
   const setCurrentMonth = () => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end));
+    setActiveQuickRange("current");
   };
   const setPreviousMonth = () => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const end = new Date(now.getFullYear(), now.getMonth(), 0);
     handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end));
+    setActiveQuickRange("prev");
   };
 
   // ===== Fetch agrupado por dia (clubes + todos jogadores) =====
@@ -697,9 +794,6 @@ export default function PlayerStatisticsByPlayerPage() {
     const sortedDates = Array.from(allDates).sort();
     const labels = sortedDates.map((d) => fmtBRFromISO(d));
 
-    // Distinct colors for each player (high contrast)
-    const playerColors = ["#3B82F6", "#F97316"]; // blue, orange
-
     const createDatasetsForMetric = (
       metricName: string,
       getValue: (d: PlayerDaySummary) => number,
@@ -711,7 +805,7 @@ export default function PlayerStatisticsByPlayerPage() {
         const playerData = perDayByPlayer[pid] ?? [];
         const playerName = playerOptions.find((p) => p.playerId === pid)?.name ?? `Player ${pid}`;
         // Use distinct colors when comparing, base color for single player
-        const color = selectedPlayerIds.length > 1 ? playerColors[idx] : baseColor;
+        const color = selectedPlayerIds.length > 1 ? PLAYER_COMPARE_COLORS[idx] : baseColor;
 
         // Map data to sorted dates
         const dataByDate = new Map<string, PlayerDaySummary>();
@@ -1124,12 +1218,32 @@ export default function PlayerStatisticsByPlayerPage() {
 
   const modeLabel = useDaysRanking ? "Modo: dias" : "Modo: jogos";
 
+  const qbCls = (key: string) =>
+    `text-xs border rounded-lg px-2.5 py-1 shadow-sm transition-colors ${
+      activeQuickRange === key
+        ? "bg-gray-800 text-white border-gray-800"
+        : "bg-white hover:bg-gray-50"
+    }`;
+
+  const rankTopClass =
+    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-green-50 text-green-700 border-green-200";
+  const rankWorstClass =
+    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-red-50 text-red-700 border-red-200";
+
   return (
     <div className="p-4 flex flex-col gap-6">
       {/* Header & filtros */}
       <header className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <h1 className="text-xl font-semibold">Estatísticas individuais por data</h1>
+          <div className="flex items-center gap-2">
+              <Link
+                to="/"
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-white hover:bg-gray-50"
+              >
+                ← Voltar
+              </Link>
+              <span className="text-gray-400 text-sm">Estatísticas individuais por data</span>
+            </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
             <div className="flex gap-2 items-center">
               <label className="text-sm">
@@ -1137,7 +1251,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 <input
                   type="date"
                   value={dateFrom}
-                  onChange={(e) => handleRangeChange(e.target.value, dateTo)}
+                  onChange={(e) => { handleRangeChange(e.target.value, dateTo); setActiveQuickRange(null); }}
                   className="ml-1 border rounded px-2 py-1"
                 />
               </label>
@@ -1146,37 +1260,18 @@ export default function PlayerStatisticsByPlayerPage() {
                 <input
                   type="date"
                   value={dateTo}
-                  onChange={(e) => handleRangeChange(dateFrom, e.target.value)}
+                  onChange={(e) => { handleRangeChange(dateFrom, e.target.value); setActiveQuickRange(null); }}
                   className="ml-1 border rounded px-2 py-1"
                 />
               </label>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setQuickRangeDays(7)}
-                className="text-xs border rounded px-2 py-1 hover:bg-gray-50"
-              >
-                7d
-              </button>
-              <button
-                onClick={() => setQuickRangeDays(14)}
-                className="text-xs border rounded px-2 py-1 hover:bg-gray-50"
-              >
-                14d
-              </button>
-              <button
-                onClick={() => setQuickRangeDays(30)}
-                className="text-xs border rounded px-2 py-1 hover:bg-gray-50"
-              >
-                30d
-              </button>
-              <button onClick={setCurrentMonth} className="text-xs border rounded px-2 py-1 hover:bg-gray-50">
-                Mês atual
-              </button>
-              <button onClick={setPreviousMonth} className="text-xs border rounded px-2 py-1 hover:bg-gray-50">
-                Mês anterior
-              </button>
+              <button onClick={() => setQuickRangeDays(7)} className={qbCls("7d")}>7d</button>
+              <button onClick={() => setQuickRangeDays(14)} className={qbCls("14d")}>14d</button>
+              <button onClick={() => setQuickRangeDays(30)} className={qbCls("30d")}>30d</button>
+              <button onClick={setCurrentMonth} className={qbCls("current")}>Mês atual</button>
+              <button onClick={setPreviousMonth} className={qbCls("prev")}>Mês anterior</button>
             </div>
           </div>
         </div>
@@ -1216,7 +1311,10 @@ export default function PlayerStatisticsByPlayerPage() {
                     >
                       {p.name}
                       {isActive && selectedPlayerIds.length > 1 && (
-                        <span className="ml-1 text-[10px] opacity-75">({selectionIndex + 1})</span>
+                        <span
+                          className="ml-1.5 inline-block w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: PLAYER_COMPARE_COLORS[selectionIndex] ?? "#6B7280" }}
+                        />
                       )}
                     </button>
                   );
@@ -1275,6 +1373,9 @@ export default function PlayerStatisticsByPlayerPage() {
                     }}
                   >
                     {fmtBRFromISO(d)}
+                    <span className="opacity-60 text-[10px] ml-0.5">
+                      {" · "}{perDayForPlayer.find((pd) => pd.date.slice(0, 10) === key)?.matches ?? 0}j
+                    </span>
                   </button>
                 );
               })}
@@ -1300,7 +1401,7 @@ export default function PlayerStatisticsByPlayerPage() {
             {/* Jogos */}
             <div className="bg-white rounded-lg border px-3 py-2 flex flex-col gap-1">
               <span className="text-xs uppercase tracking-wide text-gray-500">Jogos</span>
-              <span className="text-lg font-semibold">{summary.totalMatches}</span>
+              <span className="text-2xl font-bold">{summary.totalMatches}</span>
               {selectedDayKey === "all" && (
                 <span className="text-xs text-gray-500">
                   {summary.daysCount} dia(s); {summary.matchesPerDay.toFixed(2)} jogos/dia
@@ -1311,10 +1412,7 @@ export default function PlayerStatisticsByPlayerPage() {
             {/* Resultados */}
             <div className="bg-white rounded-lg border px-3 py-2 flex flex-col gap-1">
               <span className="text-xs uppercase tracking-wide text-gray-500">Resultados</span>
-              <span className="text-sm">
-                <strong>{summary.totalWins}</strong>V <strong>{summary.totalDraws}</strong>E{" "}
-                <strong>{summary.totalLosses}</strong>D
-              </span>
+              <RecordBar wins={summary.totalWins} draws={summary.totalDraws} losses={summary.totalLosses} />
               <span className="text-xs text-gray-500">
                 Win {summary.totalMatches > 0 ? ((summary.totalWins * 100) / summary.totalMatches).toFixed(1) : "0.0"}%
               </span>
@@ -1360,7 +1458,7 @@ export default function PlayerStatisticsByPlayerPage() {
 
           {/* Melhor dia */}
           {bestDay && (
-            <div className="rounded-lg border bg-white p-3 flex flex-col gap-2">
+            <div className="rounded-lg border border-l-4 border-l-amber-400 bg-amber-50/40 p-3 flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wide text-gray-500">
                   Melhor dia do jogador (part. = gols + assist. + pré-assist.)
@@ -1408,7 +1506,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 {/* Gols */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
                   <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-700">
+                    <span className={rankTopClass}>
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM GOLS" : "TOP 5 JOGOS EM GOLS"}
                     </span>
                   </div>
@@ -1446,7 +1544,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 {/* Assistências */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
                   <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-700">
+                    <span className={rankTopClass}>
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM ASSISTÊNCIAS" : "TOP 5 JOGOS EM ASSISTÊNCIAS"}
                     </span>
                   </div>
@@ -1484,7 +1582,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 {/* Pré-Assistências */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
                   <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-700">
+                    <span className={rankTopClass}>
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM PRÉ-ASSIST." : "TOP 5 JOGOS EM PRÉ-ASSIST."}
                     </span>
                   </div>
@@ -1522,7 +1620,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 {/* Desarmes */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
                   <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-700">
+                    <span className={rankTopClass}>
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM DESARMES" : "TOP 5 JOGOS EM DESARMES"}
                     </span>
                   </div>
@@ -1560,7 +1658,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 {/* Passes */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
                   <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-700">
+                    <span className={rankTopClass}>
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM PASSES" : "TOP 5 JOGOS EM PASSES"}
                     </span>
                   </div>
@@ -1603,7 +1701,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 {/* Gols */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
                   <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-700">
+                    <span className={rankWorstClass}>
                       {useDaysRanking ? "PIORES 5 DIAS EM GOLS" : "PIORES 5 JOGOS EM GOLS"}
                     </span>
                   </div>
@@ -1641,7 +1739,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 {/* Assistências */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
                   <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-700">
+                    <span className={rankWorstClass}>
                       {useDaysRanking ? "PIORES 5 DIAS EM ASSISTÊNCIAS" : "PIORES 5 JOGOS EM ASSISTÊNCIAS"}
                     </span>
                   </div>
@@ -1679,7 +1777,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 {/* Pré-Assistências */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
                   <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-700">
+                    <span className={rankWorstClass}>
                       {useDaysRanking ? "PIORES 5 DIAS EM PRÉ-ASSIST." : "PIORES 5 JOGOS EM PRÉ-ASSIST."}
                     </span>
                   </div>
@@ -1717,7 +1815,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 {/* Desarmes */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
                   <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-700">
+                    <span className={rankWorstClass}>
                       {useDaysRanking ? "PIORES 5 DIAS EM DESARMES" : "PIORES 5 JOGOS EM DESARMES"}
                     </span>
                   </div>
@@ -1755,7 +1853,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 {/* Passes */}
                 <div className="border rounded-xl bg-white shadow-sm p-4">
                   <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-700">
+                    <span className={rankWorstClass}>
                       {useDaysRanking ? "PIORES 5 DIAS EM PASSES" : "PIORES 5 JOGOS EM PASSES"}
                     </span>
                   </div>
@@ -1833,9 +1931,19 @@ export default function PlayerStatisticsByPlayerPage() {
                   const key = d.date.slice(0, 10);
                   const hasWindow = d.firstMatchTime && d.lastMatchTime;
                   const sameTime = d.firstMatchTime === d.lastMatchTime;
+                  const dayBlock = days.find((b) => b.date.slice(0, 10) === key);
+                  const rowBorder = dayBlock
+                    ? dayBlock.wins > dayBlock.losses
+                      ? "border-l-4 border-l-green-500"
+                      : dayBlock.losses > dayBlock.wins
+                      ? "border-l-4 border-l-red-400"
+                      : dayBlock.draws > 0
+                      ? "border-l-4 border-l-amber-400"
+                      : ""
+                    : "";
 
                   return (
-                    <tr key={d.date} className="hover:bg-gray-50">
+                    <tr key={d.date} className={`hover:bg-gray-50 ${rowBorder}`}>
                       <td className="px-3 py-2 text-left">
                         <DateBadge dateISO={key} colorMap={dateColorMap} />
                       </td>
@@ -1871,128 +1979,74 @@ export default function PlayerStatisticsByPlayerPage() {
           {/* ===== GRÁFICOS POR DIA ===== */}
           {chartDataForPlayer && (
             <div className="mt-6">
-              <h3 className="text-base font-semibold mb-4">
+              <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+                <span className="inline-block w-1 h-5 rounded-full bg-indigo-500" />
                 Evolução por dia {isComparing && `— ${selectedPlayerNames}`}
               </h3>
-              <div className="grid gap-4 md:grid-cols-2">
-                {/* Gols */}
-                <div className="bg-white border rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Gols</span>
-                    <span
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: CHART_COLORS.goals }}
-                    />
-                  </div>
-                  <div className="h-48">
-                    <Line
-                      data={{ labels: chartDataForPlayer.labels, datasets: chartDataForPlayer.goals }}
-                      options={chartOptionsDefault}
-                    />
-                  </div>
-                </div>
-
-                {/* Assistências */}
-                <div className="bg-white border rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Assistências</span>
-                    <span
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: CHART_COLORS.assists }}
-                    />
-                  </div>
-                  <div className="h-48">
-                    <Line
-                      data={{ labels: chartDataForPlayer.labels, datasets: chartDataForPlayer.assists }}
-                      options={chartOptionsDefault}
-                    />
-                  </div>
-                </div>
-
-                {/* Pré-Assistências */}
-                <div className="bg-white border rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Pré-Assistências</span>
-                    <span
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: CHART_COLORS.preAssists }}
-                    />
-                  </div>
-                  <div className="h-48">
-                    <Line
-                      data={{ labels: chartDataForPlayer.labels, datasets: chartDataForPlayer.preAssists }}
-                      options={chartOptionsDefault}
-                    />
-                  </div>
-                </div>
-
-                {/* Participações */}
-                <div className="bg-white border rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Participações (G+A+PA)</span>
-                    <span
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: CHART_COLORS.participations }}
-                    />
-                  </div>
-                  <div className="h-48">
-                    <Line
-                      data={{ labels: chartDataForPlayer.labels, datasets: chartDataForPlayer.participations }}
-                      options={chartOptionsDefault}
-                    />
-                  </div>
-                </div>
-
-                {/* Pass % */}
-                <div className="bg-white border rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Precisão de Passe (%)</span>
-                    <span
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: CHART_COLORS.passPercent }}
-                    />
-                  </div>
-                  <div className="h-48">
-                    <Line
-                      data={{ labels: chartDataForPlayer.labels, datasets: chartDataForPlayer.passPercent }}
-                      options={chartOptionsPercent}
-                    />
-                  </div>
-                </div>
-
-                {/* Tackles per game */}
-                <div className="bg-white border rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Desarmes por Jogo</span>
-                    <span
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: CHART_COLORS.tacklesAvg }}
-                    />
-                  </div>
-                  <div className="h-48">
-                    <Line
-                      data={{ labels: chartDataForPlayer.labels, datasets: chartDataForPlayer.tacklesAvg }}
-                      options={chartOptionsDefault}
-                    />
-                  </div>
-                </div>
-
-                {/* Rating */}
-                <div className="bg-white border rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Nota Média</span>
-                    <span
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: CHART_COLORS.rating }}
-                    />
-                  </div>
-                  <div className="h-48">
-                    <Line
-                      data={{ labels: chartDataForPlayer.labels, datasets: chartDataForPlayer.rating }}
-                      options={chartOptionsRating}
-                    />
-                  </div>
-                </div>
+              <div className="flex flex-col gap-4">
+                <ChartCard
+                  label="Gols"
+                  color={CHART_COLORS.goals}
+                  datasets={chartDataForPlayer.goals}
+                  options={chartOptionsDefault}
+                  labels={chartDataForPlayer.labels}
+                  decimals={0}
+                  showStats={!isComparing}
+                />
+                <ChartCard
+                  label="Assistências"
+                  color={CHART_COLORS.assists}
+                  datasets={chartDataForPlayer.assists}
+                  options={chartOptionsDefault}
+                  labels={chartDataForPlayer.labels}
+                  decimals={0}
+                  showStats={!isComparing}
+                />
+                <ChartCard
+                  label="Pré-Assistências"
+                  color={CHART_COLORS.preAssists}
+                  datasets={chartDataForPlayer.preAssists}
+                  options={chartOptionsDefault}
+                  labels={chartDataForPlayer.labels}
+                  decimals={0}
+                  showStats={!isComparing}
+                />
+                <ChartCard
+                  label="Participações (G+A+PA)"
+                  color={CHART_COLORS.participations}
+                  datasets={chartDataForPlayer.participations}
+                  options={chartOptionsDefault}
+                  labels={chartDataForPlayer.labels}
+                  decimals={0}
+                  showStats={!isComparing}
+                />
+                <ChartCard
+                  label="Precisão de Passe (%)"
+                  color={CHART_COLORS.passPercent}
+                  datasets={chartDataForPlayer.passPercent}
+                  options={chartOptionsPercent}
+                  labels={chartDataForPlayer.labels}
+                  decimals={1}
+                  showStats={!isComparing}
+                />
+                <ChartCard
+                  label="Desarmes por Jogo"
+                  color={CHART_COLORS.tacklesAvg}
+                  datasets={chartDataForPlayer.tacklesAvg}
+                  options={chartOptionsDefault}
+                  labels={chartDataForPlayer.labels}
+                  decimals={1}
+                  showStats={!isComparing}
+                />
+                <ChartCard
+                  label="Nota Média"
+                  color={CHART_COLORS.rating}
+                  datasets={chartDataForPlayer.rating}
+                  options={chartOptionsRating}
+                  labels={chartDataForPlayer.labels}
+                  decimals={2}
+                  showStats={!isComparing}
+                />
               </div>
             </div>
           )}
@@ -2021,7 +2075,7 @@ export default function PlayerStatisticsByPlayerPage() {
 
           {/* Destaques do dia: melhor jogo */}
           {!matchesLoading && !matchesError && gameHighlights.length > 0 && bestGameOfDay && (
-            <div className="rounded-lg border bg-white p-3 flex flex-col gap-2">
+            <div className="rounded-lg border border-l-4 border-l-amber-400 bg-amber-50/40 p-3 flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wide text-gray-500">
                   Melhor jogo do dia (part. = gols + assist. + pré-assist.)

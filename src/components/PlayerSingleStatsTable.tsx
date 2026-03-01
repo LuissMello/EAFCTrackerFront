@@ -83,6 +83,7 @@ export function PlayerSingleStatsTable({
                         <th className="px-3 py-2 text-right">% Desarmes</th>
                         <th className="px-3 py-2 text-right">Defesas</th>
                         <th className="px-3 py-2 text-right">Nota</th>
+                        <th className="px-3 py-2 text-right">Min.</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -150,6 +151,12 @@ export function PlayerSingleStatsTable({
                                 </td>
                                 <td className="px-3 py-2 text-right">
                                     {p2.format(rating)}
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                    {(() => {
+                                        const secondsPlayed = Number(p.totalSecondsPlayed ?? 0);
+                                        return `${Math.floor(secondsPlayed / 60)}:${String(secondsPlayed % 60).padStart(2, "0")}`;
+                                    })()}
                                 </td>
                             </tr>
                         );

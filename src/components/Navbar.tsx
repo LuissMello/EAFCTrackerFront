@@ -1,7 +1,6 @@
-﻿import React from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import React from "react";
+import { Link, useLocation } from "react-router-dom";
 import MultiClubPicker from "./MultiClubPicker.tsx";
-import { useClub } from "../hooks/useClub.tsx";
 import api from "../services/api.ts";
 
 type LastRunResponse = { lastFetchedAtUtc?: string | null };
@@ -22,63 +21,47 @@ function formatTimeAgo(iso?: string | null): string {
     if (!iso) return "Nunca";
     const then = new Date(iso).getTime();
     const now = Date.now();
-
-    // se o backend devolver levemente no futuro por fuso, trata como agora
     const diffSec = Math.floor((now - then) / 1000);
-
     if (diffSec < 5 && diffSec > -5) return "agora";
     const abs = Math.abs(diffSec);
-
     for (const [unit, inSec] of UNITS) {
         const value = Math.floor(abs / inSec);
-        if (value >= 1) {
-            // passado => número negativo para "há X"
-            return rtf.format(-value, unit);
-        }
+        if (value >= 1) return rtf.format(-value, unit);
     }
     return rtf.format(-abs, "second");
 }
 
+function freshnessDot(iso?: string | null): string {
+    if (!iso) return "bg-red-400";
+    const diffMin = (Date.now() - new Date(iso).getTime()) / 60000;
+    if (diffMin < 30) return "bg-green-400";
+    if (diffMin < 120) return "bg-amber-400";
+    return "bg-red-400";
+}
+
+const NAV_LINKS = [
+    { to: "/", label: "Partidas" },
+    { to: "/stats", label: "Estatísticas" },
+    { to: "/calendar", label: "Calendário" },
+    { to: "/statisticsbydate", label: "Stats Período" },
+    { to: "/singlestatisticsbydate", label: "Stats Individuais" },
+    { to: "/trends", label: "Trends" },
+    { to: "/attributes", label: "Atributos" },
+];
+
+function Spinner() {
+    return (
+        <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
+    );
+}
+
 export default function Navbar() {
-    const { setClub } = useClub();
-    const [searchParams, setSearchParams] = useSearchParams();
+    const location = useLocation();
+    const [menuOpen, setMenuOpen] = React.useState(false);
 
-    // seleção de clubes (como já estava)
-    const [groupIds, setGroupIds] = React.useState<number[]>(() => {
-        const raw = searchParams.get("clubIds");
-        if (raw) {
-            const ids = raw.split(",").map(x => parseInt(x, 10)).filter(n => !Number.isNaN(n));
-            return ids;
-        }
-        const single = searchParams.get("clubId");
-        if (single && !Number.isNaN(parseInt(single, 10))) return [parseInt(single, 10)];
-        return [];
-    });
-
-    React.useEffect(() => {
-        const raw = searchParams.get("clubIds");
-        if (raw) {
-            const ids = raw.split(",").map(x => parseInt(x, 10)).filter(n => !Number.isNaN(n));
-            setGroupIds(ids);
-            return;
-        }
-        const single = searchParams.get("clubId");
-        if (single && !Number.isNaN(parseInt(single, 10))) setGroupIds([parseInt(single, 10)]);
-        else setGroupIds([]);
-    }, [searchParams]);
-
-    const handleChange = (ids: number[]) => {
-        setGroupIds(ids);
-        const next = new URLSearchParams(searchParams);
-        if (ids.length) next.set("clubIds", ids.join(",")); else next.delete("clubIds");
-        if (ids.length === 1) next.set("clubId", String(ids[0])); else next.delete("clubId");
-        setSearchParams(next, { replace: true });
-
-        if (ids.length === 1) setClub({ clubId: ids[0] });
-        else setClub(null);
-    };
-
-    // última busca
     const [lastRunUtc, setLastRunUtc] = React.useState<string | null>(null);
     const [loadingLastRun, setLoadingLastRun] = React.useState<boolean>(true);
     const [running, setRunning] = React.useState<boolean>(false);
@@ -122,62 +105,122 @@ export default function Navbar() {
     }, [fetchLastRun]);
 
     const lastRunLabel = loadingLastRun ? "Carregando…" : formatTimeAgo(lastRunUtc);
+    const dotClass = loadingLastRun ? "bg-gray-500" : freshnessDot(lastRunUtc);
+
+    const isActive = (to: string) =>
+        to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
+
+    const fetchBtn = (fullWidth = false) => (
+        <button
+            onClick={handleRunFetch}
+            disabled={running}
+            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                fullWidth ? "flex-1" : ""
+            } ${
+                running
+                    ? "bg-white/10 text-gray-300 cursor-not-allowed"
+                    : "bg-white text-black hover:bg-gray-100"
+            }`}
+            title="Disparar coleta agora"
+        >
+            {running ? <><Spinner /> Buscando…</> : "Buscar partidas"}
+        </button>
+    );
+
+    const lastRunInfo = (small = false) => (
+        <div className={`flex items-center gap-1.5 ${small ? "text-[11px]" : "text-xs"} text-gray-300 whitespace-nowrap`}>
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotClass}`} />
+            <span>
+                Última busca: <span className="font-medium text-gray-100">{lastRunLabel}</span>
+            </span>
+        </div>
+    );
 
     return (
-        <nav className="bg-black text-white p-4">
-            {/* Linha 1: links */}
-            <div className="flex items-center gap-3 flex-wrap">
-                <Link className="font-bold" to="/">Partidas</Link>
-                <Link className="font-bold" to="/stats">Estatísticas</Link>
-                <Link className="font-bold" to="/calendar">Calendário</Link>
-                <Link className="font-bold" to="/statisticsbydate">Estatisticas (periodo)</Link>
-                <Link className="font-bold" to="/singlestatisticsbydate">Estatisticas Individuais (periodo)</Link>
-                <Link className="font-bold" to="/trends">Trends</Link>
-                <Link className="font-bold" to="/attributes">Atributos</Link>
+        <nav className="bg-black text-white px-5 py-2.5">
+            {/* Barra principal */}
+            <div className="flex items-center gap-2">
+                {/* Logo */}
+                <span className="font-bold text-sm tracking-tight whitespace-nowrap">EAFC Tracker</span>
+                <span className="hidden sm:block w-px h-4 bg-white/25 flex-shrink-0 mx-1" />
 
-                {/* Desktop (>=sm) */}
+                {/* Links — ocultos no mobile */}
+                <div className="hidden sm:flex items-center gap-0.5 flex-wrap">
+                    {NAV_LINKS.map(({ to, label }) => (
+                        <Link
+                            key={to}
+                            to={to}
+                            className={`px-2.5 py-1 rounded text-sm font-medium transition-colors whitespace-nowrap ${
+                                isActive(to)
+                                    ? "bg-white/15 text-white border-b-2 border-white"
+                                    : "text-gray-300 hover:text-white hover:bg-white/10"
+                            }`}
+                        >
+                            {label}
+                        </Link>
+                    ))}
+                </div>
+
+                {/* Hambúrguer (mobile only) */}
+                <button
+                    className="sm:hidden p-1 rounded hover:bg-white/10 transition ml-1"
+                    onClick={() => setMenuOpen((v) => !v)}
+                    aria-label="Menu"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        {menuOpen
+                            ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            : <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                        }
+                    </svg>
+                </button>
+
+                {/* Controles desktop */}
                 <div className="ml-auto hidden sm:flex items-center gap-3">
+                    <span className="w-px h-4 bg-white/25 flex-shrink-0" />
                     <div className="relative w-80">
-                        <MultiClubPicker value={groupIds} onChange={handleChange} />
+                        <MultiClubPicker />
                     </div>
-
-                    <button
-                        onClick={handleRunFetch}
-                        disabled={running}
-                        className={`px-3 py-2 rounded-lg border border-white/20 hover:bg-white/10 transition ${running ? "opacity-70 cursor-not-allowed" : ""}`}
-                        title="Disparar coleta agora"
-                    >
-                        {running ? "Buscando…" : "Buscar novas partidas"}
-                    </button>
-
-                    <div className="text-xs text-gray-300">
-                        Última busca: <span className="font-medium text-gray-100">{lastRunLabel}</span>
-                    </div>
+                    {fetchBtn()}
+                    {lastRunInfo()}
                 </div>
             </div>
 
-            {/* Mobile (<sm) */}
-            <div className="mt-2 flex sm:hidden flex-col gap-2">
-                <div className="relative w-full">
-                    <MultiClubPicker value={groupIds} onChange={handleChange} />
-                </div>
+            {/* Dropdown mobile */}
+            {menuOpen && (
+                <div className="sm:hidden mt-2 flex flex-col gap-1 border-t border-white/10 pt-2">
+                    {NAV_LINKS.map(({ to, label }) => (
+                        <Link
+                            key={to}
+                            to={to}
+                            onClick={() => setMenuOpen(false)}
+                            className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
+                                isActive(to)
+                                    ? "bg-white/15 text-white"
+                                    : "text-gray-300 hover:text-white hover:bg-white/10"
+                            }`}
+                        >
+                            {label}
+                        </Link>
+                    ))}
 
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={handleRunFetch}
-                        disabled={running}
-                        className={`flex-1 px-3 py-2 rounded-lg border border-white/20 hover:bg-white/10 transition ${running ? "opacity-70 cursor-not-allowed" : ""}`}
-                    >
-                        {running ? "Buscando…" : "Buscar novas partidas"}
-                    </button>
-
-                    <div className="text-[11px] text-gray-300 whitespace-nowrap">
-                        Última busca: <span className="font-medium text-gray-100">{lastRunLabel}</span>
+                    <div className="mt-2 flex flex-col gap-2 border-t border-white/10 pt-2">
+                        <div className="relative w-full">
+                            <MultiClubPicker />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {fetchBtn(true)}
+                            {lastRunInfo(true)}
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
-            {error && <div className="text-xs text-red-300 mt-1">{error}</div>}
+            {error && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-xs bg-red-900/40 rounded px-2 py-1 text-red-200">
+                    ⚠️ {error}
+                </div>
+            )}
         </nav>
     );
 }

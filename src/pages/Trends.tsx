@@ -92,6 +92,30 @@ const COLORS = {
 
 const pillColor = (r: Result) => (r === "W" ? "bg-green-600" : r === "D" ? "bg-gray-500" : "bg-red-600");
 
+function FormPills({ form }: { form: string }) {
+  if (!form) return <span className="text-gray-400">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {form.split("").filter((ch) => ch === "W" || ch === "D" || ch === "L").map((ch, i) => {
+        const cls =
+          ch === "W"
+            ? "bg-green-100 text-green-700 border-green-300"
+            : ch === "D"
+            ? "bg-amber-100 text-amber-700 border-amber-300"
+            : "bg-red-100 text-red-700 border-red-300";
+        return (
+          <span
+            key={i}
+            className={`inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold border ${cls}`}
+          >
+            {ch}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 // média móvel simples
 function movingAvg(arr: number[], win = 5) {
   if (!arr || arr.length === 0) return [];
@@ -430,7 +454,7 @@ export default function TrendsPage() {
               <button
                 key={n}
                 onClick={() => setLast(n)}
-                className={`text-sm px-2 py-1 rounded border ${
+                className={`text-sm px-2.5 py-1 rounded-lg border shadow-sm transition-colors ${
                   last === n ? "bg-blue-600 text-white border-blue-600" : "bg-white hover:bg-gray-50"
                 }`}
                 aria-pressed={last === n}
@@ -486,32 +510,41 @@ export default function TrendsPage() {
           {/* Cards - forma e streaks por clube */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {clubsWithData.map((c) => (
-              <div key={c.clubId} className="bg-white border rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
+              <div
+                key={c.clubId}
+                className="bg-white border border-l-4 rounded-xl p-4"
+                style={{ borderLeftColor: colorFromId(c.clubId) }}
+              >
+                <div className="flex items-center justify-between mb-3">
                   <div className="text-base font-semibold">{c.clubName}</div>
-                  <div className="text-xs text-gray-500">ID {c.clubId}</div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <div className="text-xs text-gray-500 mb-1">Forma (Últimos 5)</div>
-                    <div className="font-mono tracking-wide">{c.formLast5 || "-"}</div>
+                    <FormPills form={c.formLast5} />
                   </div>
                   <div>
                     <div className="text-xs text-gray-500 mb-1">Forma (Últimos 10)</div>
-                    <div className="font-mono tracking-wide">{c.formLast10 || "-"}</div>
+                    <FormPills form={c.formLast10} />
                   </div>
                   <div className="grid grid-cols-3 text-center gap-2">
                     <div>
                       <div className="text-[11px] text-gray-500">Sem perder</div>
-                      <div className="text-lg font-bold">{c.currentUnbeaten}</div>
+                      <div className={`text-lg font-bold ${c.currentUnbeaten > 0 ? "text-green-600" : "text-gray-400"}`}>
+                        {c.currentUnbeaten}
+                      </div>
                     </div>
                     <div>
-                      <div className="text-[11px] text-gray-500">Vitórias seguidas</div>
-                      <div className="text-lg font-bold">{c.currentWins}</div>
+                      <div className="text-[11px] text-gray-500">Vitórias</div>
+                      <div className={`text-lg font-bold ${c.currentWins > 0 ? "text-green-600" : "text-gray-400"}`}>
+                        {c.currentWins}
+                      </div>
                     </div>
                     <div>
                       <div className="text-[11px] text-gray-500">Clean sheets</div>
-                      <div className="text-lg font-bold">{c.currentCleanSheets}</div>
+                      <div className={`text-lg font-bold ${c.currentCleanSheets > 0 ? "text-blue-600" : "text-gray-400"}`}>
+                        {c.currentCleanSheets}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -521,7 +554,7 @@ export default function TrendsPage() {
 
           {/* CONTROLES DO GRÁFICO */}
           <div className="bg-white border rounded-xl p-4">
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 pb-3">
               <label className="text-sm text-gray-700">
                 Métrica
                 <select
@@ -537,18 +570,21 @@ export default function TrendsPage() {
                 </select>
               </label>
 
-              <label className="text-sm text-gray-700">
-                Visual
-                <select
-                  className="ml-2 border rounded px-2 py-1 text-sm"
-                  value={chartKind}
-                  onChange={(e) => setChartKind(e.target.value as any)}
-                >
-                  <option value="line">Linha</option>
-                  <option value="area">Área</option>
-                  <option value="bar">Barras</option>
-                </select>
-              </label>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm text-gray-700">Visual</span>
+                {(["line", "area", "bar"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setChartKind(k)}
+                    className={`text-xs px-2.5 py-1 rounded-lg border shadow-sm transition-colors ${
+                      chartKind === k ? "bg-gray-800 text-white border-gray-800" : "bg-white hover:bg-gray-50"
+                    }`}
+                  >
+                    {k === "line" ? "Linha" : k === "area" ? "Área" : "Barras"}
+                  </button>
+                ))}
+              </div>
 
               <label className="text-sm text-gray-700">
                 Eixo X
@@ -584,11 +620,11 @@ export default function TrendsPage() {
                         {c.series.map((s) => (
                           <span
                             key={`${c.clubId}-${s.matchId}`}
-                            title={`${formatDate(s.timestamp)} • vs ${s.opponentName} • ${s.goalsFor}-${
-                              s.goalsAgainst
-                            }`}
-                            className={`inline-block w-5 h-5 rounded ${pillColor(s.result as Result)}`}
-                          />
+                            title={`${formatDate(s.timestamp)} • vs ${s.opponentName} • ${s.goalsFor}-${s.goalsAgainst}`}
+                            className={`inline-flex items-center justify-center w-8 h-8 rounded text-white flex-shrink-0 ${pillColor(s.result as Result)}`}
+                          >
+                            <span className="text-[9px] font-bold leading-none">{s.goalsFor}-{s.goalsAgainst}</span>
+                          </span>
                         ))}
                       </div>
                     )}
@@ -633,19 +669,30 @@ export default function TrendsPage() {
                     )
                     .sort((a, b) => b.goals - a.goals || b.assists - a.assists || b.avgRating - a.avgRating)
                     .slice(0, 30)
-                    .map((t) => (
-                      <tr key={`${t._clubId}-${t.playerEntityId}`} className="border-t">
-                        <td className="p-2 text-left whitespace-nowrap">{t.playerName}</td>
-                        <td className="p-2 text-left whitespace-nowrap">{t._clubName}</td>
-                        <td className="p-2">{t.matches}</td>
-                        <td className="p-2">{t.goals}</td>
-                        <td className="p-2">{t.assists}</td>
-                        <td className="p-2">{t.preAssists ?? 0}</td>
-                        <td className="p-2 font-medium">{(t.goals ?? 0) + (t.assists ?? 0) + (t.preAssists ?? 0)}</td>
-                        <td className="p-2">{t.mom}</td>
-                        <td className="p-2">{Number(t.avgRating).toFixed(2)}</td>
-                      </tr>
-                    ))}
+                    .map((t, idx) => {
+                      const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : null;
+                      const clr = colorFromId(t._clubId);
+                      return (
+                        <tr
+                          key={`${t._clubId}-${t.playerEntityId}`}
+                          className="border-t border-l-4"
+                          style={{ borderLeftColor: clr }}
+                        >
+                          <td className="p-2 text-left whitespace-nowrap">
+                            {medal && <span className="mr-1">{medal}</span>}
+                            {t.playerName}
+                          </td>
+                          <td className="p-2 text-left whitespace-nowrap">{t._clubName}</td>
+                          <td className="p-2">{t.matches}</td>
+                          <td className="p-2">{t.goals}</td>
+                          <td className="p-2">{t.assists}</td>
+                          <td className="p-2">{t.preAssists ?? 0}</td>
+                          <td className="p-2 font-medium">{(t.goals ?? 0) + (t.assists ?? 0) + (t.preAssists ?? 0)}</td>
+                          <td className="p-2">{t.mom > 0 ? `🏆 ${t.mom}` : t.mom}</td>
+                          <td className="p-2">{Number(t.avgRating).toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>

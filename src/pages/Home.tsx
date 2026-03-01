@@ -225,9 +225,36 @@ function Badge({
 }
 
 function OutcomeBadge({ a, b }: { a: number; b: number }) {
-  if (a > b) return <Badge color="green">Vitória</Badge>;
-  if (a < b) return <Badge color="red">Derrota</Badge>;
-  return <Badge color="amber">Empate</Badge>;
+  const isWin = a > b, isLoss = a < b;
+  const label = isWin ? "Vitória" : isLoss ? "Derrota" : "Empate";
+  const cls = isWin
+    ? "bg-green-100 border-green-400 text-green-800"
+    : isLoss
+    ? "bg-red-100 border-red-400 text-red-800"
+    : "bg-amber-100 border-amber-400 text-amber-800";
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-full border text-xs font-semibold ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+function RecordBar({ wins, draws, losses }: { wins: number; draws: number; losses: number }) {
+  const total = wins + draws + losses || 1;
+  return (
+    <div className="flex flex-col gap-1 min-w-[140px]">
+      <div className="flex h-2 rounded-full overflow-hidden">
+        <div style={{ width: `${(wins / total) * 100}%` }} className="bg-green-500" />
+        <div style={{ width: `${(draws / total) * 100}%` }} className="bg-amber-400" />
+        <div style={{ width: `${(losses / total) * 100}%` }} className="bg-red-400" />
+      </div>
+      <div className="flex gap-3 text-[11px]">
+        <span className="text-green-700 font-semibold">V {wins}</span>
+        <span className="text-amber-600 font-semibold">E {draws}</span>
+        <span className="text-red-600 font-semibold">D {losses}</span>
+      </div>
+    </div>
+  );
 }
 
 function ToolbarSeparator() {
@@ -564,7 +591,7 @@ function SummaryCard({ m }: { m: MatchResultDto }) {
   const a = m.clubASummary;
   const b = m.clubBSummary;
   return (
-    <div className="mt-3 p-3 sm:p-4 rounded-lg border bg-white/70">
+    <div className="mt-3 pt-3 border-t">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
         <SummaryItem
           title={m.clubAName}
@@ -650,7 +677,11 @@ function MatchCard({
   const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
   const outcome = p.myGoals === p.oppGoals ? "draw" : p.myGoals > p.oppGoals ? "win" : "loss";
   const borderClass =
-    outcome === "win" ? "border-green-200" : outcome === "loss" ? "border-red-200" : "border-gray-200";
+    outcome === "win"
+      ? "border-l-4 border-l-green-500 border-gray-200"
+      : outcome === "loss"
+      ? "border-l-4 border-l-red-400 border-gray-200"
+      : "border-l-4 border-l-gray-300 border-gray-200";
 
   const stadiumName =
     m.clubADetails?.stadName ?? m.clubADetails?.StadName ?? m.clubADetails?.name ?? m.clubADetails?.Name ?? m.clubAName;
@@ -741,7 +772,7 @@ function MatchCard({
           >
             {m.clubAGoals}
           </span>
-          <span className="text-gray-400"> x </span>
+          <span className="text-gray-400"> – </span>
           <span
             className={`${
               !p.isMineA
@@ -904,7 +935,7 @@ function MatchCard({
           >
             {m.clubAGoals}
           </span>
-          <span className="text-gray-400"> x </span>
+          <span className="text-gray-400"> – </span>
           <span
             className={`${
               !p.isMineA
@@ -921,22 +952,23 @@ function MatchCard({
         </div>
       </div>
 
-      {/* Contagem de jogadores */}
-      <div className="mt-3 flex items-center justify-center gap-3 text-base sm:text-sm">
+      {/* Jogadores + Estádio (linha unificada) */}
+      <div className="mt-3 flex items-center justify-center gap-2 text-xs sm:text-sm text-gray-600 flex-wrap">
         <div className="inline-flex items-center gap-1">
-          <PersonIcon className="text-gray-700" />
-          <span className="font-semibold tabular-nums">{m.clubAPlayerCount ?? "-"}</span>
+          <PersonIcon className="text-gray-500" />
+          <span className="font-semibold tabular-nums text-gray-700">{m.clubAPlayerCount ?? "-"}</span>
         </div>
-        <span className="text-gray-400">-</span>
+        <span className="text-gray-400">–</span>
         <div className="inline-flex items-center gap-1">
-          <span className="font-semibold tabular-nums">{m.clubBPlayerCount ?? "-"}</span>
-          <PersonIcon className="text-gray-700" />
+          <span className="font-semibold tabular-nums text-gray-700">{m.clubBPlayerCount ?? "-"}</span>
+          <PersonIcon className="text-gray-500" />
         </div>
-      </div>
-
-      {/* Estádio */}
-      <div className="mt-2 text-xs sm:text-sm text-gray-600 text-center font-medium">
-        {stadiumName || "Estádio não informado"}
+        {stadiumName && (
+          <>
+            <span className="text-gray-300">·</span>
+            <span className="font-medium">{stadiumName}</span>
+          </>
+        )}
       </div>
 
       {/* Resumo */}
@@ -1486,28 +1518,24 @@ export default function Home() {
         </div>
 
         {hasResults && (
-          <div className="flex items-center flex-wrap gap-2 text-xs">
-            <Badge color="green">
-              V: <span className="tabular-nums ml-1">{summary.v}</span>
-            </Badge>
-            <Badge color="amber">
-              E: <span className="tabular-nums ml-1">{summary.e}</span>
-            </Badge>
-            <Badge color="red">
-              D: <span className="tabular-nums ml-1">{summary.d}</span>
-            </Badge>
-            <Badge>
-              GP: <span className="tabular-nums ml-1">{summary.golsPro}</span>
-            </Badge>
-            <Badge>
-              GC: <span className="tabular-nums ml-1">{summary.golsContra}</span>
-            </Badge>
-            <Badge color={summary.saldo >= 0 ? "green" : "red"}>
-              Saldo: <span className="tabular-nums ml-1">{summary.saldo}</span>
-            </Badge>
-            <Badge color={summary.cartoes > 0 ? "red" : "gray"}>
-              Verm.: <span className="tabular-nums ml-1">{summary.cartoes}</span>
-            </Badge>
+          <div className="flex items-center flex-wrap gap-3">
+            <RecordBar wins={summary.v} draws={summary.e} losses={summary.d} />
+            <div className="flex items-center flex-wrap gap-2 text-xs">
+              <Badge>
+                GP: <span className="tabular-nums ml-1">{summary.golsPro}</span>
+              </Badge>
+              <Badge>
+                GC: <span className="tabular-nums ml-1">{summary.golsContra}</span>
+              </Badge>
+              <Badge color={summary.saldo >= 0 ? "green" : "red"}>
+                Saldo: <span className="tabular-nums ml-1">{summary.saldo >= 0 ? "+" : ""}{summary.saldo}</span>
+              </Badge>
+              {summary.cartoes > 0 && (
+                <Badge color="red">
+                  🟥 <span className="tabular-nums ml-1">{summary.cartoes}</span>
+                </Badge>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -1543,7 +1571,7 @@ export default function Home() {
 
             {/* Filtro vermelhos */}
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-600">Vermelhos:</span>
+              <span className="text-gray-600">Verm.:</span>
               <select
                 className="border rounded-lg px-2 py-2"
                 value={redFilter}
@@ -1558,7 +1586,7 @@ export default function Home() {
 
             {/* Filtro por quantidade do adversário */}
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-600">Adversário (jogadores):</span>
+              <span className="text-gray-600">Jog. adv.:</span>
               <select
                 className="border rounded-lg px-2 py-2"
                 value={opponentCount ?? ""}
@@ -1582,7 +1610,7 @@ export default function Home() {
 
             {/* Filtro por divisão do adversário */}
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-600">Adversário (divisão):</span>
+              <span className="text-gray-600">Div. adv.:</span>
               <DivisionsSelect value={opponentDivision} onChange={setOpponentDivision} />
             </div>
 
@@ -1612,10 +1640,34 @@ export default function Home() {
 
       {/* Estados */}
       {loading && (
-        <div className="grid gap-3 mt-4">
-          <Skeleton className="h-20" />
-          <Skeleton className="h-20" />
-          <Skeleton className="h-20" />
+        <div className="grid gap-2 mt-4">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="bg-white rounded-xl border border-l-4 border-l-gray-200 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+              <div className="hidden sm:flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <Skeleton className="h-4 w-28" />
+                </div>
+                <Skeleton className="h-8 w-16 rounded" />
+                <div className="flex items-center gap-2 justify-end">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                </div>
+              </div>
+              <div className="flex items-center justify-center gap-2">
+                <Skeleton className="h-3 w-8" />
+                <Skeleton className="h-3 w-40" />
+              </div>
+              <div className="border-t pt-3 flex gap-4">
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -1643,19 +1695,6 @@ export default function Home() {
         <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
           Selecione clubes no menu (botão “Clubes”) para começar.
         </div>
-      )}
-
-      {/* Info de contagem */}
-      {isServerPaged && selectedClubIds.length === 1 ? (
-        <div className="mt-6 text-xs text-gray-500 text-center">
-          Exibindo {filtered.length} de {totalCount} partidas (página {totalPages ? page : 0}/{totalPages}).
-        </div>
-      ) : (
-        filtered.length > 0 && (
-          <div className="mt-6 text-xs text-gray-500 text-center">
-            Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.
-          </div>
-        )
       )}
 
       {/* Lista */}

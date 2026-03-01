@@ -40,7 +40,7 @@ function useNumberFormats() {
 function SortIcon({ active, order }: { active: boolean; order: "asc" | "desc" }) {
     if (!active)
         return (
-            <span aria-hidden className="opacity-30">
+            <span aria-hidden className="opacity-0 group-hover:opacity-40 transition-opacity">
                 ↕
             </span>
         );
@@ -99,8 +99,8 @@ function CellBar({
     );
 }
 
-/** 3 barras verticais (V/E/D) + label com valor absoluto e %: ex "3 (60,0%)" */
-function VerticalRecordBars({
+/** Barra horizontal empilhada V/E/D */
+function HorizontalRecordBar({
     wins,
     ties,
     losses,
@@ -116,55 +116,28 @@ function VerticalRecordBars({
     const v = Math.max(0, Number(wins || 0));
     const e = Math.max(0, Number(ties || 0));
     const d = Math.max(0, Number(losses || 0));
-    const total = v + e + d;
+    const total = Math.max(v + e + d, 1);
 
-    const vPct = total ? (v / total) * 100 : 0;
-    const ePct = total ? (e / total) * 100 : 0;
-    const dPct = total ? (d / total) * 100 : 0;
+    const vPct = (v / total) * 100;
+    const ePct = (e / total) * 100;
+    const dPct = (d / total) * 100;
 
-    const tooltip = `Vitórias/Empates/Derrotas: ${int.format(v)}/${int.format(e)}/${int.format(d)} (${p1.format(
-        vPct
-    )}% / ${p1.format(ePct)}% / ${p1.format(dPct)}%)`;
-
-    const Bar = ({ heightPct, className }: { heightPct: number; className: string }) => (
-        <div className="w-3 h-10 rounded-sm bg-gray-100 border border-gray-200 overflow-hidden flex items-end">
-            <div className={`w-full ${className}`} style={{ height: `${clamp(heightPct)}%` }} />
-        </div>
-    );
-
-    const Stat = ({
-        label,
-        abs,
-        pctValue,
-        barPct,
-        colorClass,
-    }: {
-        label: "V" | "E" | "D";
-        abs: number;
-        pctValue: number;
-        barPct: number;
-        colorClass: string;
-    }) => (
-        <div className="flex flex-col items-center">
-            <Bar heightPct={barPct} className={colorClass} />
-            <span className="text-[10px] leading-none mt-1 font-medium">{label}</span>
-            <span className="text-[10px] leading-none mt-1 text-gray-600">
-                {int.format(abs)} ({p1.format(pctValue)}%)
-            </span>
-        </div>
-    );
-
-    const content = (
-        <div className="flex items-end justify-center gap-3">
-            <Stat label="V" abs={v} pctValue={vPct} barPct={vPct} colorClass="bg-emerald-300" />
-            <Stat label="E" abs={e} pctValue={ePct} barPct={ePct} colorClass="bg-orange-300" />
-            <Stat label="D" abs={d} pctValue={dPct} barPct={dPct} colorClass="bg-red-300" />
-        </div>
-    );
+    const tooltip = `Vitórias: ${int.format(v)} (${p1.format(vPct)}%) · Empates: ${int.format(e)} (${p1.format(ePct)}%) · Derrotas: ${int.format(d)} (${p1.format(dPct)}%)`;
 
     return (
         <Tooltip content={tooltip} wrapperClassName="block">
-            {content}
+            <div className="min-w-[72px]">
+                <div className="flex h-3 rounded overflow-hidden gap-px">
+                    {v > 0 && <div className="bg-emerald-400" style={{ width: `${vPct}%` }} />}
+                    {e > 0 && <div className="bg-orange-300" style={{ width: `${ePct}%` }} />}
+                    {d > 0 && <div className="bg-red-400" style={{ width: `${dPct}%` }} />}
+                </div>
+                <div className="flex justify-between text-[10px] mt-0.5 font-medium">
+                    <span className="text-emerald-700">{v}V</span>
+                    <span className="text-orange-500">{e}E</span>
+                    <span className="text-red-600">{d}D</span>
+                </div>
+            </div>
         </Tooltip>
     );
 }
@@ -257,6 +230,7 @@ export function PlayerStatsTable({
             "tackleSuccessPercent",
             "goalAccuracyPercent",
             "totalSaves",
+            "totalSecondsPlayed",
         ];
         const res = new Map<keyof PlayerStats | "participations", number>();
         keys.forEach((k) => res.set(k, Math.max(1, ...filtered.map((p) => Number(p[k]) || 0))));
@@ -314,6 +288,7 @@ export function PlayerStatsTable({
     const allColumns = [
         { key: "proName", label: "Jogador", tooltip: "Nome do jogador" },
         { key: "matchesPlayed", label: "Partidas" },
+        { key: "totalSecondsPlayed", label: "Min.", tooltip: "Minutos em campo no total" },
         { key: "participations", label: "Partic.", tooltip: "Participações em gols (Gols + Assistências + Pré-Assistências)" },
         { key: "totalGoals", label: "Gols" },
         { key: "totalAssists", label: "Assistências" },
@@ -359,7 +334,7 @@ export function PlayerStatsTable({
                                     <th
                                         key={c.key}
                                         onClick={() => handleSort(c.key as keyof PlayerStats)}
-                                        className="px-3 py-2 cursor-pointer select-none hover:bg-gray-100"
+                                        className={`px-3 py-2 cursor-pointer select-none hover:bg-gray-100 group${sortKey === (c.key as keyof PlayerStats) ? " bg-blue-50" : ""}`}
                                         aria-sort={
                                             sortKey === (c.key as keyof PlayerStats)
                                                 ? sortOrder === "asc"
@@ -397,7 +372,7 @@ export function PlayerStatsTable({
                         )}
 
                         {!loading &&
-                            pageItems.map((p) => {
+                            pageItems.map((p, rowIdx) => {
                                 const saves = Number(p.totalSaves || 0);
                                 const conceded = clubGoalsAgainst;
                                 const savePct = pct(saves, saves + conceded);
@@ -466,7 +441,7 @@ export function PlayerStatsTable({
                                             return (
                                                 <td
                                                     key={col.key}
-                                                    className="px-3 py-2 font-medium text-left sticky left-0 bg-inherit"
+                                                    className="px-3 py-2 font-medium text-left sticky left-0 bg-inherit border-r border-gray-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
                                                 >
                                                     {Icons}
                                                     {p.proName}
@@ -478,6 +453,16 @@ export function PlayerStatsTable({
                                                     {int.format(p.matchesPlayed)}
                                                 </td>
                                             );
+                                        case "totalSecondsPlayed": {
+                                            const mins = Math.floor(p.totalSecondsPlayed / 60);
+                                            const secs = p.totalSecondsPlayed % 60;
+                                            const label = `${mins}:${String(secs).padStart(2, "0")}`;
+                                            return (
+                                                <td key={col.key} className="px-3 py-2">
+                                                    <CellBar value={p.totalSecondsPlayed} max={maxByKey.get("totalSecondsPlayed") || 1} format={() => label} />
+                                                </td>
+                                            );
+                                        }
                                         case "totalGoals":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
@@ -504,25 +489,21 @@ export function PlayerStatsTable({
                                             const participations =
                                                 (Number(p.totalGoals) || 0) + (Number(p.totalAssists) || 0) + (Number(p.totalPreAssists) || 0);
                                             return (
-                                                <td key={col.key} className="px-3 py-2 font-medium">
-                                                    {int.format(participations)}
+                                                <td key={col.key} className="px-3 py-2">
+                                                    <CellBar value={participations} max={maxByKey.get("participations") || 1} format={(v) => int.format(v)} />
                                                 </td>
                                             );
                                         }
                                         case "totalShots":
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.totalGoals)} / {int.format(p.totalShots)}
-                                                    <div className="mt-1">
-                                                        <CellBar
-                                                            value={p.goalAccuracyPercent}
-                                                            max={100}
-                                                            suffix="%"
-                                                            positive
-                                                            format={(v) => p1.format(v)}
-                                                            statType="shotToGoalConversion"
-                                                        />
-                                                    </div>
+                                                <td key={col.key} className="px-3 py-2 min-w-[140px]">
+                                                    <CellBar
+                                                        value={p.goalAccuracyPercent}
+                                                        max={100}
+                                                        positive
+                                                        format={(v) => `${int.format(p.totalGoals)}/${int.format(p.totalShots)} · ${p1.format(v)}%`}
+                                                        statType="shotToGoalConversion"
+                                                    />
                                                 </td>
                                             );
                                         case "totalSaves":
@@ -543,35 +524,27 @@ export function PlayerStatsTable({
                                             );
                                         case "totalPassesMade":
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.totalPassesMade)} / {int.format(p.totalPassAttempts)}
-                                                    <div className="mt-1">
-                                                        <CellBar
-                                                            value={pct(p.totalPassesMade, p.totalPassAttempts)}
-                                                            max={100}
-                                                            suffix="%"
-                                                            positive
-                                                            format={(v) => p1.format(v)}
-                                                            statType="passCompletion"
-                                                        />
-                                                    </div>
+                                                <td key={col.key} className="px-3 py-2 min-w-[168px]">
+                                                    <CellBar
+                                                        value={pct(p.totalPassesMade, p.totalPassAttempts)}
+                                                        max={100}
+                                                        positive
+                                                        format={(v) => `${int.format(p.totalPassesMade)}/${int.format(p.totalPassAttempts)} · ${p1.format(v)}%`}
+                                                        statType="passCompletion"
+                                                    />
                                                 </td>
                                             );
                                         case "totalTacklesMade": {
                                             const tacklePct = pct(p.totalTacklesMade, p.totalTackleAttempts);
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.totalTacklesMade)} / {int.format(p.totalTackleAttempts)}
-                                                    <div className="mt-1">
-                                                        <CellBar
-                                                            value={tacklePct}
-                                                            max={100}
-                                                            suffix="%"
-                                                            positive
-                                                            format={(v) => p1.format(v)}
-                                                            statType="tackleDuelWin"
-                                                        />
-                                                    </div>
+                                                <td key={col.key} className="px-3 py-2 min-w-[148px]">
+                                                    <CellBar
+                                                        value={tacklePct}
+                                                        max={100}
+                                                        positive
+                                                        format={(v) => `${int.format(p.totalTacklesMade)}/${int.format(p.totalTackleAttempts)} · ${p1.format(v)}%`}
+                                                        statType="tackleDuelWin"
+                                                    />
                                                 </td>
                                             );
                                         }
@@ -579,7 +552,7 @@ export function PlayerStatsTable({
                                         case "vedBars":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    <VerticalRecordBars
+                                                    <HorizontalRecordBar
                                                         wins={Number(p.totalWins || 0)}
                                                         ties={Number(p.totalDraws || 0)}
                                                         losses={Number(p.totalLosses || 0)}
@@ -592,7 +565,7 @@ export function PlayerStatsTable({
                                         case "totalMom":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.totalMom)}
+                                                    {p.totalMom > 0 ? int.format(p.totalMom) : "—"}
                                                 </td>
                                             );
                                         case "avgRating":
@@ -606,8 +579,10 @@ export function PlayerStatsTable({
                                     }
                                 };
 
+                                const stripeClass = rowClass ? "" : rowIdx % 2 === 1 ? "bg-gray-50" : "";
+
                                 return (
-                                    <tr key={p.playerId} className={`hover:bg-gray-50 ${rowClass}`}>
+                                    <tr key={p.playerId} className={`hover:bg-gray-50 ${rowClass || stripeClass}`}>
                                         {columns.map((col) => renderCell(col))}
                                     </tr>
                                 );

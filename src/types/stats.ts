@@ -27,6 +27,8 @@ export interface PlayerStats {
   proHeight: number;
   proName: string;
   proOverallStr: string;
+  totalSecondsPlayed: number;
+  totalGameTime: number;
 }
 
 export interface ClubStats {

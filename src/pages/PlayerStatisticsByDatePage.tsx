@@ -4,6 +4,8 @@ import { useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
 import type { PlayerStats } from "../types/stats";
+import { Trophy, TrendingDown } from "lucide-react";
+import { Tooltip } from "../components/Tooltip.tsx";
 
 // ===== Tipos vindos da API =====
 type FullMatchStatisticsDto = {
@@ -97,6 +99,31 @@ const DateBadge: React.FC<{ dateISO: string; colorMap: Map<string, DateColor>; c
     );
 };
 
+/** Barra horizontal V/E/D para resumos */
+function RecordBar({ wins, draws, losses }: { wins: number; draws: number; losses: number }) {
+    const total = Math.max(wins + draws + losses, 1);
+    return (
+        <div>
+            <div className="flex h-3 rounded overflow-hidden gap-px">
+                {wins > 0 && <div className="bg-emerald-400" style={{ width: `${(wins / total) * 100}%` }} />}
+                {draws > 0 && <div className="bg-orange-300" style={{ width: `${(draws / total) * 100}%` }} />}
+                {losses > 0 && <div className="bg-red-400" style={{ width: `${(losses / total) * 100}%` }} />}
+            </div>
+            <div className="flex justify-between text-[10px] mt-0.5 font-medium">
+                <span className="text-emerald-700">{wins}V</span>
+                <span className="text-orange-500">{draws}E</span>
+                <span className="text-red-600">{losses}D</span>
+            </div>
+        </div>
+    );
+}
+
+/** Mini-barra proporcional para rankings */
+function MiniBar({ value, max }: { value: number; max: number }) {
+    const w = max > 0 ? Math.max(4, (value / max) * 100) : 4;
+    return <div className="h-1.5 rounded bg-blue-400 mt-1" style={{ width: `${w}%` }} />;
+}
+
 // Helpers para ler percentuais do DTO (camelCase / PascalCase)
 function getPassPct(p: any): number {
     const v =
@@ -134,15 +161,15 @@ function getSuccessfulTackles(p: any): number {
     );
 }
 
-// Tooltip simples via title
 const Info: React.FC<{ title: string }> = ({ title }) => (
-    <span
-        className="ml-1 inline-flex items-center justify-center w-4 h-4 text-xs rounded-full border border-gray-300 text-gray-600 select-none"
-        title={title}
-        aria-label={title}
-    >
-        i
-    </span>
+    <Tooltip content={title}>
+        <span
+            className="ml-1 inline-flex items-center justify-center w-4 h-4 text-xs rounded-full border border-gray-300 text-gray-600 select-none cursor-help"
+            aria-label={title}
+        >
+            i
+        </span>
+    </Tooltip>
 );
 
 export default function PlayerStatisticsByDatePage() {
@@ -150,6 +177,7 @@ export default function PlayerStatisticsByDatePage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [days, setDays] = useState<DayBlock[]>([]);
+    const [activeRange, setActiveRange] = useState<string | null>(null);
 
     // clubes selecionados (?clubIds=355651,352016,...)
     const clubIds = useMemo(() => {
@@ -174,9 +202,10 @@ export default function PlayerStatisticsByDatePage() {
         return fmtYYYYMMDD(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     });
 
-    const handleRangeChange = (start: string, end: string) => {
+    const handleRangeChange = (start: string, end: string, range: string | null = null) => {
         setDateFrom(start);
         setDateTo(end);
+        setActiveRange(range);
         const sp = new URLSearchParams(searchParams);
         sp.set("dateFrom", start);
         sp.set("dateTo", end);
@@ -187,19 +216,19 @@ export default function PlayerStatisticsByDatePage() {
         const end = new Date();
         const start = new Date();
         start.setDate(end.getDate() - (nDays - 1));
-        handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end));
+        handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end), `${nDays}d`);
     };
     const setCurrentMonth = () => {
         const now = new Date();
         const start = new Date(now.getFullYear(), now.getMonth(), 1);
         const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end));
+        handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end), "currentMonth");
     };
     const setPreviousMonth = () => {
         const now = new Date();
         const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const end = new Date(now.getFullYear(), now.getMonth(), 0);
-        handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end));
+        handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end), "prevMonth");
     };
 
     // ===== Fetch =====
@@ -506,11 +535,25 @@ export default function PlayerStatisticsByDatePage() {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                        <button onClick={() => setQuickRangeDays(7)} className="text-xs border rounded px-2 py-1 hover:bg-gray-50">7d</button>
-                        <button onClick={() => setQuickRangeDays(14)} className="text-xs border rounded px-2 py-1 hover:bg-gray-50">14d</button>
-                        <button onClick={() => setQuickRangeDays(30)} className="text-xs border rounded px-2 py-1 hover:bg-gray-50">30d</button>
-                        <button onClick={setCurrentMonth} className="text-xs border rounded px-2 py-1 hover:bg-gray-50">Mês atual</button>
-                        <button onClick={setPreviousMonth} className="text-xs border rounded px-2 py-1 hover:bg-gray-50">Mês anterior</button>
+                        {([
+                            { label: "7d", key: "7d", action: () => setQuickRangeDays(7) },
+                            { label: "14d", key: "14d", action: () => setQuickRangeDays(14) },
+                            { label: "30d", key: "30d", action: () => setQuickRangeDays(30) },
+                            { label: "Mês atual", key: "currentMonth", action: setCurrentMonth },
+                            { label: "Mês anterior", key: "prevMonth", action: setPreviousMonth },
+                        ] as const).map(({ label, key, action }) => (
+                            <button
+                                key={key}
+                                onClick={action}
+                                className={`text-xs border rounded px-2 py-1 transition-colors ${
+                                    activeRange === key
+                                        ? "bg-blue-50 border-blue-400 text-blue-700 font-medium"
+                                        : "hover:bg-gray-50"
+                                }`}
+                            >
+                                {label}
+                            </button>
+                        ))}
                     </div>
                 </div>
             </header>
@@ -543,19 +586,9 @@ export default function PlayerStatisticsByDatePage() {
                             </div>
                         </div>
                         <div className="rounded-lg border p-3">
-                            <div className="text-sm text-gray-600">Resultados</div>
-                            <div className="font-semibold">
-                                {days.reduce((a, d) => a + d.wins, 0)}V{" "}
-                                {days.reduce((a, d) => a + d.draws, 0)}E{" "}
-                                {days.reduce((a, d) => a + d.losses, 0)}D
-                            </div>
-                            <div className="text-xs text-gray-500">
-                                {(() => {
-                                    const m = days.reduce((a, d) => a + d.matchesCount, 0);
-                                    const w = days.reduce((a, d) => a + d.wins, 0);
-                                    return `Win% ${m > 0 ? ((w * 100) / m).toFixed(1) : "0.0"}%`;
-                                })()}
-                            </div>
+                            <div className="text-sm text-gray-600 mb-1">Resultados</div>
+                            <RecordBar wins={period.wins} draws={period.draws} losses={period.losses} />
+                            <div className="text-xs text-gray-500 mt-1">Win% {period.winPct.toFixed(1)}%</div>
                         </div>
                         <div className="rounded-lg border p-3">
                             <div className="text-sm text-gray-600">Gols</div>
@@ -596,8 +629,11 @@ export default function PlayerStatisticsByDatePage() {
 
             {/* Melhor dia (geral) */}
             {!loading && !error && bestOverallDay && (
-                <section className="rounded-xl border p-4 shadow-sm">
-                    <h2 className="text-lg font-semibold mb-2">Melhor dia (geral)</h2>
+                <section className="rounded-xl border-2 border-amber-300 bg-amber-50/30 p-4 shadow-sm">
+                    <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                        <Trophy size={18} className="text-amber-500" />
+                        Melhor dia (geral)
+                    </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         <div className="rounded-lg border p-3">
                             <div className="text-sm text-gray-600">Data</div>
@@ -641,10 +677,14 @@ export default function PlayerStatisticsByDatePage() {
                         <div className="rounded-lg border">
                             <div className="px-3 py-2 border-b font-medium">Maior Win%</div>
                             <ul className="text-sm divide-y">
-                                {topByWinPct.map((d) => (
-                                    <li key={`wp-${d.date}`} className="px-3 py-2 flex justify-between items-center">
-                                        <DateBadge dateISO={d.date} colorMap={dateColorMap} />
-                                        <span>{d.winPct.toFixed(1)}% • {d.wins}V/{d.matchesCount}</span>
+                                {topByWinPct.map((d, i) => (
+                                    <li key={`wp-${d.date}`} className="px-3 py-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-400 w-5 shrink-0">#{i + 1}</span>
+                                            <DateBadge dateISO={d.date} colorMap={dateColorMap} />
+                                            <span className="ml-auto text-xs whitespace-nowrap">{d.winPct.toFixed(1)}% · {d.wins}V/{d.matchesCount}</span>
+                                        </div>
+                                        <MiniBar value={d.winPct} max={topByWinPct[0]?.winPct || 1} />
                                     </li>
                                 ))}
                             </ul>
@@ -654,12 +694,16 @@ export default function PlayerStatisticsByDatePage() {
                         <div className="rounded-lg border">
                             <div className="px-3 py-2 border-b font-medium">Maior saldo</div>
                             <ul className="text-sm divide-y">
-                                {topBySaldo.map((d) => (
-                                    <li key={`sd-${d.date}`} className="px-3 py-2 flex justify-between items-center">
-                                        <DateBadge dateISO={d.date} colorMap={dateColorMap} />
-                                        <span>
-                                            {d.saldo >= 0 ? "+" : ""}{d.saldo} ({d.goalsFor}-{d.goalsAgainst})
-                                        </span>
+                                {topBySaldo.map((d, i) => (
+                                    <li key={`sd-${d.date}`} className="px-3 py-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-400 w-5 shrink-0">#{i + 1}</span>
+                                            <DateBadge dateISO={d.date} colorMap={dateColorMap} />
+                                            <span className="ml-auto text-xs whitespace-nowrap">
+                                                {d.saldo >= 0 ? "+" : ""}{d.saldo} ({d.goalsFor}–{d.goalsAgainst})
+                                            </span>
+                                        </div>
+                                        <MiniBar value={Math.max(0, d.saldo)} max={Math.max(1, topBySaldo[0]?.saldo || 1)} />
                                     </li>
                                 ))}
                             </ul>
@@ -669,13 +713,15 @@ export default function PlayerStatisticsByDatePage() {
                         <div className="rounded-lg border">
                             <div className="px-3 py-2 border-b font-medium">Mais gols marcados (por jogo)</div>
                             <ul className="text-sm divide-y">
-                                {topByGFPerGame.map((d) => (
+                                {topByGFPerGame.map((d, i) => (
                                     <li key={`gfpg-${d.date}`} className="px-3 py-2">
-                                        <div className="flex justify-between items-center">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-400 w-5 shrink-0">#{i + 1}</span>
                                             <DateBadge dateISO={d.date} colorMap={dateColorMap} />
-                                            <span>{d.gfPerMatch.toFixed(2)} gol/jogo</span>
+                                            <span className="ml-auto text-xs whitespace-nowrap">{d.gfPerMatch.toFixed(2)} gol/jogo</span>
                                         </div>
-                                        <div className="text-gray-500 text-xs text-right">
+                                        <MiniBar value={d.gfPerMatch} max={topByGFPerGame[0]?.gfPerMatch || 1} />
+                                        <div className="text-gray-500 text-xs mt-0.5">
                                             Total: {d.goalsFor} em {d.matchesCount} jogos
                                         </div>
                                     </li>
@@ -687,17 +733,24 @@ export default function PlayerStatisticsByDatePage() {
                         <div className="rounded-lg border">
                             <div className="px-3 py-2 border-b font-medium">Menos gols sofridos (por jogo)</div>
                             <ul className="text-sm divide-y">
-                                {topByLowGAPerGame.map((d) => (
-                                    <li key={`gapg-${d.date}`} className="px-3 py-2">
-                                        <div className="flex justify-between items-center">
-                                            <DateBadge dateISO={d.date} colorMap={dateColorMap} />
-                                            <span>{d.gaPerMatch.toFixed(2)} gol/jogo</span>
-                                        </div>
-                                        <div className="text-gray-500 text-xs text-right">
-                                            Total: {d.goalsAgainst} em {d.matchesCount} jogos
-                                        </div>
-                                    </li>
-                                ))}
+                                {topByLowGAPerGame.map((d, i) => {
+                                    const worstGA = topByLowGAPerGame.at(-1)?.gaPerMatch ?? 1;
+                                    const bestGA = topByLowGAPerGame[0]?.gaPerMatch ?? 0;
+                                    const barMax = Math.max(0.01, worstGA - bestGA);
+                                    return (
+                                        <li key={`gapg-${d.date}`} className="px-3 py-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-gray-400 w-5 shrink-0">#{i + 1}</span>
+                                                <DateBadge dateISO={d.date} colorMap={dateColorMap} />
+                                                <span className="ml-auto text-xs whitespace-nowrap">{d.gaPerMatch.toFixed(2)} gol/jogo</span>
+                                            </div>
+                                            <MiniBar value={Math.max(0, worstGA - d.gaPerMatch)} max={barMax} />
+                                            <div className="text-gray-500 text-xs mt-0.5">
+                                                Total: {d.goalsAgainst} em {d.matchesCount} jogos
+                                            </div>
+                                        </li>
+                                    );
+                                })}
                             </ul>
                         </div>
                     </div>
@@ -708,11 +761,14 @@ export default function PlayerStatisticsByDatePage() {
             {!loading && !error && days.length > 0 && (
                 <section className="rounded-xl border p-4 shadow-sm">
                     <div className="flex items-center gap-2 mb-3">
-                        <h2 className="text-lg font-semibold">Melhor dia de cada jogador por métrica</h2>
+                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                            <Trophy size={18} className="text-amber-500" />
+                            Melhor dia de cada jogador por métrica
+                        </h2>
                     </div>
-                    <div className="overflow-x-auto rounded-lg border bg-white">
+                    <div className="overflow-x-auto rounded-lg border border-l-4 border-l-green-500 bg-white">
                         <table className="table-auto w-full text-sm">
-                            <thead className="bg-gray-50">
+                            <thead className="bg-green-50">
                                 <tr>
                                     <th className="px-3 py-2 text-left">Jogador</th>
                                     <th className="px-3 py-2 text-center">Gols</th>
@@ -740,9 +796,9 @@ export default function PlayerStatisticsByDatePage() {
                                         </td>
                                     </tr>
                                 )}
-                                {bestDayPerPlayer.map((r) => (
-                                    <tr key={r.playerId} className="hover:bg-gray-50">
-                                        <td className="px-3 py-2 text-left">{r.playerName}</td>
+                                {bestDayPerPlayer.map((r, i) => (
+                                    <tr key={r.playerId} className={`hover:bg-gray-50 ${i % 2 === 1 ? "bg-gray-50" : ""}`}>
+                                        <td className="px-3 py-2 text-left sticky left-0 bg-inherit border-r border-gray-200">{r.playerName}</td>
                                         <td className="px-3 py-2 text-center">
                                             {r.goals.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.goals.date} colorMap={dateColorMap} />
@@ -791,11 +847,14 @@ export default function PlayerStatisticsByDatePage() {
             {!loading && !error && days.length > 0 && (
                 <section className="rounded-xl border p-4 shadow-sm">
                     <div className="flex items-center gap-2 mb-3">
-                        <h2 className="text-lg font-semibold">Pior dia de cada jogador por métrica</h2>
+                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                            <TrendingDown size={18} className="text-red-500" />
+                            Pior dia de cada jogador por métrica
+                        </h2>
                     </div>
-                    <div className="overflow-x-auto rounded-lg border bg-white">
+                    <div className="overflow-x-auto rounded-lg border border-l-4 border-l-red-400 bg-white">
                         <table className="table-auto w-full text-sm">
-                            <thead className="bg-gray-50">
+                            <thead className="bg-red-50">
                                 <tr>
                                     <th className="px-3 py-2 text-left">Jogador</th>
                                     <th className="px-3 py-2 text-center">Gols</th>
@@ -823,9 +882,9 @@ export default function PlayerStatisticsByDatePage() {
                                         </td>
                                     </tr>
                                 )}
-                                {worstDayPerPlayer.map((r) => (
-                                    <tr key={r.playerId} className="hover:bg-gray-50">
-                                        <td className="px-3 py-2 text-left">{r.playerName}</td>
+                                {worstDayPerPlayer.map((r, i) => (
+                                    <tr key={r.playerId} className={`hover:bg-gray-50 ${i % 2 === 1 ? "bg-gray-50" : ""}`}>
+                                        <td className="px-3 py-2 text-left sticky left-0 bg-inherit border-r border-gray-200">{r.playerName}</td>
                                         <td className="px-3 py-2 text-center">
                                             {r.goals.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.goals.date} colorMap={dateColorMap} />
@@ -888,15 +947,29 @@ export default function PlayerStatisticsByDatePage() {
                                     backgroundColor: `${dateColors.bg}22`,
                                 }}
                             >
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="font-medium">
-                                        <DateBadge dateISO={d.date} colorMap={dateColorMap} />
-                                    </div>
-                                    <div className="text-sm text-gray-700">
-                                        Jogos: <strong>{d.matchesCount}</strong> • {d.wins}V {d.draws}E {d.losses}D • Gols: {d.goalsFor}-{d.goalsAgainst} •{" "}
-                                        GF/jg {d.matchesCount ? (d.goalsFor / d.matchesCount).toFixed(2) : "0.00"} •{" "}
-                                        GA/jg {d.matchesCount ? (d.goalsAgainst / d.matchesCount).toFixed(2) : "0.00"}
-                                    </div>
+                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                    <DateBadge dateISO={d.date} colorMap={dateColorMap} />
+                                    {bestOverallDay?.date === d.date && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-300">
+                                            <Trophy size={11} /> Melhor dia
+                                        </span>
+                                    )}
+                                    <span className="px-2 py-0.5 rounded-full bg-white border text-xs font-medium">
+                                        {d.matchesCount} jogo{d.matchesCount !== 1 ? "s" : ""}
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-medium">{d.wins}V</span>
+                                    <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-300 text-xs font-medium">{d.draws}E</span>
+                                    <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 text-xs font-medium">{d.losses}D</span>
+                                    <span className="px-2 py-0.5 rounded-full bg-white border text-xs">
+                                        Gols: <strong>{d.goalsFor}–{d.goalsAgainst}</strong>{" "}
+                                        (Saldo {d.goalsFor - d.goalsAgainst >= 0 ? "+" : ""}{d.goalsFor - d.goalsAgainst})
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-full bg-white border text-xs">
+                                        GF/jg {d.matchesCount ? (d.goalsFor / d.matchesCount).toFixed(2) : "—"}
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-full bg-white border text-xs">
+                                        GA/jg {d.matchesCount ? (d.goalsAgainst / d.matchesCount).toFixed(2) : "—"}
+                                    </span>
                                 </div>
 
                                 <PlayerStatsTable
@@ -905,6 +978,7 @@ export default function PlayerStatisticsByDatePage() {
                                     error={null}
                                     clubStats={null}
                                     compactMode
+                                    hiddenColumns={["matchesPlayed"]}
                                 />
                             </section>
                         );

@@ -302,6 +302,15 @@ export default function MatchDetails() {
   const leftIsSelected = !!selectedClubId && orderedClubs[0]?.clubId === selectedClubId;
   const rightIsSelected = !!selectedClubId && orderedClubs[1]?.clubId === selectedClubId;
 
+  const selectedWon = (leftIsSelected && leftWon) || (rightIsSelected && rightWon);
+  const selectedLost = (leftIsSelected && rightWon) || (rightIsSelected && leftWon);
+  const heroBg = selectedWon ? "bg-green-50/40" : selectedLost ? "bg-red-50/30" : "";
+  const heroBorderClass = selectedWon
+    ? "border-l-4 border-l-green-500"
+    : selectedLost
+    ? "border-l-4 border-l-red-400"
+    : "border-l-4 border-l-gray-300";
+
   // Identificar goleiro por clube
   const gkByClub = useMemo(() => {
     const map = new Map<number, PlayerRow | undefined>();
@@ -376,26 +385,35 @@ export default function MatchDetails() {
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
       {/* Topo */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-2xl font-bold">Detalhes da Partida</h1>
-        <div className="flex items-center gap-2">
-          <Link to="/" className="text-blue-700 hover:underline">
-            ← Voltar
-          </Link>
-        </div>
+      <div className="flex items-center gap-2">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-white hover:bg-gray-50"
+        >
+          ← Voltar
+        </Link>
+        <span className="text-gray-400 text-sm">Detalhes da Partida</span>
       </div>
 
       {/* Painel Overall (toggle) */}
       <div className="bg-white shadow-sm rounded-xl p-4 border">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Resumo histórico (Overall)</h2>
-          <Button
-            onClick={() => {
-              const next = !showOverallPanel;
-              setShowOverallPanel(next);
-            }}
-          >
-            {showOverallPanel ? "Minimizar" : "Maximizar"}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-base font-semibold text-gray-700">Histórico dos clubes</h2>
+            {orderedClubs.slice(0, 2).map((c) => (
+              <div key={c.clubId} className="flex items-center gap-1.5">
+                <img
+                  src={crestUrl(c.clubCrestAssetId)}
+                  onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                  alt={c.clubName}
+                  className="w-6 h-6 rounded-full bg-white border object-contain"
+                />
+                <span className="text-sm text-gray-600 font-medium">{c.clubName}</span>
+              </div>
+            ))}
+          </div>
+          <Button onClick={() => setShowOverallPanel((v) => !v)}>
+            {showOverallPanel ? "▲ Minimizar" : "▼ Ver histórico"}
           </Button>
         </div>
 
@@ -465,45 +483,54 @@ export default function MatchDetails() {
       )}
 
       {/* Cabeçalho dos clubes + placar e highlights */}
-      <div className="bg-white shadow-sm rounded-xl p-4 border">
+      <div className={`bg-white shadow-sm rounded-xl p-4 border ${heroBorderClass} ${heroBg}`}>
         {haveTwoClubs ? (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
               {/* Esquerda */}
-              <div className="flex items-center gap-2 px-2 py-1 rounded justify-center sm:justify-start">
+              <div className="flex items-center gap-3 px-2 py-1 justify-center sm:justify-start">
                 <img
                   src={crestUrl(orderedClubs[0]?.clubCrestAssetId)}
                   onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                   alt={`Escudo ${orderedClubs[0]?.clubName ?? "Clube A"}`}
-                  className="w-8 h-8 rounded-full bg-white border"
+                  className="w-12 h-12 rounded-full bg-white border object-contain shrink-0"
                 />
-                <div className="font-semibold flex items-center gap-2 flex-wrap">
-                  {orderedClubs[0]?.clubName ?? "Clube A"}
+                <div className="min-w-0">
+                  <div className="font-semibold leading-tight truncate">
+                    {orderedClubs[0]?.clubName ?? "Clube A"}
+                  </div>
                   {leftIsSelected && (
-                    <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>
+                    <span className="text-[11px] text-blue-600 font-medium">Clube selecionado</span>
                   )}
-                  {leftWon && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Vitória</Badge>}
-                  {!leftWon && haveScore && !rightWon && <Badge className="bg-gray-100 text-gray-700">Empate</Badge>}
                 </div>
               </div>
 
               {/* Placar */}
-              <div className="text-lg sm:text-xl font-bold text-gray-900 text-center">{scoreLabel}</div>
+              <div className="flex items-center justify-center gap-3">
+                <span className={`text-3xl sm:text-4xl font-bold tabular-nums ${leftWon ? "text-green-700" : rightWon ? "text-red-600" : "text-gray-700"}`}>
+                  {goalsA}
+                </span>
+                <span className="text-gray-400 text-xl font-light">–</span>
+                <span className={`text-3xl sm:text-4xl font-bold tabular-nums ${rightWon ? "text-green-700" : leftWon ? "text-red-600" : "text-gray-700"}`}>
+                  {goalsB}
+                </span>
+              </div>
 
               {/* Direita */}
-              <div className="flex items-center gap-2 px-2 py-1 rounded justify-center sm:justify-end">
-                <div className="font-semibold flex items-center gap-2 flex-wrap">
-                  {orderedClubs[1]?.clubName ?? "Clube B"}
+              <div className="flex items-center gap-3 px-2 py-1 justify-center sm:justify-end">
+                <div className="min-w-0 text-right">
+                  <div className="font-semibold leading-tight truncate">
+                    {orderedClubs[1]?.clubName ?? "Clube B"}
+                  </div>
                   {rightIsSelected && (
-                    <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>
+                    <span className="text-[11px] text-blue-600 font-medium">Clube selecionado</span>
                   )}
-                  {rightWon && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Vitória</Badge>}
                 </div>
                 <img
                   src={crestUrl(orderedClubs[1]?.clubCrestAssetId)}
                   onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                   alt={`Escudo ${orderedClubs[1]?.clubName ?? "Clube B"}`}
-                  className="w-8 h-8 rounded-full bg-white border"
+                  className="w-12 h-12 rounded-full bg-white border object-contain shrink-0"
                 />
               </div>
             </div>
@@ -520,14 +547,37 @@ export default function MatchDetails() {
                 </thead>
                 <tbody>
                   {comparisonStats.map(({ label, key }) => {
-                    const va = (orderedClubs[0] as any)?.[key] as number;
-                    const vb = (orderedClubs[1] as any)?.[key] as number;
+                    const va = Number((orderedClubs[0] as any)?.[key] ?? 0);
+                    const vb = Number((orderedClubs[1] as any)?.[key] ?? 0);
                     const heat = cellHeat(va, vb);
+                    const total = va + vb || 1;
+                    const barA = Math.round((va / total) * 100);
+                    const barB = 100 - barA;
                     return (
                       <tr key={String(key)} className="border-t">
-                        <td className={`p-2 tabular-nums ${heat.a}`}>{fmt(va)}</td>
-                        <td className="p-2 font-medium">{label}</td>
-                        <td className={`p-2 tabular-nums ${heat.b}`}>{fmt(vb)}</td>
+                        <td className={`p-2 tabular-nums ${heat.a}`}>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span>{fmt(va)}</span>
+                            <div className="w-full h-1 rounded-full bg-gray-100 overflow-hidden">
+                              <div
+                                className={`h-full ${va > vb ? "bg-green-400" : va < vb ? "bg-red-300" : "bg-gray-300"}`}
+                                style={{ width: `${barA}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-2 font-medium text-gray-600">{label}</td>
+                        <td className={`p-2 tabular-nums ${heat.b}`}>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span>{fmt(vb)}</span>
+                            <div className="w-full h-1 rounded-full bg-gray-100 overflow-hidden">
+                              <div
+                                className={`h-full ${vb > va ? "bg-green-400" : vb < va ? "bg-red-300" : "bg-gray-300"}`}
+                                style={{ width: `${barB}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -537,9 +587,11 @@ export default function MatchDetails() {
 
             {/* MVP */}
             {mom && (
-              <div className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-700">
-                <span aria-hidden>⭐</span>
-                <span className="font-medium">{mom.playerName}</span>
+              <div className="mt-4 flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-400 bg-amber-100 text-amber-800 text-sm font-semibold">
+                  🏆 {mom.playerName}
+                </span>
+                <span className="text-xs text-gray-500">Man of the Match</span>
               </div>
             )}
           </>
@@ -570,9 +622,17 @@ export default function MatchDetails() {
       {/* Player Stats Tables by Club */}
       {orderedClubs.map((clubRow) => {
         const clubPlayers = players.filter((p) => p.clubId === clubRow.clubId);
+        const opponent = orderedClubs.find((c) => c.clubId !== clubRow.clubId);
+        const clubWon = haveTwoClubs && !!opponent && clubRow.totalGoals > opponent.totalGoals;
+        const clubLost = haveTwoClubs && !!opponent && clubRow.totalGoals < opponent.totalGoals;
+        const clubBorderClass = clubWon
+          ? "border-l-4 border-l-green-500"
+          : clubLost
+          ? "border-l-4 border-l-red-400"
+          : "border-l-4 border-l-gray-300";
 
         return (
-          <div key={clubRow.clubId} className="bg-white shadow-sm rounded-xl p-4 border">
+          <div key={clubRow.clubId} className={`bg-white shadow-sm rounded-xl p-4 border ${clubBorderClass}`}>
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <img
                 src={crestUrl(clubRow?.clubCrestAssetId)}

@@ -95,16 +95,6 @@ function Crest({ id, alt }: { id?: string | null; alt: string }) {
 }
 function Skeleton({ className = "" }: { className?: string }) { return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />; }
 
-function Dots({ count }: { count: number }) {
-    const capped = Math.min(4, count);
-    return (
-        <div className="absolute bottom-1 left-1 right-1 flex justify-center gap-1">
-            {Array.from({ length: capped }).map((_, i) => (
-                <span key={i} className="w-1.5 h-1.5 rounded-full bg-blue-400/70" />
-            ))}
-        </div>
-    );
-}
 
 // ===== Página =====
 type ViewMode = "monthly" | "weekly";
@@ -364,12 +354,13 @@ export default function CalendarPage() {
         return `${ptDay.format(start)} ${ptMonth.format(start)} ${start.getFullYear()} – ${ptDay.format(end)} ${ptMonth.format(end)} ${end.getFullYear()}`;
     }, [referenceWeekStart]);
 
-    function cellTone(count?: number) {
-        if (!count || count <= 0) return "";
-        if (count >= 4) return "bg-blue-50";
-        if (count === 3) return "bg-indigo-50";
-        if (count === 2) return "bg-violet-50";
-        return "bg-purple-50";
+    function cellTone(summary?: CalendarDaySummaryDto) {
+        if (!summary || summary.matchesCount <= 0) return "";
+        const { wins, draws, losses } = summary;
+        if (wins > losses && wins > draws) return "bg-green-50";
+        if (losses > wins && losses > draws) return "bg-red-50";
+        if (draws > 0 && draws >= wins && draws >= losses) return "bg-amber-50";
+        return "bg-blue-50/40";
     }
 
     const ROWS = viewMode === "monthly" ? 6 : 1;
@@ -435,11 +426,14 @@ export default function CalendarPage() {
                             key={ymd}
                             onClick={(e) => { if (disabled) return; setSelectedDate(ymd); setLastActiveButton(e.currentTarget); }}
                             className={[
-                                "relative border p-1 sm:p-2 rounded-xl transition focus:outline-none focus:ring-2 focus:ring-blue-500 h-full",
-                                viewMode === "monthly" ? (inMonth ? "bg-white" : "bg-gray-50") : "bg-white",
+                                "relative border p-1 sm:p-2 rounded-xl transition focus:outline-none h-full",
+                                selectedDate === ymd
+                                    ? "bg-blue-50"
+                                    : viewMode === "monthly"
+                                    ? (inMonth ? (summary ? cellTone(summary) : "bg-white") : "bg-gray-50")
+                                    : (summary ? cellTone(summary) : "bg-white"),
                                 disabled ? "opacity-60 cursor-default" : "hover:shadow-md cursor-pointer",
-                                cellTone(summary?.matchesCount),
-                                isToday ? "ring-1 ring-blue-300" : "",
+                                selectedDate === ymd ? "ring-2 ring-blue-600" : isToday ? "ring-2 ring-blue-500" : "",
                                 "overflow-hidden w-full flex flex-col"
                             ].join(" ")}
                             aria-disabled={disabled}
@@ -448,36 +442,36 @@ export default function CalendarPage() {
                             title={summary ? `${summary.matchesCount} jogo(s)` : "Sem jogos"}
                         >
                             <div className="flex items-start justify-between min-w-0">
-                                <span className={`font-semibold ${inMonth ? "text-gray-900" : "text-gray-400"} text-xs sm:text-sm`}>
-                                    {ptDay.format(d)}{isToday ? " • hoje" : ""}
-                                </span>
+                                <div className="flex items-center gap-1">
+                                    <span className={`font-semibold ${inMonth ? "text-gray-900" : "text-gray-400"} text-xs sm:text-sm`}>
+                                        {ptDay.format(d)}
+                                    </span>
+                                    {isToday && (
+                                        <span className="text-[8px] sm:text-[9px] font-bold text-blue-600 leading-none uppercase tracking-wide">Hoje</span>
+                                    )}
+                                </div>
                                 {loadingMonth && !monthData && <Skeleton className="w-6 sm:w-8 h-3 sm:h-4" />}
                             </div>
 
                             {summary && hasAnyClub && (
-                                <div className="flex-1 flex items-center justify-center">
-                                    <div className="sm:hidden text-[10px] text-gray-700 leading-3 text-center">
-                                        <div className="font-medium">{summary.matchesCount} jogo(s)</div>
-                                        <div className="mt-1 flex items-center justify-center gap-1">
-                                            <span className="px-1 rounded bg-green-100 text-green-700">V {summary.wins}</span>
-                                            <span className="px-1 rounded bg-yellow-100 text-yellow-700">E {summary.draws}</span>
-                                            <span className="px-1 rounded bg-red-100 text-red-700">D {summary.losses}</span>
-                                        </div>
+                                <div className="flex-1 flex flex-col justify-center gap-0.5 px-0.5 mt-1">
+                                    <div className="flex items-center justify-center gap-1">
+                                        <span className="px-1 rounded bg-green-100 text-green-700 text-[9px] sm:text-[10px]">V {summary.wins}</span>
+                                        <span className="px-1 rounded bg-amber-100 text-amber-700 text-[9px] sm:text-[10px]">E {summary.draws}</span>
+                                        <span className="px-1 rounded bg-red-100 text-red-700 text-[9px] sm:text-[10px]">D {summary.losses}</span>
                                     </div>
-
-                                    <div className="hidden sm:block text-[11px] text-gray-700 text-center">
-                                        <div className="text-xs">{summary.matchesCount} jogo(s)</div>
-                                        <div className="mt-1 flex items-center justify-center gap-1">
-                                            <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">V {summary.wins}</span>
-                                            <span className="px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">E {summary.draws}</span>
-                                            <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700">D {summary.losses}</span>
-                                        </div>
-                                        <div className="mt-1">GP {summary.goalsFor} • GC {summary.goalsAgainst}</div>
+                                    <div className={`text-[8px] sm:text-[9px] text-gray-500 text-center ${viewMode === "weekly" ? "block" : "hidden sm:block"}`}>
+                                        GP {summary.goalsFor} · GC {summary.goalsAgainst}
                                     </div>
+                                    {viewMode === "weekly" && (
+                                        <div className="text-[9px] sm:text-[10px] text-center font-semibold">
+                                            <span className={summary.goalsFor >= summary.goalsAgainst ? "text-green-600" : "text-red-500"}>
+                                                {summary.goalsFor - summary.goalsAgainst >= 0 ? "+" : ""}{summary.goalsFor - summary.goalsAgainst}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             )}
-
-                            {summary?.matchesCount ? <Dots count={summary.matchesCount} /> : null}
                         </button>
                     );
                 })}
@@ -505,12 +499,15 @@ export default function CalendarPage() {
                             <div>
                                 <h2 id={dialogTitleId} className="text-xl font-semibold">{ptDay.format(fromYmd(selectedDate))} {ptMonth.format(fromYmd(selectedDate))}</h2>
                                 {dayData && (
-                                    <p className="text-sm text-gray-600">
-                                        {dayData.totalMatches} jogo(s) • GP {dayData.goalsFor} • GC {dayData.goalsAgainst} •
-                                        <span className="ml-1">V {dayData.wins}</span>
-                                        <span className="ml-1">E {dayData.draws}</span>
-                                        <span className="ml-1">D {dayData.losses}</span>
-                                    </p>
+                                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                        <span className="text-sm text-gray-500">{dayData.totalMatches} jogo(s)</span>
+                                        <span className="text-gray-300">·</span>
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">V {dayData.wins}</span>
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">E {dayData.draws}</span>
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-200">D {dayData.losses}</span>
+                                        <span className="text-gray-300">·</span>
+                                        <span className="text-xs text-gray-500">GP {dayData.goalsFor} · GC {dayData.goalsAgainst}</span>
+                                    </div>
                                 )}
                             </div>
                             <button className="px-3 py-2 rounded-lg border hover:bg-gray-50" onClick={() => { setSelectedDate(null); setDayData(null); lastActiveButton?.focus(); }}>Fechar</button>
@@ -533,19 +530,26 @@ export default function CalendarPage() {
                             <div className="space-y-3">
                                 {dayData.matches.map((m) => {
                                     const kickoff = m.timestamp ? ptTime.format(new Date(m.timestamp)) : "";
+                                    const aWon = m.clubAGoals > m.clubBGoals;
+                                    const bWon = m.clubBGoals > m.clubAGoals;
+                                    const resultBorder =
+                                        m.resultForClub === "W" ? "border-l-4 border-l-green-500"
+                                        : m.resultForClub === "L" ? "border-l-4 border-l-red-400"
+                                        : m.resultForClub === "D" ? "border-l-4 border-l-amber-400"
+                                        : "";
                                     return (
-                                        <div key={m.matchId} className="border rounded-xl p-3 hover:shadow">
+                                        <div key={m.matchId} className={`border rounded-xl p-3 hover:shadow ${resultBorder}`}>
                                             <div className="flex items-center justify-between mb-2">
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <Crest id={m.clubACrestAssetId} alt={m.clubAName} />
                                                     <span className="font-medium truncate max-w-[34%]" title={m.clubAName}>{m.clubAName}</span>
-                                                    <span className="font-semibold">{m.clubAGoals}</span>
-                                                    <span className="text-gray-400">x</span>
-                                                    <span className="font-semibold">{m.clubBGoals}</span>
+                                                    <span className={`font-semibold ${aWon ? "text-green-700" : bWon ? "text-red-600" : ""}`}>{m.clubAGoals}</span>
+                                                    <span className="text-gray-400">–</span>
+                                                    <span className={`font-semibold ${bWon ? "text-green-700" : aWon ? "text-red-600" : ""}`}>{m.clubBGoals}</span>
                                                     <span className="font-medium truncate max-w-[34%]" title={m.clubBName}>{m.clubBName}</span>
                                                     <Crest id={m.clubBCrestAssetId} alt={m.clubBName} />
                                                 </div>
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-2 shrink-0">
                                                     {kickoff && <span className="text-xs text-gray-500">{kickoff}</span>}
                                                     <ResultPill r={m.resultForClub} />
                                                 </div>
@@ -557,10 +561,17 @@ export default function CalendarPage() {
                                                 <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Passes Certos</span><span className="font-semibold">{m.stats.totalPassesMade}</span></div>
                                                 <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Passes (%)</span><span className="font-semibold">{m.stats.passAccuracyPercent.toFixed(0)}%</span></div>
                                                 <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Desarmes (%)</span><span className="font-semibold">{m.stats.tackleSuccessPercent.toFixed(0)}%</span></div>
-                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Nota Média</span><span className="font-semibold">{m.stats.avgRating.toFixed(2)}</span></div>
+                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between border border-gray-200"><span className="font-medium">Nota Média</span><span className="font-bold">{m.stats.avgRating.toFixed(2)}</span></div>
                                             </div>
 
-                                            <div className="mt-2 text-right"><Link to={`/match/${m.matchId}`} className="text-sm text-blue-700 hover:underline">Ver detalhes da partida</Link></div>
+                                            <div className="mt-2 flex justify-end">
+                                                <Link
+                                                    to={`/match/${m.matchId}`}
+                                                    className="inline-flex items-center gap-1 text-xs border rounded-lg px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
+                                                >
+                                                    Ver detalhes →
+                                                </Link>
+                                            </div>
                                         </div>
                                     );
                                 })}
