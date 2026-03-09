@@ -1281,37 +1281,39 @@ export default function Home() {
           return;
         }
 
-        // Múltiplos clubes → busca paralela e merge (sem paginação no servidor)
-        const reqs = selectedClubIds.map((id) =>
-          api
-            .get<MatchResultDto[] | PagedResult<MatchResultDto>>(`/api/clubs/${id}/matches/results`, {
-              params: baseParams,
-              signal: (controller as any).signal,
-            })
-            .then((r) => {
-              const c = coercePaged<MatchResultDto>(r.data);
-              return c.items;
-            })
-            .catch(() => [])
+        // Múltiplos clubes → uma única chamada server-side paginada
+        const params = {
+          ...baseParams,
+          clubIds: selectedClubIds,
+          page,
+          pageSize,
+        };
+        const { data } = await api.get<PagedResult<MatchResultDto>>(
+          `/api/clubs/matches/results`,
+          {
+            params,
+            paramsSerializer: (p) => {
+              const sp = new URLSearchParams();
+              for (const [key, val] of Object.entries(p)) {
+                if (Array.isArray(val)) {
+                  (val as unknown[]).forEach((v) => sp.append(key, String(v)));
+                } else if (val !== undefined && val !== null) {
+                  sp.append(key, String(val));
+                }
+              }
+              return sp.toString();
+            },
+            signal: (controller as any).signal,
+          }
         );
-
-        const arrays = await Promise.all(reqs);
         if (!mounted) return;
-
-        const merged = ([] as MatchResultDto[]).concat(...arrays);
-        const byId = new Map<number, MatchResultDto>();
-        for (const m of merged) {
-          if (!byId.has(m.matchId)) byId.set(m.matchId, m);
-        }
-        const unique = Array.from(byId.values());
-
-        setIsServerPaged(false);
-        setResults(unique);
-        setTotalCount(unique.length);
-        setTotalPages(Math.ceil(unique.length / Math.max(visible, 1)) || 1);
-        setHasNext(false);
-        setHasPrev(false);
-        setVisible(30);
+        const norm = coercePaged<MatchResultDto>(data);
+        setIsServerPaged(norm.isPaged);
+        setResults(norm.items);
+        setTotalCount(norm.totalCount);
+        setTotalPages(norm.totalPages);
+        setHasNext(norm.hasNext);
+        setHasPrev(norm.hasPrevious);
       } catch (err: any) {
         if (mounted) setError(err?.message ?? "Erro ao carregar resultados");
       } finally {
@@ -1449,7 +1451,7 @@ export default function Home() {
   const prev = () => hasPrev && setPage((p) => Math.max(1, p - 1));
 
   const PageControls = () => {
-    if (!isServerPaged || selectedClubIds.length !== 1) return null;
+    if (!isServerPaged) return null;
     return (
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
         <div className="flex items-center gap-2 text-sm">
@@ -1699,7 +1701,7 @@ export default function Home() {
 
       {/* Lista */}
       <div className="mt-4 grid gap-2">
-        {(isServerPaged && selectedClubIds.length === 1 ? filtered : filtered.slice(0, visible)).map((m) => (
+        {(isServerPaged ? filtered : filtered.slice(0, visible)).map((m) => (
           <MatchCard
             key={m.matchId}
             m={m}
@@ -1712,7 +1714,7 @@ export default function Home() {
       </div>
 
       {/* Paginação */}
-      {isServerPaged && selectedClubIds.length === 1 ? (
+      {isServerPaged ? (
         <PageControls />
       ) : (
         filtered.length > 0 &&
@@ -1729,7 +1731,7 @@ export default function Home() {
       )}
 
       {/* Rodapé de contagem */}
-      {isServerPaged && selectedClubIds.length === 1 ? (
+      {isServerPaged ? (
         <div className="mt-6 text-xs text-gray-500 text-center">
           Página {totalPages ? page : 0} de {totalPages} — {totalCount} partidas.
         </div>
