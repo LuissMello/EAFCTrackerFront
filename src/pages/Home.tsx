@@ -1092,7 +1092,7 @@ function DivisionsSelect({
    Página
 ====================== */
 export default function Home() {
-  const { club } = useClub();
+  const { club, selectedClubs } = useClub();
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -1436,7 +1436,7 @@ export default function Home() {
   const headerRight = hasSelection ? (
     selectedClubIds.length > 1 ? (
       <>
-        Clubes atuais: <span className="font-medium">{selectedClubIds.join(", ")}</span>
+        Clubes atuais: <span className="font-medium">{selectedClubIds.map((id) => selectedClubs.find((c) => c.clubId === id)?.clubName || id).join(", ")}</span>
       </>
     ) : (
       <>
