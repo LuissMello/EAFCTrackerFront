@@ -739,6 +739,7 @@ function MatchCard({
                   height={24}
                   className="h-8 w-8 object-contain"
                   loading="lazy"
+                  onError={(e) => (e.currentTarget.style.display = 'none')}
                 />
               )}
               <div className="w-10 shrink-0 flex justify-center overflow-visible">
@@ -813,6 +814,7 @@ function MatchCard({
                   height={24}
                   className="h-8 w-8 object-contain"
                   loading="lazy"
+                  onError={(e) => (e.currentTarget.style.display = 'none')}
                 />
               )}
               <div className="w-10 shrink-0 flex justify-end overflow-visible">
@@ -857,6 +859,7 @@ function MatchCard({
                     height={20}
                     className="h-5 w-5 object-contain"
                     loading="lazy"
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
                   />
                 </div>
               )}
@@ -876,6 +879,7 @@ function MatchCard({
                     height={20}
                     className="h-5 w-5 object-contain"
                     loading="lazy"
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
                   />
                 </div>
               )}
@@ -1088,7 +1092,7 @@ function DivisionsSelect({
    Página
 ====================== */
 export default function Home() {
-  const { club } = useClub();
+  const { club, selectedClubs } = useClub();
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -1432,11 +1436,11 @@ export default function Home() {
   const headerRight = hasSelection ? (
     selectedClubIds.length > 1 ? (
       <>
-        Clubes atuais: <span className="font-medium">{selectedClubIds.join(", ")}</span>
+        Clubes atuais: <span className="font-medium">{selectedClubIds.map((id) => selectedClubs.find((c) => c.clubId === id)?.clubName || id).join(", ")}</span>
       </>
     ) : (
       <>
-        Clube atual: <span className="font-medium">{selectedClubIds[0]}</span>
+        Clube atual: <span className="font-medium">{fallbackClubName || selectedClubIds[0]}</span>
       </>
     )
   ) : (
