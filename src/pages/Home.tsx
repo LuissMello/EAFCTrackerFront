@@ -739,6 +739,7 @@ function MatchCard({
                   height={24}
                   className="h-8 w-8 object-contain"
                   loading="lazy"
+                  onError={(e) => (e.currentTarget.style.display = 'none')}
                 />
               )}
               <div className="w-10 shrink-0 flex justify-center overflow-visible">
@@ -813,6 +814,7 @@ function MatchCard({
                   height={24}
                   className="h-8 w-8 object-contain"
                   loading="lazy"
+                  onError={(e) => (e.currentTarget.style.display = 'none')}
                 />
               )}
               <div className="w-10 shrink-0 flex justify-end overflow-visible">
@@ -857,6 +859,7 @@ function MatchCard({
                     height={20}
                     className="h-5 w-5 object-contain"
                     loading="lazy"
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
                   />
                 </div>
               )}
@@ -876,6 +879,7 @@ function MatchCard({
                     height={20}
                     className="h-5 w-5 object-contain"
                     loading="lazy"
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
                   />
                 </div>
               )}
@@ -1436,7 +1440,7 @@ export default function Home() {
       </>
     ) : (
       <>
-        Clube atual: <span className="font-medium">{selectedClubIds[0]}</span>
+        Clube atual: <span className="font-medium">{fallbackClubName || selectedClubIds[0]}</span>
       </>
     )
   ) : (

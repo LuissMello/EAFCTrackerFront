@@ -42,7 +42,8 @@ export const crestUrl = (crestAssetId?: string | null): string => {
 export const divisionCrestUrl = (division?: string | null): string | null => {
   if (!division) return null;
   const n = Number(String(division).trim());
-  return Number.isFinite(n) && n > 0 ? `${EA_DIVISION_BASE}divisioncrest${Math.trunc(n)}.png` : null;
+  // EA CDN only hosts badges for divisions 1–6; 7+ return 404
+  return Number.isFinite(n) && n > 0 && n <= 6 ? `${EA_DIVISION_BASE}divisioncrest${Math.trunc(n)}.png` : null;
 };
 
 export const reputationTierUrl = (tier?: string | null): string => {

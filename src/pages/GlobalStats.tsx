@@ -28,7 +28,7 @@ export default function PlayerStatisticsPage() {
   // estado
   const [players, setPlayers] = useState<PlayerStats[]>([]);
   const [clubStats, setClubStats] = useState<ClubStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -168,7 +168,7 @@ export default function PlayerStatisticsPage() {
             </>
           ) : (
             <>
-              Clube atual: <span className="font-semibold">{groupClubIds[0] ?? "-"}</span>
+              Clube atual: <span className="font-semibold">{club?.clubName || (groupClubIds[0] ?? "-")}</span>
             </>
           )}
         </div>
