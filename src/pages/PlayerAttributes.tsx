@@ -304,7 +304,7 @@ export default function PlayerAttributesPage() {
                     {/* Base: lista de atributos */}
                     <Card>
                         <h3 className="text-base font-semibold mb-3">Atributos — {base?.playerName ?? "—"}</h3>
-                        {base?.statistics ? (
+                        {base?.statistics && Object.values(base.statistics).some((v) => v && v !== 0) ? (
                             <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-sm text-gray-700">
                                 {(Object.keys(ATTR_LABELS) as (keyof PlayerMatchStats)[]).map((key) => (
                                     <li key={String(key)} className="col-span-1">
@@ -316,7 +316,9 @@ export default function PlayerAttributesPage() {
                                 ))}
                             </ul>
                         ) : (
-                            <div className="text-sm text-gray-600">Sem snapshot de atributos para este jogador.</div>
+                            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                Dados de atributos não disponíveis para este jogador.
+                            </div>
                         )}
                     </Card>
 
@@ -326,7 +328,7 @@ export default function PlayerAttributesPage() {
                             Comparação — {compareMode === "media" ? "Média do clube" : rows.find((r) => String(r.playerId) === String(comparePlayerId))?.playerName ?? "—"}
                         </h3>
 
-                        {compare ? (
+                        {compare && Object.values(compare).some((v) => v && v !== 0) ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {(Object.keys(ATTR_LABELS) as (keyof PlayerMatchStats)[]).map((key) => {
                                     const mine = clamp01to100(Number((base?.statistics as any)?.[key] ?? 0));

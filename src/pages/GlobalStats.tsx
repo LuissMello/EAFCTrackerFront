@@ -8,7 +8,7 @@ import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
 import { API_ENDPOINTS } from "../config/urls.ts";
 
 export default function PlayerStatisticsPage() {
-  const { club } = useClub();
+  const { club, selectedClubs } = useClub();
   const fallbackClubId = club?.clubId ?? null;
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -28,7 +28,7 @@ export default function PlayerStatisticsPage() {
   // estado
   const [players, setPlayers] = useState<PlayerStats[]>([]);
   const [clubStats, setClubStats] = useState<ClubStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -164,11 +164,11 @@ export default function PlayerStatisticsPage() {
         <div className="text-sm text-gray-600">
           {groupClubIds.length > 1 ? (
             <>
-              Agrupando clubes: <span className="font-semibold">{groupClubIds.join(", ")}</span>
+              Agrupando clubes: <span className="font-semibold">{groupClubIds.map((id) => selectedClubs.find((c) => c.clubId === id)?.clubName || id).join(", ")}</span>
             </>
           ) : (
             <>
-              Clube atual: <span className="font-semibold">{groupClubIds[0] ?? "-"}</span>
+              Clube atual: <span className="font-semibold">{club?.clubName || (groupClubIds[0] ?? "-")}</span>
             </>
           )}
         </div>
