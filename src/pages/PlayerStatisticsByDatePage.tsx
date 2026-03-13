@@ -978,7 +978,7 @@ export default function PlayerStatisticsByDatePage() {
                                     error={null}
                                     clubStats={null}
                                     compactMode
-                                    hiddenColumns={["matchesPlayed"]}
+                                    hiddenColumns={[]}
                                 />
                             </section>
                         );

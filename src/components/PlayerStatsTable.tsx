@@ -219,6 +219,7 @@ export function PlayerStatsTable({
     // Calculate max values for bars
     const maxByKey = useMemo(() => {
         const keys: (keyof PlayerStats)[] = [
+            "matchesPlayed",
             "totalGoals",
             "totalAssists",
             "totalPreAssists",
@@ -312,7 +313,17 @@ export function PlayerStatsTable({
         { key: "avgRating", label: "Nota" },
     ];
 
-    const columns = allColumns.filter((col) => !hiddenColumns.includes(col.key));
+    const effectiveHiddenColumns = useMemo(() => {
+        const maxPlayed = filtered.length > 0
+            ? Math.max(...filtered.map((p) => p.matchesPlayed || 0))
+            : 0;
+        if (maxPlayed <= 1) {
+            return [...new Set([...hiddenColumns, "vedBars"])];
+        }
+        return hiddenColumns;
+    }, [filtered, hiddenColumns]);
+
+    const columns = allColumns.filter((col) => !effectiveHiddenColumns.includes(col.key));
 
     return (
         <section>
@@ -450,7 +461,7 @@ export function PlayerStatsTable({
                                         case "matchesPlayed":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    {int.format(p.matchesPlayed)}
+                                                    <CellBar value={p.matchesPlayed} max={maxByKey.get("matchesPlayed") || 1} format={(v) => int.format(v)} />
                                                 </td>
                                             );
                                         case "totalSecondsPlayed": {
