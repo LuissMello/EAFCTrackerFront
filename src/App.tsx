@@ -10,6 +10,9 @@ import PlayerStatisticsByDatePage from "./pages/PlayerStatisticsByDatePage.tsx";
 import SinglePlayerStatisticsByDatePage from "./pages/SinglePlayerStatisticsByDatePage.tsx";
 import MatchGoalAnalysis from "./pages/MatchGoalAnalysis.tsx";
 import GoalAnalytics from "./pages/GoalAnalytics.tsx";
+import Records from "./pages/Records.tsx";
+import PlayerProfile from "./pages/PlayerProfile.tsx";
+import Opponents from "./pages/Opponents.tsx";
 import Navbar from "./components/Navbar.tsx";
 import { ClubProvider } from "./hooks/useClub.tsx";
 
@@ -31,6 +34,9 @@ export default function App() {
                         <Route path="/attributes" element={<PlayerAttributes />} />
                         <Route path="/statisticsbydate" element={<PlayerStatisticsByDatePage />} />
                         <Route path="/singlestatisticsbydate" element={<SinglePlayerStatisticsByDatePage />} />
+                        <Route path="/records" element={<Records />} />
+                        <Route path="/player/:playerEntityId" element={<PlayerProfile />} />
+                        <Route path="/opponents" element={<Opponents />} />
                     </Routes>
                 </div>
             </ClubProvider>

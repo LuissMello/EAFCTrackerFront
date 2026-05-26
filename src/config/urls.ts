@@ -28,6 +28,11 @@ export const API_ENDPOINTS = {
   TRENDS_CLUB: (clubId: number, last: number) => `/api/Trends/club/${clubId}?last=${last}`,
   TRENDS_TOP_SCORERS: (clubId: number, limit = 10) => `/api/Trends/top-scorers?clubId=${clubId}&limit=${limit}`,
 
+  // Records / Opponents / Player Profile
+  CLUB_RECORDS: (clubIds: string) => `/api/Clubs/records?clubIds=${clubIds}`,
+  CLUB_OPPONENTS: (clubIds: string) => `/api/Clubs/opponents?clubIds=${clubIds}`,
+  PLAYER_PROFILE: (playerEntityId: number) => `/api/Players/${playerEntityId}/profile`,
+
   // System
   FETCH_LAST_RUN: '/api/fetch/last-run',
   FETCH_RUN: '/api/fetch/run',
