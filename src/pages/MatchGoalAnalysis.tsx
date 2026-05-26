@@ -116,25 +116,23 @@ function buildConnections(goals: ApiGoal[]) {
   return { pairs, trios };
 }
 
-/** Builds pass-flow matrix: how many times player A "fed" player B (preAssist→assist + assist→scorer) */
-function buildMatrix(goals: ApiGoal[], players: string[]) {
-  const idx = new Map(players.map((p, i) => [p, i]));
-  const n = players.length;
-  const matrix: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
+interface PassFlowEntry { from: string; to: string; count: number }
 
+function buildPassFlow(goals: ApiGoal[]): PassFlowEntry[] {
+  const map = new Map<string, PassFlowEntry>();
   for (const g of goals) {
     if (g.assistName) {
-      const from = idx.get(g.assistName);
-      const to = idx.get(g.scorerName);
-      if (from !== undefined && to !== undefined) matrix[from][to]++;
+      const key = `${g.assistName}→${g.scorerName}`;
+      if (!map.has(key)) map.set(key, { from: g.assistName, to: g.scorerName, count: 0 });
+      map.get(key)!.count++;
     }
     if (g.preAssistName && g.assistName) {
-      const from = idx.get(g.preAssistName);
-      const to = idx.get(g.assistName);
-      if (from !== undefined && to !== undefined) matrix[from][to]++;
+      const key = `${g.preAssistName}→${g.assistName}`;
+      if (!map.has(key)) map.set(key, { from: g.preAssistName, to: g.assistName, count: 0 });
+      map.get(key)!.count++;
     }
   }
-  return matrix;
+  return Array.from(map.values()).sort((a, b) => b.count - a.count);
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -256,8 +254,7 @@ export default function MatchGoalAnalysis() {
     return Array.from(names);
   }, [goals]);
 
-  const matrix = useMemo(() => buildMatrix(goals, involvedPlayers), [goals, involvedPlayers]);
-  const maxMatrixVal = useMemo(() => Math.max(...matrix.flat(), 1), [matrix]);
+  const passFlow = useMemo(() => buildPassFlow(goals), [goals]);
 
   const goalsByClub = useMemo(() => {
     const map = new Map<number, ApiGoal[]>();
@@ -618,117 +615,38 @@ export default function MatchGoalAnalysis() {
             )}
           </div>
 
-          {/* Connection Matrix */}
-          {involvedPlayers.length > 1 && (
+          {/* Pass Flow */}
+          {passFlow.length > 0 && (
             <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b bg-gray-50">
-                <h3 className="font-semibold text-gray-800">🗂️ Matriz de Passes</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Linha = quem passou · Coluna = quem recebeu</p>
+                <h3 className="font-semibold text-gray-800">🔗 Fluxo de Passes</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Conexões de pré-assist→assist e assist→gol, ordenadas por frequência</p>
               </div>
-              <div className="overflow-x-auto p-4">
-                <table className="text-xs border-collapse">
-                  <thead>
-                    <tr>
-                      <th className="w-24 min-w-[96px]" />
-                      {involvedPlayers.map((p) => {
-                        const c = getPalette(colorMap.get(p) ?? 0);
-                        return (
-                          <th key={p} className="pb-2 px-1">
-                            <div className="flex justify-center">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-semibold border ${c.bg} ${c.text} ${c.border} whitespace-nowrap max-w-[80px] truncate`}>
-                                {p}
-                              </span>
-                            </div>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {involvedPlayers.map((rowPlayer, ri) => {
-                      const rc = getPalette(colorMap.get(rowPlayer) ?? 0);
-                      const rowTotal = matrix[ri].reduce((s, v) => s + v, 0);
-                      return (
-                        <tr key={rowPlayer}>
-                          <td className="pr-3 py-1.5 text-right">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-semibold border ${rc.bg} ${rc.text} ${rc.border} whitespace-nowrap max-w-[96px] truncate`}>
-                              {rowPlayer}
-                            </span>
-                          </td>
-                          {involvedPlayers.map((colPlayer, ci) => {
-                            const val = matrix[ri][ci];
-                            const isSelf = rowPlayer === colPlayer;
-                            const intensity = isSelf ? 0 : val / maxMatrixVal;
-                            return (
-                              <td key={colPlayer} className="px-1 py-1.5 text-center">
-                                <div
-                                  className={`flex items-center justify-center w-9 h-9 rounded-lg mx-auto text-sm font-bold transition-colors ${
-                                    isSelf
-                                      ? "bg-gray-100 text-gray-300"
-                                      : val === 0
-                                      ? "text-gray-200"
-                                      : intensity >= 0.75
-                                      ? "bg-gray-900 text-white"
-                                      : intensity >= 0.5
-                                      ? "bg-gray-700 text-white"
-                                      : intensity >= 0.25
-                                      ? "bg-gray-300 text-gray-800"
-                                      : "bg-gray-100 text-gray-600"
-                                  }`}
-                                  title={isSelf ? "" : `${rowPlayer} → ${colPlayer}: ${val}×`}
-                                >
-                                  {isSelf ? "·" : val === 0 ? "–" : val}
-                                </div>
-                              </td>
-                            );
-                          })}
-                          <td className="pl-3 py-1.5">
-                            <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
-                              {rowTotal > 0 ? `${rowTotal} passes` : ""}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                {/* Legend */}
-                <div className="mt-4 flex items-center gap-3 flex-wrap">
-                  <span className="text-xs text-gray-500">Intensidade:</span>
-                  {[
-                    { label: "1 passe", style: "bg-gray-100 text-gray-600" },
-                    { label: "2 passes", style: "bg-gray-300 text-gray-800" },
-                    { label: "3 passes", style: "bg-gray-700 text-white" },
-                    { label: "4+ passes", style: "bg-gray-900 text-white" },
-                  ].map((l) => (
-                    <div key={l.label} className="flex items-center gap-1.5">
-                      <div className={`w-5 h-5 rounded ${l.style} flex items-center justify-center text-[10px] font-bold`}>
-                        {l.label.split(" ")[0]}
+              <div className="divide-y">
+                {passFlow.map((entry, i) => {
+                  const fromC = getPalette(colorMap.get(entry.from) ?? 0);
+                  const toC = getPalette(colorMap.get(entry.to) ?? 1);
+                  const pct = Math.round((entry.count / passFlow[0].count) * 100);
+                  return (
+                    <div key={`${entry.from}→${entry.to}`} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-xs text-gray-400 w-5 text-right font-medium">{i + 1}</span>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${fromC.bg} ${fromC.text} ${fromC.border}`}>{entry.from}</span>
+                        <span className="text-gray-400 text-xs">→</span>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${toC.bg} ${toC.text} ${toC.border}`}>{entry.to}</span>
+                        <div className="flex-1" />
+                        <span className="text-sm font-bold text-gray-700">{entry.count}×</span>
                       </div>
-                      <span className="text-xs text-gray-500">{l.label}</span>
+                      <div className="ml-7 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${fromC.dot}`} style={{ width: `${pct}%` }} />
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Player colour legend */}
-          <div className="bg-white rounded-xl border shadow-sm p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Legenda de Jogadores</h3>
-            <div className="flex flex-wrap gap-2">
-              {involvedPlayers.map((name) => {
-                const c = getPalette(colorMap.get(name) ?? 0);
-                return (
-                  <span key={name} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${c.bg} ${c.text} ${c.border}`}>
-                    <span className={`w-2 h-2 rounded-full ${c.dot}`} />
-                    {name}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
         </div>
       )}
     </div>
