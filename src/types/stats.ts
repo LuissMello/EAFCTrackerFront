@@ -1,5 +1,6 @@
 export interface PlayerStats {
   playerId: number;
+  playerEntityId: number;
   playerName: string;
   clubId: number;
   matchesPlayed: number;

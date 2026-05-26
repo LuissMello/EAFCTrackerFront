@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { PlayerStats, ClubStats } from "../types/stats.ts";
 import { classifyStat, getStatQualityDetails } from "../utils/statClassifier.ts";
 import { Tooltip } from "./Tooltip.tsx";
@@ -455,7 +456,16 @@ export function PlayerStatsTable({
                                                     className="px-3 py-2 font-medium text-left sticky left-0 bg-inherit border-r border-gray-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
                                                 >
                                                     {Icons}
-                                                    {p.proName}
+                                                    {p.playerEntityId ? (
+                                                        <Link
+                                                            to={`/player/${p.playerEntityId}`}
+                                                            className="hover:underline hover:text-blue-600 transition-colors"
+                                                        >
+                                                            {p.proName}
+                                                        </Link>
+                                                    ) : (
+                                                        p.proName
+                                                    )}
                                                 </td>
                                             );
                                         case "matchesPlayed":
