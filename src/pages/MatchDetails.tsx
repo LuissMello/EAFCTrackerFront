@@ -517,14 +517,6 @@ export default function MatchDetails() {
         </div>
       )}
 
-      {/* Estatísticas Pós-Jogo (event-aggregates) */}
-      {(eventAggregatesLoading || eventAggregatesError || eventAggregates !== null) && (
-        <MatchEaPostGameStats
-          data={eventAggregates}
-          loading={eventAggregatesLoading}
-          error={eventAggregatesError}
-        />
-      )}
 
       {/* Cabeçalho dos clubes + placar e highlights */}
       <div className={`bg-white shadow-sm rounded-xl p-4 border ${heroBorderClass} ${heroBg}`}>
