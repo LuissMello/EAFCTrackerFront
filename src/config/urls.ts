@@ -1,5 +1,5 @@
 // API Base URL
-export const API_BASE_URL = 'https://eafctracker.fly.dev';
+export const API_BASE_URL = 'http://localhost:8080';
 
 // API Endpoints
 export const API_ENDPOINTS = {
@@ -11,9 +11,13 @@ export const API_ENDPOINTS = {
   CLUB_STATS_GROUPED: '/api/clubs/grouped/matches/statistics/limited',
   CLUB_MATCHES_RESULTS: (clubId: number) => `/api/clubs/${clubId}/matches/results`,
   CLUB_PLAYERS_ATTRIBUTES: (clubId: number) => `/api/clubs/${clubId}/players/attributes`,
+  CLUB_GOAL_ANALYSIS: (clubId: number, from: string, to: string) =>
+    `/api/Clubs/${clubId}/goals/analysis?from=${from}&to=${to}`,
 
   // Matches
   MATCH_GOALS: (matchId: string) => `/api/Matches/${matchId}/goals`,
+  MATCH_STATISTICS: (matchId: string) => `/api/Matches/${matchId}/statistics`,
+  MATCH_EVENT_AGGREGATES: (matchId: string) => `/api/Matches/${matchId}/event-aggregates`,
   MATCHES_STATS_BY_DATE: '/api/Clubs/matches/statistics/by-date-range-grouped',
 
   // Calendar

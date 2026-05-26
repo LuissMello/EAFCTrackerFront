@@ -6,8 +6,10 @@ import OverallSummaryCard, { ClubOverallRow, PlayoffAchievementDto } from "../co
 import { TeamStatsSection } from "../components/TeamStatsSection.tsx";
 import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
 import { GoalLinkingSection } from "../components/GoalLinkingSection.tsx";
+import { MatchEaPostGameStats } from "../components/MatchEaPostGameStats.tsx";
 import { ClubStats, PlayerStats } from "../types/stats.ts";
-import { crestUrl, FALLBACK_LOGO } from "../config/urls.ts";
+import { MatchEventAggregatesResponseDto } from "../types/matchEventAggregates.ts";
+import { crestUrl, FALLBACK_LOGO, API_ENDPOINTS } from "../config/urls.ts";
 
 // ======================
 // Tipos (espelham /api/Matches/{matchId}/statistics)
@@ -160,6 +162,11 @@ export default function MatchDetails() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [showOverallPanel, setShowOverallPanel] = useState<boolean>(false);
 
+  // event-aggregates
+  const [eventAggregates, setEventAggregates] = useState<MatchEventAggregatesResponseDto | null>(null);
+  const [eventAggregatesLoading, setEventAggregatesLoading] = useState(false);
+  const [eventAggregatesError, setEventAggregatesError] = useState<string | null>(null);
+
   // ====== Buscar estatísticas da partida ======
   const fetchData = useCallback(async () => {
     if (!matchId) return;
@@ -182,6 +189,27 @@ export default function MatchDetails() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // ====== Buscar event-aggregates ======
+  useEffect(() => {
+    if (!matchId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setEventAggregatesLoading(true);
+        setEventAggregatesError(null);
+        const { data } = await api.get<MatchEventAggregatesResponseDto>(
+          API_ENDPOINTS.MATCH_EVENT_AGGREGATES(matchId)
+        );
+        if (!cancelled) setEventAggregates(data ?? null);
+      } catch {
+        if (!cancelled) setEventAggregatesError("Não foi possível carregar os dados de pós-jogo.");
+      } finally {
+        if (!cancelled) setEventAggregatesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [matchId]);
 
   const players = stats?.players ?? [];
   const clubs = stats?.clubs ?? [];
@@ -385,7 +413,7 @@ export default function MatchDetails() {
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
       {/* Topo */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <Link
           to="/"
           className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-white hover:bg-gray-50"
@@ -393,6 +421,13 @@ export default function MatchDetails() {
           ← Voltar
         </Link>
         <span className="text-gray-400 text-sm">Detalhes da Partida</span>
+        <div className="flex-1" />
+        <Link
+          to={`/match/${matchId}/goals`}
+          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-white hover:bg-gray-50 font-medium"
+        >
+          ⚽ Análise de Gols
+        </Link>
       </div>
 
       {/* Painel Overall (toggle) */}
@@ -480,6 +515,15 @@ export default function MatchDetails() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Estatísticas Pós-Jogo (event-aggregates) */}
+      {(eventAggregatesLoading || eventAggregatesError || eventAggregates !== null) && (
+        <MatchEaPostGameStats
+          data={eventAggregates}
+          loading={eventAggregatesLoading}
+          error={eventAggregatesError}
+        />
       )}
 
       {/* Cabeçalho dos clubes + placar e highlights */}
