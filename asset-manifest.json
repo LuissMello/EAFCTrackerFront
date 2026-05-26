@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/EAFCTrackerFront/static/css/main.347662b1.css",
-    "main.js": "/EAFCTrackerFront/static/js/main.e4b34809.js",
+    "main.js": "/EAFCTrackerFront/static/js/main.fe37ef45.js",
     "index.html": "/EAFCTrackerFront/index.html",
     "main.347662b1.css.map": "/EAFCTrackerFront/static/css/main.347662b1.css.map",
-    "main.e4b34809.js.map": "/EAFCTrackerFront/static/js/main.e4b34809.js.map"
+    "main.fe37ef45.js.map": "/EAFCTrackerFront/static/js/main.fe37ef45.js.map"
   },
   "entrypoints": [
     "static/css/main.347662b1.css",
-    "static/js/main.e4b34809.js"
+    "static/js/main.fe37ef45.js"
   ]
 }
