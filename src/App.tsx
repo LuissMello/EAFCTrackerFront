@@ -8,6 +8,8 @@ import Trends from "./pages/Trends.tsx";
 import PlayerAttributes from "./pages/PlayerAttributes.tsx";
 import PlayerStatisticsByDatePage from "./pages/PlayerStatisticsByDatePage.tsx";
 import SinglePlayerStatisticsByDatePage from "./pages/SinglePlayerStatisticsByDatePage.tsx";
+import MatchGoalAnalysis from "./pages/MatchGoalAnalysis.tsx";
+import GoalAnalytics from "./pages/GoalAnalytics.tsx";
 import Navbar from "./components/Navbar.tsx";
 import { ClubProvider } from "./hooks/useClub.tsx";
 
@@ -20,6 +22,8 @@ export default function App() {
                     <Routes>
                         <Route path="/" element={<Home />} />
                         <Route path="/match/:matchId" element={<MatchDetails />} />
+                        <Route path="/match/:matchId/goals" element={<MatchGoalAnalysis />} />
+                        <Route path="/goal-analytics" element={<GoalAnalytics />} />
                         <Route path="/statistics/player/:matchId/:playerId" element={<PlayerStats />} />
                         <Route path="/stats" element={<GlobalStats />} />
                         <Route path="/calendar" element={<Calendar />} />

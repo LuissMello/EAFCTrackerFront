@@ -45,8 +45,8 @@ const NAV_LINKS = [
     { to: "/calendar", label: "Calendário" },
     { to: "/statisticsbydate", label: "Stats Período" },
     { to: "/singlestatisticsbydate", label: "Stats Individuais" },
+    { to: "/goal-analytics", label: "Gols" },
     { to: "/trends", label: "Trends" },
-    { to: "/attributes", label: "Atributos" },
 ];
 
 function Spinner() {
