@@ -165,17 +165,20 @@ function mergeResponses(responses: GoalAnalysisResponse[]): GoalAnalysisResponse
 
   const allLinks = responses.flatMap(r => r.goalLinks);
 
-  // Re-aggregate players from merged links
+  // Merge players by summing the stats already aggregated by the backend (from MatchPlayerEntity)
   const playerMap = new Map<string, GoalAnalysisPlayer>();
-  const get = (name: string): GoalAnalysisPlayer => {
-    if (!playerMap.has(name)) playerMap.set(name, { name, goals: 0, assists: 0, preAssists: 0, total: 0 });
-    return playerMap.get(name)!;
-  };
-  for (const l of allLinks) {
-    get(l.scorerName).goals++;
-    get(l.scorerName).total++;
-    if (l.assistName)    { get(l.assistName).assists++;    get(l.assistName).total++;    }
-    if (l.preAssistName) { get(l.preAssistName).preAssists++; get(l.preAssistName).total++; }
+  for (const r of responses) {
+    for (const p of r.players) {
+      const existing = playerMap.get(p.name);
+      if (existing) {
+        existing.goals      += p.goals;
+        existing.assists    += p.assists;
+        existing.preAssists += p.preAssists;
+        existing.total      += p.total;
+      } else {
+        playerMap.set(p.name, { ...p });
+      }
+    }
   }
   const players = Array.from(playerMap.values()).sort((a, b) => b.total - a.total || b.goals - a.goals);
 
