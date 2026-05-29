@@ -38,6 +38,11 @@ function useNumberFormats() {
     return { int, p1, p2 };
 }
 
+const STICKY_PLAYER_HEADER =
+    "sticky left-0 z-20 border-r border-gray-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]";
+const STICKY_PLAYER_CELL =
+    "sticky left-0 z-10 border-r border-gray-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]";
+
 function SortIcon({ active, order }: { active: boolean; order: "asc" | "desc" }) {
     if (!active)
         return (
@@ -81,18 +86,19 @@ function CellBar({
         barColor = qualityColors[quality.level];
     }
 
+    const label = `${format(value)}${suffix}`;
+
     const cellBarContent = (
         <div className="relative w-full h-6 rounded-md border border-gray-200 overflow-hidden bg-gray-50">
             <div className={`h-full ${barColor}`} style={{ width: `${width}%` }} />
-            <div className="absolute inset-0 grid place-items-center text-xs font-medium">
-                {format(value)}
-                {suffix}
+            <div className="absolute inset-0 grid place-items-center text-xs font-medium whitespace-nowrap tabular-nums">
+                {label}
             </div>
         </div>
     );
 
     return statType ? (
-        <Tooltip content={getStatQualityDetails(statType, value) || `${format(value)}${suffix}`} wrapperClassName="block">
+        <Tooltip content={getStatQualityDetails(statType, value) || label} wrapperClassName="block">
             {cellBarContent}
         </Tooltip>
     ) : (
@@ -235,20 +241,19 @@ export function PlayerStatsTable({
             "totalSecondsPlayed",
         ];
         const res = new Map<keyof PlayerStats | "participations", number>();
-        keys.forEach((k) => res.set(k, Math.max(1, ...filtered.map((p) => Number(p[k]) || 0))));
-        // Participations = goals + assists + preAssists
-        res.set(
-            "participations",
-            Math.max(
-                1,
-                ...filtered.map(
-                    (p) =>
-                        (Number(p.totalGoals) || 0) +
-                        (Number(p.totalAssists) || 0) +
-                        (Number(p.totalPreAssists) || 0)
-                )
-            )
-        );
+        keys.forEach((k) => {
+            let max = 1;
+            for (const p of filtered) max = Math.max(max, Number(p[k]) || 0);
+            res.set(k, max);
+        });
+        let maxParticipations = 1;
+        for (const p of filtered) {
+            maxParticipations = Math.max(
+                maxParticipations,
+                (Number(p.totalGoals) || 0) + (Number(p.totalAssists) || 0) + (Number(p.totalPreAssists) || 0)
+            );
+        }
+        res.set("participations", maxParticipations);
         return res;
     }, [filtered]);
 
@@ -330,9 +335,10 @@ export function PlayerStatsTable({
         <section>
             {effectiveShowTitle && <h2 className="text-xl font-bold mb-2 text-center">Estatísticas dos Jogadores</h2>}
 
-            <div className="overflow-x-auto rounded-lg border bg-white shadow">
+            <div className="rounded-lg border bg-white shadow overflow-hidden">
+                <div className="scroll-touch-x overflow-x-auto">
                 <table className="table-auto w-full text-sm text-center">
-                    <thead className="bg-gray-50 sticky top-0 z-10">
+                    <thead className="bg-gray-50">
                         <tr>
                             {columns.map((c) => {
                                 const headerContent = (
@@ -342,11 +348,16 @@ export function PlayerStatsTable({
                                     </div>
                                 );
 
+                                const isProNameCol = c.key === "proName";
+                                const isActiveSort = sortKey === (c.key as keyof PlayerStats);
+
                                 return (
                                     <th
                                         key={c.key}
                                         onClick={() => handleSort(c.key as keyof PlayerStats)}
-                                        className={`px-3 py-2 cursor-pointer select-none hover:bg-gray-100 group${sortKey === (c.key as keyof PlayerStats) ? " bg-blue-50" : ""}`}
+                                        className={`px-3 py-2 cursor-pointer select-none hover:bg-gray-100 group${
+                                            isActiveSort ? " bg-blue-50" : isProNameCol ? " bg-gray-50" : ""
+                                        }${isProNameCol ? ` ${STICKY_PLAYER_HEADER}` : ""}`}
                                         aria-sort={
                                             sortKey === (c.key as keyof PlayerStats)
                                                 ? sortOrder === "asc"
@@ -447,13 +458,16 @@ export function PlayerStatsTable({
                                     </span>
                                 ) : null;
 
+                                const stripeClass = rowClass ? "" : rowIdx % 2 === 1 ? "bg-gray-50" : "";
+                                const rowBgClass = rowClass || stripeClass || "bg-white";
+
                                 const renderCell = (col: { key: string }) => {
                                     switch (col.key) {
                                         case "proName":
                                             return (
                                                 <td
                                                     key={col.key}
-                                                    className="px-3 py-2 font-medium text-left sticky left-0 bg-inherit border-r border-gray-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
+                                                    className={`px-3 py-2 font-medium text-left whitespace-nowrap ${STICKY_PLAYER_CELL} ${rowBgClass}`}
                                                 >
                                                     {Icons}
                                                     {p.playerEntityId ? (
@@ -600,8 +614,6 @@ export function PlayerStatsTable({
                                     }
                                 };
 
-                                const stripeClass = rowClass ? "" : rowIdx % 2 === 1 ? "bg-gray-50" : "";
-
                                 return (
                                     <tr key={p.playerId} className={`hover:bg-gray-50 ${rowClass || stripeClass}`}>
                                         {columns.map((col) => renderCell(col))}
@@ -610,6 +622,7 @@ export function PlayerStatsTable({
                             })}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             {effectiveShowPagination && (

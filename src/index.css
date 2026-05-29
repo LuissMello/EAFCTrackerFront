@@ -2,4 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
- 
+@layer utilities {
+  .scroll-touch-x {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+}
