@@ -85,12 +85,39 @@ const SkeletonBlock: React.FC<{ h?: string }> = ({ h = "h-20" }) => (
     <div className={`rounded-xl border bg-gray-100 animate-pulse ${h}`} />
 );
 
+function buildDist<T extends string | number>(
+    values: T[],
+    sorter: (a: T, b: T) => number
+): { key: T; count: number }[] {
+    const map = values.reduce<Record<string, number>>((acc, v) => {
+        const k = String(v);
+        acc[k] = (acc[k] ?? 0) + 1;
+        return acc;
+    }, {});
+    return Object.entries(map)
+        .map(([k, count]) => ({ key: (typeof values[0] === "number" ? Number(k) : k) as T, count }))
+        .sort((a, b) => sorter(a.key, b.key));
+}
+
+function DistBar({ label, count, max, color }: { label: string; count: number; max: number; color: string }) {
+    return (
+        <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-gray-600 w-10 text-right shrink-0">{label}</span>
+            <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round((count / max) * 100)}%` }} />
+            </div>
+            <span className="text-xs text-gray-500 w-6 text-right shrink-0">{count}</span>
+        </div>
+    );
+}
+
 export default function PlayerProfile() {
     const { playerEntityId } = useParams<{ playerEntityId: string }>();
     const navigate = useNavigate();
     const [data, setData] = useState<PlayerProfileDto | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [distOpen, setDistOpen] = useState(false);
 
     const load = useCallback(async () => {
         if (!playerEntityId) return;
@@ -173,6 +200,7 @@ export default function PlayerProfile() {
                             <KpiCard label="Nota Média" value={data.avgRating.toFixed(2)} />
                             <KpiCard label="MoM" value={data.totalMoM} />
                             <KpiCard label="Hat-tricks" value={data.hatTricks} />
+                            <KpiCard label="Expulsões" value={data.totalRedCards} />
                         </div>
                     </div>
 
@@ -207,6 +235,68 @@ export default function PlayerProfile() {
                             </div>
                         </div>
                     </div>
+
+                    {data.history.length > 0 && (() => {
+                        const ratingDist = buildDist(
+                            data.history.map(h => Math.floor(h.rating)),
+                            (a, b) => a - b
+                        );
+                        const goalsDist = buildDist(
+                            data.history.map(h => h.goals),
+                            (a, b) => a - b
+                        );
+                        const maxR = Math.max(...ratingDist.map(d => d.count));
+                        const maxG = Math.max(...goalsDist.map(d => d.count));
+
+                        const ratingColor = (key: number) =>
+                            key >= 9 ? "bg-green-500" : key >= 7 ? "bg-blue-400" : key >= 6 ? "bg-yellow-400" : "bg-red-400";
+
+                        return (
+                            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                                <button
+                                    onClick={() => setDistOpen(v => !v)}
+                                    className="w-full px-4 py-3 border-b bg-gray-50 flex items-center justify-between hover:bg-gray-100 transition-colors"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-gray-800 text-sm">📊 Distribuição por Nota e Gols</span>
+                                        <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">
+                                            {data.history.length} partidas
+                                        </span>
+                                    </div>
+                                    <span className="text-gray-400 text-sm">{distOpen ? "▲" : "▼"}</span>
+                                </button>
+
+                                {distOpen && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x">
+                                        <div className="p-4 space-y-2">
+                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Por Nota</p>
+                                            {ratingDist.map(({ key, count }) => (
+                                                <DistBar
+                                                    key={key}
+                                                    label={key === 10 ? "10" : `${key}.x`}
+                                                    count={count}
+                                                    max={maxR}
+                                                    color={ratingColor(key)}
+                                                />
+                                            ))}
+                                        </div>
+                                        <div className="p-4 space-y-2">
+                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Por Gols</p>
+                                            {goalsDist.map(({ key, count }) => (
+                                                <DistBar
+                                                    key={key}
+                                                    label={key === 0 ? "0" : `${key}G`}
+                                                    count={count}
+                                                    max={maxG}
+                                                    color="bg-indigo-400"
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
 
                     {positionEntries.length > 0 && (
                         <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
