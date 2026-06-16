@@ -275,11 +275,11 @@ export default function MatchDetails() {
         targets.map(async (c) => {
           // Fetch both endpoints in parallel for each club
           const [overallRes, playoffsRes] = await Promise.all([
-            api.get<ClubOverallRow[]>(`/api/Clubs/${c.clubId}/overall`),
+            api.get<ClubOverallRow>(`/api/Clubs/${c.clubId}/matches/${matchId}/overall`),
             api.get<{ clubId: number; achievements: PlayoffAchievementDto[] }[]>(`/api/Clubs/${c.clubId}/playoffs`),
           ]);
 
-          const overall = overallRes.data?.[0] ?? null;
+          const overall = overallRes.data ?? null;
           const playoffsBlock = playoffsRes.data?.find((x) => x.clubId === c.clubId) ?? playoffsRes.data?.[0];
           const playoffs = playoffsBlock?.achievements ?? [];
 
@@ -654,6 +654,13 @@ export default function MatchDetails() {
           </div>
         )}
       </div>
+
+      {/* Eventos de jogo (match_event_aggregate) */}
+      <MatchEaPostGameStats
+        data={eventAggregates}
+        loading={eventAggregatesLoading}
+        error={eventAggregatesError}
+      />
 
       {/* Player Stats Tables by Club */}
       {orderedClubs.map((clubRow) => {

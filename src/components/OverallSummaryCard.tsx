@@ -157,10 +157,10 @@ const OverallSummaryCard: React.FC<Props> = ({
                 setLoading(true);
                 setError(null);
                 const [overallRes, playoffsRes] = await Promise.all([
-                    api.get<ClubOverallRow[]>(`/api/Clubs/${clubId}/overall`),
+                    api.get<{ items: ClubOverallRow[] }>(`/api/Clubs/${clubId}/overall?page=1&pageSize=1`),
                     api.get<{ clubId: number; achievements: PlayoffAchievementDto[] }[]>(`/api/Clubs/${clubId}/playoffs`),
                 ]);
-                const nextOverall = overallRes.data?.[0] ?? null;
+                const nextOverall = overallRes.data?.items?.[0] ?? null;
                 const playoffsBlock = playoffsRes.data?.find((x) => x.clubId === clubId) ?? playoffsRes.data?.[0];
                 const nextPlayoffs = playoffsBlock?.achievements ?? [];
                 if (!cancel) { setO(nextOverall); setPo(nextPlayoffs); setLoading(false); }
