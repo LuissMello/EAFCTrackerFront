@@ -3,11 +3,16 @@
 // O mapeamento ID → label/categoria vem do backend; o frontend apenas renderiza.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Nível de confiança do mapeamento de um evento */
+export type EventConfidence = 'confirmed' | 'probable' | 'ambiguous';
+
 /** Definição de um evento, retornada pelo backend */
 export interface EventDefinitionDto {
   id: string;
   label: string;
   category: string;
+  /** ✓ confirmed | ~ probable | ✗ ambiguous */
+  confidence: EventConfidence;
 }
 
 /** Estatísticas de um jogador individual */
@@ -40,4 +45,5 @@ export interface MatchEventAggregatesResponseDto {
 export interface EventColumn {
   id: string;
   label: string;
+  confidence: EventConfidence;
 }

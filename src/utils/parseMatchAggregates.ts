@@ -19,7 +19,7 @@ export function getColumnsForCategory(
 ): EventColumn[] {
   return definitions
     .filter((d) => d.category === category)
-    .map((d) => ({ id: d.id, label: d.label }));
+    .map((d) => ({ id: d.id, label: d.label, confidence: d.confidence }));
 }
 
 /**
@@ -44,7 +44,7 @@ export function getUnknownColumns(
 
   return [...unknownIds]
     .sort((a, b) => Number(a) - Number(b))
-    .map((id) => ({ id, label: `ID ${id}` }));
+    .map((id) => ({ id, label: `ID ${id}`, confidence: 'ambiguous' as const }));
 }
 
 /**
