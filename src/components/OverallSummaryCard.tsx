@@ -90,6 +90,14 @@ const PLAYOFF_BORDER_CLASS: Record<string, string> = {
     "3": "border-amber-600 bg-amber-50",
 };
 
+/** "CLUBS_LEAGUE_SEASON_07" / "8" → "Temporada 7" (extrai o número final). */
+function formatSeasonLabel(seasonName?: string | null, seasonId?: string | null): string {
+    const src = seasonName ?? seasonId ?? "";
+    const m = /(\d+)\s*$/.exec(src);
+    if (m) return `Temporada ${parseInt(m[1], 10)}`;
+    return src || "–";
+}
+
 const TinyBar: React.FC<{ pct: number; className?: string; title?: string; color?: string }> = ({
     pct,
     className = "",
@@ -178,7 +186,8 @@ const OverallSummaryCard: React.FC<Props> = ({
     const goalsFor = toNum(o?.goals);
     const goalsAgainst = toNum(o?.goalsAgainst);
     const goalDiff = goalsFor - goalsAgainst;
-    const winPct = games > 0 ? (wins * 100) / games : 0;
+    const decided = wins + draws + losses;
+    const winPct = decided > 0 ? (wins * 100) / decided : 0;
     const wstreak = toNum(o?.wstreak);
     const unbeaten = toNum(o?.unbeatenstreak);
     const promotions = toNum(o?.promotions);
@@ -220,7 +229,7 @@ const OverallSummaryCard: React.FC<Props> = ({
             </div>
 
             {loading ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
                     <SkeletonCard />
                     <SkeletonCard />
                     <SkeletonCard />
@@ -238,7 +247,7 @@ const OverallSummaryCard: React.FC<Props> = ({
             ) : !o ? (
                 <div className="mt-3 text-sm text-gray-600">Sem dados históricos para este clube.</div>
             ) : (
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 text-sm">
                     {/* Skill Rating + Reputation */}
                     <div className="p-2 rounded-lg border">
                         <div className="text-xs text-gray-500 mb-1">Skill Rating</div>
@@ -369,7 +378,7 @@ const OverallSummaryCard: React.FC<Props> = ({
                     </div>
 
                     {/* Histórico de Playoffs */}
-                    <div className="p-2 rounded-lg border col-span-2">
+                    <div className="p-2 rounded-lg border col-span-2 xl:col-span-4">
                         <div className="text-xs text-gray-500 mb-1.5">Histórico de Playoffs</div>
                         {(po ?? []).length === 0 ? (
                             <div className="text-xs text-gray-600">Sem temporadas concluídas.</div>
@@ -380,11 +389,12 @@ const OverallSummaryCard: React.FC<Props> = ({
                                     const hpKey = asNonNegativeIntString(p.bestFinishGroup) ?? "";
                                     const hpLabel = HIGHEST_PLACEMENT_LABELS[hpKey] ?? p.bestFinishGroup ?? "–";
                                     const cardCls = PLAYOFF_BORDER_CLASS[hpKey] ?? "border-gray-200 bg-white";
+                                    const seasonLabel = formatSeasonLabel(p.seasonName, p.seasonId);
                                     return (
                                         <div
                                             key={`${p.seasonId}-${p.bestDivision}-${p.bestFinishGroup}`}
                                             className={`min-w-[68px] px-2 py-1.5 border-2 rounded-lg flex flex-col items-center text-center transition-shadow hover:shadow-md ${cardCls}`}
-                                            title={`${p.seasonName ?? p.seasonId ?? ""} • ${hpLabel}`}
+                                            title={`${seasonLabel} • ${hpLabel}`}
                                         >
                                             <img
                                                 src={crest}
@@ -393,7 +403,7 @@ const OverallSummaryCard: React.FC<Props> = ({
                                                 className="w-9 h-9 object-contain"
                                             />
                                             <div className="mt-1 text-[10px] leading-tight font-semibold">{hpLabel}</div>
-                                            <div className="text-[9px] text-gray-500 leading-tight">{p.seasonName ?? p.seasonId}</div>
+                                            <div className="text-[9px] text-gray-500 leading-tight whitespace-nowrap">{seasonLabel}</div>
                                         </div>
                                     );
                                 })}

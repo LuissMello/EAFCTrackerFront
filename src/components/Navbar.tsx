@@ -47,6 +47,7 @@ const NAV_LINKS = [
     { to: "/singlestatisticsbydate", label: "Stats Individuais" },
     { to: "/goal-analytics", label: "Gols" },
     { to: "/trends", label: "Trends" },
+    { to: "/overall-evolution", label: "Evolução" },
 ];
 
 function Spinner() {

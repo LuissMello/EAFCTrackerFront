@@ -6,6 +6,8 @@ export const API_ENDPOINTS = {
   // Clubs
   CLUBS: '/api/clubs',
   CLUB_OVERALL: (clubId: number) => `/api/Clubs/${clubId}/overall`,
+  CLUB_MATCHES_OVERALL: (clubId: number, pageSize = 50, page = 1) =>
+    `/api/Clubs/${clubId}/matches/overall?page=${page}&pageSize=${pageSize}`,
   CLUB_PLAYOFFS: (clubId: number) => `/api/Clubs/${clubId}/playoffs`,
   CLUB_STATS: (clubId: number) => `/api/clubs/${clubId}/matches/statistics/limited`,
   CLUB_STATS_GROUPED: '/api/clubs/grouped/matches/statistics/limited',

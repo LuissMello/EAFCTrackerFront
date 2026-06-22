@@ -13,6 +13,7 @@ import GoalAnalytics from "./pages/GoalAnalytics.tsx";
 import Records from "./pages/Records.tsx";
 import PlayerProfile from "./pages/PlayerProfile.tsx";
 import Opponents from "./pages/Opponents.tsx";
+import OverallEvolution from "./pages/OverallEvolution.tsx";
 import Navbar from "./components/Navbar.tsx";
 import { ClubProvider } from "./hooks/useClub.tsx";
 
@@ -37,6 +38,7 @@ export default function App() {
                         <Route path="/records" element={<Records />} />
                         <Route path="/player/:playerEntityId" element={<PlayerProfile />} />
                         <Route path="/opponents" element={<Opponents />} />
+                        <Route path="/overall-evolution" element={<OverallEvolution />} />
                     </Routes>
                 </div>
             </ClubProvider>
