@@ -6,6 +6,7 @@ import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
 import type { PlayerStats } from "../types/stats";
 import { Trophy, TrendingDown } from "lucide-react";
 import { Tooltip } from "../components/Tooltip.tsx";
+import { RatingPill } from "../components/ui.tsx";
 
 // ===== Tipos vindos da API =====
 type FullMatchStatisticsDto = {
@@ -105,14 +106,14 @@ function RecordBar({ wins, draws, losses }: { wins: number; draws: number; losse
     return (
         <div>
             <div className="flex h-3 rounded overflow-hidden gap-px">
-                {wins > 0 && <div className="bg-emerald-400" style={{ width: `${(wins / total) * 100}%` }} />}
-                {draws > 0 && <div className="bg-orange-300" style={{ width: `${(draws / total) * 100}%` }} />}
-                {losses > 0 && <div className="bg-red-400" style={{ width: `${(losses / total) * 100}%` }} />}
+                {wins > 0 && <div className="bg-positive" style={{ width: `${(wins / total) * 100}%` }} />}
+                {draws > 0 && <div className="bg-warning" style={{ width: `${(draws / total) * 100}%` }} />}
+                {losses > 0 && <div className="bg-negative" style={{ width: `${(losses / total) * 100}%` }} />}
             </div>
             <div className="flex justify-between text-[10px] mt-0.5 font-medium">
-                <span className="text-emerald-700">{wins}V</span>
-                <span className="text-orange-500">{draws}E</span>
-                <span className="text-red-600">{losses}D</span>
+                <span className="text-positive">{wins}V</span>
+                <span className="text-warning">{draws}E</span>
+                <span className="text-negative">{losses}D</span>
             </div>
         </div>
     );
@@ -121,7 +122,7 @@ function RecordBar({ wins, draws, losses }: { wins: number; draws: number; losse
 /** Mini-barra proporcional para rankings */
 function MiniBar({ value, max }: { value: number; max: number }) {
     const w = max > 0 ? Math.max(4, (value / max) * 100) : 4;
-    return <div className="h-1.5 rounded bg-blue-400 mt-1" style={{ width: `${w}%` }} />;
+    return <div className="h-1.5 rounded bg-accent mt-1" style={{ width: `${w}%` }} />;
 }
 
 // Helpers para ler percentuais do DTO (camelCase / PascalCase)
@@ -164,7 +165,7 @@ function getSuccessfulTackles(p: any): number {
 const Info: React.FC<{ title: string }> = ({ title }) => (
     <Tooltip content={title}>
         <span
-            className="ml-1 inline-flex items-center justify-center w-4 h-4 text-xs rounded-full border border-gray-300 text-gray-600 select-none cursor-help"
+            className="ml-1 inline-flex items-center justify-center w-4 h-4 text-xs rounded-full border border-border-strong text-fg-muted select-none cursor-help"
             aria-label={title}
         >
             i
@@ -511,7 +512,7 @@ export default function PlayerStatisticsByDatePage() {
     return (
         <div className="p-4 flex flex-col gap-6">
             <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <h1 className="text-xl font-semibold">Estatísticas por Data (Agrupadas)</h1>
+                <h1 className="font-display font-bold uppercase tracking-wide text-xl sm:text-2xl text-fg">Estatísticas por Data (Agrupadas)</h1>
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
                     <div className="flex gap-2 items-center">
                         <label className="text-sm">
@@ -547,8 +548,8 @@ export default function PlayerStatisticsByDatePage() {
                                 onClick={action}
                                 className={`text-xs border rounded px-2 py-1 transition-colors ${
                                     activeRange === key
-                                        ? "bg-blue-50 border-blue-400 text-blue-700 font-medium"
-                                        : "hover:bg-gray-50"
+                                        ? "bg-accent text-accent-fg border-accent font-medium"
+                                        : "bg-surface text-fg-secondary hover:bg-surface-raised"
                                 }`}
                             >
                                 {label}
@@ -559,9 +560,9 @@ export default function PlayerStatisticsByDatePage() {
             </header>
 
             {loading && <div>Carregando…</div>}
-            {error && <div className="text-red-600">{error}</div>}
+            {error && <div className="text-negative">{error}</div>}
             {!loading && !error && !clubIds.length && (
-                <div className="text-gray-600">Nenhum clube selecionado.</div>
+                <div className="text-fg-muted">Nenhum clube selecionado.</div>
             )}
 
             {/* Resumo do período */}
@@ -570,11 +571,11 @@ export default function PlayerStatisticsByDatePage() {
                     <h2 className="text-lg font-semibold mb-3">Resumo do período</h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         <div className="rounded-lg border p-3">
-                            <div className="text-sm text-gray-600">Jogos</div>
+                            <div className="text-sm text-fg-muted">Jogos</div>
                             <div className="font-semibold text-lg">
                                 {days.reduce((a, d) => a + d.matchesCount, 0)}
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-fg-muted">
                                 {
                                     (() => {
                                         const totalDaysWithMatches = days.filter((d) => d.matchesCount > 0).length;
@@ -586,17 +587,17 @@ export default function PlayerStatisticsByDatePage() {
                             </div>
                         </div>
                         <div className="rounded-lg border p-3">
-                            <div className="text-sm text-gray-600 mb-1">Resultados</div>
+                            <div className="text-sm text-fg-muted mb-1">Resultados</div>
                             <RecordBar wins={period.wins} draws={period.draws} losses={period.losses} />
-                            <div className="text-xs text-gray-500 mt-1">Win% {period.winPct.toFixed(1)}%</div>
+                            <div className="text-xs text-fg-muted mt-1">Win% {period.winPct.toFixed(1)}%</div>
                         </div>
                         <div className="rounded-lg border p-3">
-                            <div className="text-sm text-gray-600">Gols</div>
+                            <div className="text-sm text-fg-muted">Gols</div>
                             <div className="font-semibold">
                                 {days.reduce((a, d) => a + d.goalsFor, 0)}-
                                 {days.reduce((a, d) => a + d.goalsAgainst, 0)}
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-fg-muted">
                                 {(() => {
                                     const gf = days.reduce((a, d) => a + d.goalsFor, 0);
                                     const ga = days.reduce((a, d) => a + d.goalsAgainst, 0);
@@ -606,19 +607,19 @@ export default function PlayerStatisticsByDatePage() {
                             </div>
                         </div>
                         <div className="rounded-lg border p-3">
-                            <div className="text-sm text-gray-600">GF por jogo</div>
+                            <div className="text-sm text-fg-muted">GF por jogo</div>
                             <div className="font-semibold">
                                 {period.gfPerMatch.toFixed(2)}
                             </div>
                         </div>
                         <div className="rounded-lg border p-3">
-                            <div className="text-sm text-gray-600">GA por jogo</div>
+                            <div className="text-sm text-fg-muted">GA por jogo</div>
                             <div className="font-semibold">
                                 {period.gaPerMatch.toFixed(2)}
                             </div>
                         </div>
                         <div className="rounded-lg border p-3">
-                            <div className="text-sm text-gray-600">Intervalo</div>
+                            <div className="text-sm text-fg-muted">Intervalo</div>
                             <div className="font-semibold">
                                 {fmtBRFromISO(dateFrom)} → {fmtBRFromISO(dateTo)}
                             </div>
@@ -629,29 +630,29 @@ export default function PlayerStatisticsByDatePage() {
 
             {/* Melhor dia (geral) */}
             {!loading && !error && bestOverallDay && (
-                <section className="rounded-xl border-2 border-amber-300 bg-amber-50/30 p-4 shadow-sm">
+                <section className="rounded-xl border-2 border-gold/50 bg-gold-soft/30 p-4 shadow-sm">
                     <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                        <Trophy size={18} className="text-amber-500" />
+                        <Trophy size={18} className="text-gold" />
                         Melhor dia (geral)
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         <div className="rounded-lg border p-3">
-                            <div className="text-sm text-gray-600">Data</div>
+                            <div className="text-sm text-fg-muted">Data</div>
                             <div className="font-medium">
                                 <DateBadge dateISO={bestOverallDay.date} colorMap={dateColorMap} />
                             </div>
                         </div>
                         <div className="rounded-lg border p-3">
-                            <div className="text-sm text-gray-600">Resultados</div>
+                            <div className="text-sm text-fg-muted">Resultados</div>
                             <div className="font-medium">
                                 {bestOverallDay.wins}V {bestOverallDay.draws}E {bestOverallDay.losses}D
                             </div>
-                            <div className="text-sm text-gray-600">
+                            <div className="text-sm text-fg-muted">
                                 Jogos: {bestOverallDay.matchesCount} • Win%: {bestOverallDay.winPct.toFixed(1)}%
                             </div>
                         </div>
                         <div className="rounded-lg border p-3">
-                            <div className="text-sm text-gray-600">Gols</div>
+                            <div className="text-sm text-fg-muted">Gols</div>
                             <div className="font-medium">
                                 {bestOverallDay.goalsFor}-{bestOverallDay.goalsAgainst} (Saldo{" "}
                                 {bestOverallDay.saldo >= 0 ? "+" : ""}
@@ -659,7 +660,7 @@ export default function PlayerStatisticsByDatePage() {
                             </div>
                         </div>
                         <div className="rounded-lg border p-3">
-                            <div className="text-sm text-gray-600">Médias do dia</div>
+                            <div className="text-sm text-fg-muted">Médias do dia</div>
                             <div className="font-medium">
                                 GF/jg {bestOverallDay.gfPerMatch.toFixed(2)} • GA/jg {bestOverallDay.gaPerMatch.toFixed(2)}
                             </div>
@@ -680,7 +681,7 @@ export default function PlayerStatisticsByDatePage() {
                                 {topByWinPct.map((d, i) => (
                                     <li key={`wp-${d.date}`} className="px-3 py-2">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xs text-gray-400 w-5 shrink-0">#{i + 1}</span>
+                                            <span className="text-xs text-fg-subtle w-5 shrink-0">#{i + 1}</span>
                                             <DateBadge dateISO={d.date} colorMap={dateColorMap} />
                                             <span className="ml-auto text-xs whitespace-nowrap">{d.winPct.toFixed(1)}% · {d.wins}V/{d.matchesCount}</span>
                                         </div>
@@ -697,7 +698,7 @@ export default function PlayerStatisticsByDatePage() {
                                 {topBySaldo.map((d, i) => (
                                     <li key={`sd-${d.date}`} className="px-3 py-2">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xs text-gray-400 w-5 shrink-0">#{i + 1}</span>
+                                            <span className="text-xs text-fg-subtle w-5 shrink-0">#{i + 1}</span>
                                             <DateBadge dateISO={d.date} colorMap={dateColorMap} />
                                             <span className="ml-auto text-xs whitespace-nowrap">
                                                 {d.saldo >= 0 ? "+" : ""}{d.saldo} ({d.goalsFor}–{d.goalsAgainst})
@@ -716,12 +717,12 @@ export default function PlayerStatisticsByDatePage() {
                                 {topByGFPerGame.map((d, i) => (
                                     <li key={`gfpg-${d.date}`} className="px-3 py-2">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xs text-gray-400 w-5 shrink-0">#{i + 1}</span>
+                                            <span className="text-xs text-fg-subtle w-5 shrink-0">#{i + 1}</span>
                                             <DateBadge dateISO={d.date} colorMap={dateColorMap} />
                                             <span className="ml-auto text-xs whitespace-nowrap">{d.gfPerMatch.toFixed(2)} gol/jogo</span>
                                         </div>
                                         <MiniBar value={d.gfPerMatch} max={topByGFPerGame[0]?.gfPerMatch || 1} />
-                                        <div className="text-gray-500 text-xs mt-0.5">
+                                        <div className="text-fg-muted text-xs mt-0.5">
                                             Total: {d.goalsFor} em {d.matchesCount} jogos
                                         </div>
                                     </li>
@@ -740,12 +741,12 @@ export default function PlayerStatisticsByDatePage() {
                                     return (
                                         <li key={`gapg-${d.date}`} className="px-3 py-2">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-xs text-gray-400 w-5 shrink-0">#{i + 1}</span>
+                                                <span className="text-xs text-fg-subtle w-5 shrink-0">#{i + 1}</span>
                                                 <DateBadge dateISO={d.date} colorMap={dateColorMap} />
                                                 <span className="ml-auto text-xs whitespace-nowrap">{d.gaPerMatch.toFixed(2)} gol/jogo</span>
                                             </div>
                                             <MiniBar value={Math.max(0, worstGA - d.gaPerMatch)} max={barMax} />
-                                            <div className="text-gray-500 text-xs mt-0.5">
+                                            <div className="text-fg-muted text-xs mt-0.5">
                                                 Total: {d.goalsAgainst} em {d.matchesCount} jogos
                                             </div>
                                         </li>
@@ -762,13 +763,13 @@ export default function PlayerStatisticsByDatePage() {
                 <section className="rounded-xl border p-4 shadow-sm">
                     <div className="flex items-center gap-2 mb-3">
                         <h2 className="text-lg font-semibold flex items-center gap-2">
-                            <Trophy size={18} className="text-amber-500" />
+                            <Trophy size={18} className="text-gold" />
                             Melhor dia de cada jogador por métrica
                         </h2>
                     </div>
-                    <div className="overflow-x-auto rounded-lg border border-l-4 border-l-green-500 bg-white">
+                    <div className="overflow-x-auto rounded-lg border border-l-4 border-l-positive bg-surface">
                         <table className="table-auto w-full text-sm">
-                            <thead className="bg-green-50">
+                            <thead className="bg-positive-soft text-positive-fg">
                                 <tr>
                                     <th className="px-3 py-2 text-left">Jogador</th>
                                     <th className="px-3 py-2 text-center">Gols</th>
@@ -791,14 +792,14 @@ export default function PlayerStatisticsByDatePage() {
                             <tbody>
                                 {bestDayPerPlayer.length === 0 && (
                                     <tr>
-                                        <td colSpan={10} className="px-3 py-3 text-center text-gray-600">
+                                        <td colSpan={10} className="px-3 py-3 text-center text-fg-muted">
                                             Nenhum jogador no período.
                                         </td>
                                     </tr>
                                 )}
                                 {bestDayPerPlayer.map((r, i) => (
-                                    <tr key={r.playerId} className={`hover:bg-gray-50 ${i % 2 === 1 ? "bg-gray-50" : ""}`}>
-                                        <td className="px-3 py-2 text-left sticky left-0 bg-inherit border-r border-gray-200">{r.playerName}</td>
+                                    <tr key={r.playerId} className={`hover:bg-surface-raised ${i % 2 === 1 ? "bg-surface-raised" : ""}`}>
+                                        <td className="px-3 py-2 text-left sticky left-0 bg-inherit border-r border-border">{r.playerName}</td>
                                         <td className="px-3 py-2 text-center">
                                             {r.goals.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.goals.date} colorMap={dateColorMap} />
@@ -832,7 +833,7 @@ export default function PlayerStatisticsByDatePage() {
                                             <DateBadge className="ml-1" dateISO={r.saves.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2 text-center">
-                                            {Number(r.rating.value).toFixed(2)}{" "}
+                                            <RatingPill value={Number(r.rating.value)} />{" "}
                                             <DateBadge className="ml-1" dateISO={r.rating.date} colorMap={dateColorMap} />
                                         </td>
                                     </tr>
@@ -848,13 +849,13 @@ export default function PlayerStatisticsByDatePage() {
                 <section className="rounded-xl border p-4 shadow-sm">
                     <div className="flex items-center gap-2 mb-3">
                         <h2 className="text-lg font-semibold flex items-center gap-2">
-                            <TrendingDown size={18} className="text-red-500" />
+                            <TrendingDown size={18} className="text-negative" />
                             Pior dia de cada jogador por métrica
                         </h2>
                     </div>
-                    <div className="overflow-x-auto rounded-lg border border-l-4 border-l-red-400 bg-white">
+                    <div className="overflow-x-auto rounded-lg border border-l-4 border-l-negative bg-surface">
                         <table className="table-auto w-full text-sm">
-                            <thead className="bg-red-50">
+                            <thead className="bg-negative-soft text-negative-fg">
                                 <tr>
                                     <th className="px-3 py-2 text-left">Jogador</th>
                                     <th className="px-3 py-2 text-center">Gols</th>
@@ -877,14 +878,14 @@ export default function PlayerStatisticsByDatePage() {
                             <tbody>
                                 {worstDayPerPlayer.length === 0 && (
                                     <tr>
-                                        <td colSpan={10} className="px-3 py-3 text-center text-gray-600">
+                                        <td colSpan={10} className="px-3 py-3 text-center text-fg-muted">
                                             Nenhum jogador no período.
                                         </td>
                                     </tr>
                                 )}
                                 {worstDayPerPlayer.map((r, i) => (
-                                    <tr key={r.playerId} className={`hover:bg-gray-50 ${i % 2 === 1 ? "bg-gray-50" : ""}`}>
-                                        <td className="px-3 py-2 text-left sticky left-0 bg-inherit border-r border-gray-200">{r.playerName}</td>
+                                    <tr key={r.playerId} className={`hover:bg-surface-raised ${i % 2 === 1 ? "bg-surface-raised" : ""}`}>
+                                        <td className="px-3 py-2 text-left sticky left-0 bg-inherit border-r border-border">{r.playerName}</td>
                                         <td className="px-3 py-2 text-center">
                                             {r.goals.value}{" "}
                                             <DateBadge className="ml-1" dateISO={r.goals.date} colorMap={dateColorMap} />
@@ -918,7 +919,7 @@ export default function PlayerStatisticsByDatePage() {
                                             <DateBadge className="ml-1" dateISO={r.saves.date} colorMap={dateColorMap} />
                                         </td>
                                         <td className="px-3 py-2 text-center">
-                                            {Number(r.rating.value).toFixed(2)}{" "}
+                                            <RatingPill value={Number(r.rating.value)} />{" "}
                                             <DateBadge className="ml-1" dateISO={r.rating.date} colorMap={dateColorMap} />
                                         </td>
                                     </tr>
@@ -933,7 +934,7 @@ export default function PlayerStatisticsByDatePage() {
             {!loading && !error && clubIds.length > 0 && (
                 <div className="flex flex-col gap-6">
                     {days.length === 0 && (
-                        <div className="text-gray-500">Nenhum jogo no período selecionado.</div>
+                        <div className="text-fg-muted">Nenhum jogo no período selecionado.</div>
                     )}
                     {days.map((d) => {
                         const key = d.date.slice(0, 10);
@@ -950,24 +951,24 @@ export default function PlayerStatisticsByDatePage() {
                                 <div className="flex flex-wrap items-center gap-2 mb-2">
                                     <DateBadge dateISO={d.date} colorMap={dateColorMap} />
                                     {bestOverallDay?.date === d.date && (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-300">
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gold-soft text-gold-fg border border-gold/40">
                                             <Trophy size={11} /> Melhor dia
                                         </span>
                                     )}
-                                    <span className="px-2 py-0.5 rounded-full bg-white border text-xs font-medium">
+                                    <span className="px-2 py-0.5 rounded-full bg-surface border text-xs font-medium">
                                         {d.matchesCount} jogo{d.matchesCount !== 1 ? "s" : ""}
                                     </span>
-                                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-medium">{d.wins}V</span>
-                                    <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-300 text-xs font-medium">{d.draws}E</span>
-                                    <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 text-xs font-medium">{d.losses}D</span>
-                                    <span className="px-2 py-0.5 rounded-full bg-white border text-xs">
+                                    <span className="px-2 py-0.5 rounded-full bg-positive-soft text-positive-fg border border-positive/40 text-xs font-medium">{d.wins}V</span>
+                                    <span className="px-2 py-0.5 rounded-full bg-warning-soft text-warning-fg border border-warning/40 text-xs font-medium">{d.draws}E</span>
+                                    <span className="px-2 py-0.5 rounded-full bg-negative-soft text-negative-fg border border-negative/40 text-xs font-medium">{d.losses}D</span>
+                                    <span className="px-2 py-0.5 rounded-full bg-surface border text-xs">
                                         Gols: <strong>{d.goalsFor}–{d.goalsAgainst}</strong>{" "}
                                         (Saldo {d.goalsFor - d.goalsAgainst >= 0 ? "+" : ""}{d.goalsFor - d.goalsAgainst})
                                     </span>
-                                    <span className="px-2 py-0.5 rounded-full bg-white border text-xs">
+                                    <span className="px-2 py-0.5 rounded-full bg-surface border text-xs">
                                         GF/jg {d.matchesCount ? (d.goalsFor / d.matchesCount).toFixed(2) : "—"}
                                     </span>
-                                    <span className="px-2 py-0.5 rounded-full bg-white border text-xs">
+                                    <span className="px-2 py-0.5 rounded-full bg-surface border text-xs">
                                         GA/jg {d.matchesCount ? (d.goalsAgainst / d.matchesCount).toFixed(2) : "—"}
                                     </span>
                                 </div>
@@ -978,7 +979,7 @@ export default function PlayerStatisticsByDatePage() {
                                     error={null}
                                     clubStats={null}
                                     compactMode
-                                    hiddenColumns={[]}
+                                    hiddenColumns={["totalSecondsPlayed"]}
                                 />
                             </section>
                         );

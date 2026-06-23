@@ -1,11 +1,12 @@
 ﻿// src/pages/Home.tsx
-import React, { useEffect, useMemo, useRef, useState, useId, useCallback } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
-import { PlugZap } from "lucide-react";
-import { GiGoalKeeper } from "react-icons/gi";
-import { crestUrl, divisionCrestUrl, FALLBACK_LOGO } from "../config/urls.ts";
+import { ChevronDown, Search, RotateCw, X } from "lucide-react";
+import { crestUrl, divisionCrestUrl } from "../config/urls.ts";
+import { Crest, ResultPill, Outcome } from "../components/ui.tsx";
+import LatestDayPanel from "../components/LatestDayPanel.tsx";
 
 /* ======================
    Tipos
@@ -97,21 +98,8 @@ interface PagedResult<T> {
    Helpers
 ====================== */
 const fmtDateTime = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" });
-
-const AVATAR_PX = 40;
-
-function toHex(dec: string | number | null | undefined): string | null {
-  if (dec === null || dec === undefined) return null;
-  if (typeof dec === "string") {
-    const s = dec.trim();
-    if (/^#?[0-9a-fA-F]{6}$/.test(s)) return s.startsWith("#") ? s : `#${s}`;
-    const n = Number(s);
-    if (!Number.isNaN(n)) return `#${n.toString(16).padStart(6, "0").toUpperCase()}`;
-    return null;
-  }
-  if (typeof dec === "number") return `#${dec.toString(16).padStart(6, "0").toUpperCase()}`;
-  return null;
-}
+const fmtCompactDate = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
+const fmtCompactTime = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 /** 🔒 Timestamp robusto */
 function parseTimestamp(ts?: string | number | null): Date | null {
@@ -131,6 +119,13 @@ function parseTimestamp(ts?: string | number | null): Date | null {
 function formatDateSafe(ts?: string | number | null, fallback = "—"): string {
   const d = parseTimestamp(ts);
   return d ? fmtDateTime.format(d) : fallback;
+}
+
+/** Data compacta em duas linhas (dd/mm + hh:mm) para a lista densa. */
+function compactWhen(ts?: string | number | null): { date: string; time: string } {
+  const d = parseTimestamp(ts);
+  if (!d) return { date: "—", time: "" };
+  return { date: fmtCompactDate.format(d), time: fmtCompactTime.format(d) };
 }
 
 function timeValue(ts?: string | number | null, whenInvalid = -Infinity) {
@@ -201,7 +196,7 @@ function coercePaged<T>(data: any): {
    UI
 ====================== */
 function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
+  return <div className={`animate-pulse bg-surface-sunken rounded ${className}`} />;
 }
 
 function Badge({
@@ -212,29 +207,14 @@ function Badge({
   children: React.ReactNode;
 }) {
   const palette: Record<string, string> = {
-    gray: "bg-gray-50 border-gray-200 text-gray-600",
-    green: "bg-green-50 border-green-200 text-green-700",
-    red: "bg-red-50 border-red-200 text-red-700",
-    amber: "bg-amber-50 border-amber-200 text-amber-700",
+    gray: "bg-surface-raised border-border text-fg-muted",
+    green: "bg-positive-soft border-positive/40 text-positive-fg",
+    red: "bg-negative-soft border-negative/40 text-negative-fg",
+    amber: "bg-warning-soft border-warning/40 text-warning-fg",
   };
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${palette[color]}`}>
       {children}
-    </span>
-  );
-}
-
-function OutcomeBadge({ a, b }: { a: number; b: number }) {
-  const isWin = a > b, isLoss = a < b;
-  const label = isWin ? "Vitória" : isLoss ? "Derrota" : "Empate";
-  const cls = isWin
-    ? "bg-green-100 border-green-400 text-green-800"
-    : isLoss
-    ? "bg-red-100 border-red-400 text-red-800"
-    : "bg-amber-100 border-amber-400 text-amber-800";
-  return (
-    <span className={`inline-flex items-center px-3 py-1 rounded-full border text-xs font-semibold ${cls}`}>
-      {label}
     </span>
   );
 }
@@ -244,21 +224,63 @@ function RecordBar({ wins, draws, losses }: { wins: number; draws: number; losse
   return (
     <div className="flex flex-col gap-1 min-w-[140px]">
       <div className="flex h-2 rounded-full overflow-hidden">
-        <div style={{ width: `${(wins / total) * 100}%` }} className="bg-green-500" />
-        <div style={{ width: `${(draws / total) * 100}%` }} className="bg-amber-400" />
-        <div style={{ width: `${(losses / total) * 100}%` }} className="bg-red-400" />
+        <div style={{ width: `${(wins / total) * 100}%` }} className="bg-positive" />
+        <div style={{ width: `${(draws / total) * 100}%` }} className="bg-warning" />
+        <div style={{ width: `${(losses / total) * 100}%` }} className="bg-negative" />
       </div>
-      <div className="flex gap-3 text-[11px]">
-        <span className="text-green-700 font-semibold">V {wins}</span>
-        <span className="text-amber-600 font-semibold">E {draws}</span>
-        <span className="text-red-600 font-semibold">D {losses}</span>
+      <div className="flex gap-3 text-[11px] tabular-nums">
+        <span className="text-positive font-semibold">V {wins}</span>
+        <span className="text-warning font-semibold">E {draws}</span>
+        <span className="text-negative font-semibold">D {losses}</span>
       </div>
     </div>
   );
 }
 
-function ToolbarSeparator() {
-  return <div className="hidden sm:block w-px self-stretch bg-gray-200" />;
+/** Filtro compacto: rótulo + select nativo estilizado como "pill", com estado ativo. */
+function SelectField({
+  label,
+  active = false,
+  value,
+  onChange,
+  children,
+  title,
+}: {
+  label: string;
+  active?: boolean;
+  value: string | number;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  children: React.ReactNode;
+  title?: string;
+}) {
+  return (
+    <label
+      title={title}
+      className={`inline-flex items-center gap-1.5 h-9 pl-3 pr-2 rounded-lg border text-sm cursor-pointer transition ${
+        active
+          ? "border-accent/60 bg-accent/5"
+          : "border-border bg-surface-sunken hover:border-border-strong"
+      }`}
+    >
+      <span
+        className={`text-[11px] font-semibold uppercase tracking-wide ${
+          active ? "text-accent" : "text-fg-subtle"
+        }`}
+      >
+        {label}
+      </span>
+      <div className="relative flex items-center">
+        <select
+          value={value}
+          onChange={onChange}
+          className="appearance-none bg-transparent pr-5 text-sm font-medium text-fg-secondary outline-none cursor-pointer"
+        >
+          {children}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-0 w-3.5 h-3.5 text-fg-subtle" />
+      </div>
+    </label>
+  );
 }
 
 function Segmented({ value, onChange }: { value: MatchTypeFilter; onChange: (v: MatchTypeFilter) => void }) {
@@ -268,350 +290,20 @@ function Segmented({ value, onChange }: { value: MatchTypeFilter; onChange: (v: 
     { v: "Playoff", label: "Playoff" },
   ];
   return (
-    <div role="tablist" aria-label="Tipo de partida" className="inline-flex rounded-xl border bg-white p-1">
+    <div role="tablist" aria-label="Tipo de partida" className="inline-flex rounded-xl border bg-surface p-1">
       {opts.map((o) => (
         <button
           key={o.v}
           role="tab"
           aria-selected={value === o.v}
           onClick={() => onChange(o.v)}
-          className={`px-3 py-1.5 rounded-lg text-sm transition ${
-            value === o.v ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50"
+          className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
+            value === o.v ? "bg-accent text-accent-fg" : "text-fg-muted hover:bg-surface-raised"
           }`}
         >
           {o.label}
         </button>
       ))}
-    </div>
-  );
-}
-
-const PersonIcon = ({ className = "" }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden className={className}>
-    <path
-      fill="currentColor"
-      d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"
-    />
-  </svg>
-);
-
-/* ======================
-   Jersey (SVG)
-====================== */
-type JerseyPattern = "plain" | "hoops" | "stripes" | "sash" | "halves" | "quarters";
-const KNOWN_TEMPLATES: Record<string, JerseyPattern> = {};
-
-function guessPattern(details?: ClubDetailsDto | null): JerseyPattern {
-  const txt =
-    ((details?.customKitId || details?.kitId) ?? "") +
-    "|" +
-    (details?.kitId ?? "") +
-    "|" +
-    (details?.dCustomKit ?? (details as any)?.DCustomKit ?? "");
-
-  for (const key of Object.keys(KNOWN_TEMPLATES)) {
-    if (txt.includes(key)) return KNOWN_TEMPLATES[key];
-  }
-  const hasC4 = !!(details?.kitColor4 ?? (details as any)?.KitColor4);
-  const hint = txt.toLowerCase();
-  if (hint.includes("sash")) return "sash";
-  if (hint.includes("stripe")) return "stripes";
-  if (hint.includes("hoop")) return "hoops";
-  if (hint.includes("half")) return "halves";
-  if (hint.includes("quarter")) return "quarters";
-  return hasC4 ? "hoops" : "plain";
-}
-
-function KitJersey({
-  colors,
-  pattern = "plain",
-  sizePx = AVATAR_PX,
-  className = "",
-  title = "Mini camisa",
-}: {
-  colors: Array<string | number | null | undefined>;
-  pattern?: JerseyPattern;
-  sizePx?: number;
-  className?: string;
-  title?: string;
-}) {
-  const raw = useId();
-  const uidRef = useRef(`jersey-${raw.replace(/[^a-zA-Z0-9_-]/g, "")}-${Math.random().toString(36).slice(2, 7)}`);
-  const uid = uidRef.current;
-
-  const idBody = `${uid}-body`;
-  const idSlL = `${uid}-slL`;
-  const idSlR = `${uid}-slR`;
-  const needsSleeveClips = pattern === "hoops" || pattern === "stripes" || pattern === "sash";
-
-  const [c1, c2, c3, c4] = [
-    toHex(colors[0]) ?? "#9CA3AF",
-    toHex(colors[1]) ?? undefined,
-    toHex(colors[2]) ?? "#111827",
-    toHex(colors[3]) ?? undefined,
-  ];
-
-  const body = c1;
-  const sleeves = c2 ?? body;
-  const collar = c3!;
-  const accent = c4 ?? sleeves;
-
-  const bodyX = 20,
-    bodyY = 18,
-    bodyW = 24,
-    bodyH = 34;
-  const slLy1 = 18,
-    slLy2 = 32;
-
-  const renderHoops = () => {
-    const stripeCount = 5;
-    const gap = 2;
-    const h = (bodyH - (stripeCount - 1) * gap) / stripeCount;
-    const rows: JSX.Element[] = [];
-    for (let i = 0; i < stripeCount; i++) {
-      const y = bodyY + i * (h + gap);
-      rows.push(<rect key={`b-${i}`} x={bodyX} y={y} width={bodyW} height={h} fill={accent} />);
-    }
-    return <g clipPath={`url(#${idBody})`}>{rows}</g>;
-  };
-
-  const renderStripes = () => {
-    const stripeCount = 6;
-    const gap = 1.5;
-    const w = (bodyW - (stripeCount - 1) * gap) / stripeCount;
-    const cols: JSX.Element[] = [];
-    for (let i = 0; i < stripeCount; i++) {
-      const x = bodyX + i * (w + gap);
-      cols.push(<rect key={`bcol-${i}`} x={x} y={bodyY} width={w} height={bodyH} fill={accent} />);
-    }
-    return <g clipPath={`url(#${idBody})`}>{cols}</g>;
-  };
-
-  const renderSash = () => (
-    <>
-      <polygon points="16,18 24,18 48,52 40,52" fill={accent} opacity={0.95} />
-    </>
-  );
-
-  const renderHalves = () => (
-    <>
-      <rect x={20} y={18} width={bodyW / 2} height={bodyH} rx={0} fill={body} />
-      <rect x={20 + bodyW / 2} y={18} width={bodyW / 2} height={bodyH} rx={0} fill={accent} />
-    </>
-  );
-
-  const renderQuarters = () => (
-    <>
-      <rect x={20} y={18} width={bodyW / 2} height={bodyH / 2} fill={body} />
-      <rect x={20 + bodyW / 2} y={18} width={bodyW / 2} height={bodyH / 2} fill={accent} />
-      <rect x={20} y={18 + bodyH / 2} width={bodyW / 2} height={bodyH / 2} fill={accent} />
-      <rect x={20 + bodyW / 2} y={18 + bodyH / 2} width={bodyW / 2} height={bodyH / 2} fill={body} />
-    </>
-  );
-
-  return (
-    <svg
-      width={sizePx}
-      height={sizePx}
-      viewBox="0 0 64 64"
-      className={className}
-      role="img"
-      aria-label={title}
-      preserveAspectRatio="xMidYMid meet"
-      style={{ overflow: "visible", display: "block" }}
-    >
-      <defs>
-        <clipPath id={idBody}>
-          <rect x={20} y={18} width={24} height={34} rx={4} />
-        </clipPath>
-        {needsSleeveClips && (
-          <>
-            <clipPath id={idSlL}>
-              <polygon points="20,18 12,22 12,32 20,28" />
-            </clipPath>
-            <clipPath id={idSlR}>
-              <polygon points="44,18 52,22 52,32 44,28" />
-            </clipPath>
-          </>
-        )}
-      </defs>
-
-      {/* mangas */}
-      <polygon points="20,18 12,22 12,32 20,28" fill={sleeves} />
-      <polygon points="44,18 52,22 52,32 44,28" fill={sleeves} />
-
-      {/* tronco */}
-      <rect x={20} y={18} width={24} height={34} rx={4} fill={body} />
-
-      {pattern === "hoops" && renderHoops()}
-      {pattern === "stripes" && renderStripes()}
-      {pattern === "sash" && renderSash()}
-      {pattern === "halves" && renderHalves()}
-      {pattern === "quarters" && renderQuarters()}
-
-      {/* gola + contornos */}
-      <polygon points="28,14 32,20 36,14" fill={collar} />
-      <rect x={20} y={18} width={24} height={34} rx={4} fill="none" stroke="rgba(0,0,0,0.15)" />
-      <polyline points="20,18 12,22 12,32 20,28" fill="none" stroke="rgba(0,0,0,0.15)" />
-      <polyline points="44,18 52,22 52,32 44,28" fill="none" stroke="rgba(0,0,0,0.15)" />
-    </svg>
-  );
-}
-
-/* ======================
-   Novo: Card de Resumo
-====================== */
-function Chip({ children, className = "", title }: { children: React.ReactNode; className?: string; title?: string }) {
-  return (
-    <span
-      title={title}
-      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[12px] ${className}`}
-    >
-      {children}
-    </span>
-  );
-}
-
-function SummaryItem({
-  title,
-  redCards,
-  hatTrickNames,
-  goalkeeperName,
-  motmName,
-  disconnected,
-  align = "left",
-}: {
-  title: string;
-  redCards?: number | null;
-  hatTrickNames?: Array<string | null>;
-  goalkeeperName?: string | null;
-  motmName?: string | null;
-  disconnected?: boolean;
-  align?: "left" | "right";
-}) {
-  const reds = typeof redCards === "number" ? redCards : 0;
-  const textAlign = align === "right" ? "text-left sm:text-right" : "text-left";
-  const dir = align === "right" ? "justify-start sm:justify-end" : "justify-start";
-  const hatList = (hatTrickNames ?? []).filter((n): n is string => !!n);
-
-  return (
-    <div className={`flex flex-col gap-1 ${textAlign}`}>
-      <div className={`flex ${dir} gap-2 flex-wrap items-center`}>
-        <Chip
-          title={`Cartões vermelhos: ${reds}`}
-          className={`${
-            reds > 0 ? "bg-red-50 border-red-200 text-red-700" : "bg-gray-50 border-gray-200 text-gray-400"
-          }`}
-        >
-          <span
-            role="img"
-            aria-label="Cartão vermelho"
-            title="Cartão vermelho"
-            className={`inline-block leading-none ${reds > 0 ? "" : "opacity-60"}`}
-            style={{ fontSize: 14 }}
-          >
-            🟥
-          </span>
-          <span className="tabular-nums">{reds}</span>
-        </Chip>
-
-        {hatList.length === 0 ? (
-          <Chip className="bg-gray-50 border-gray-200 text-gray-400" title="Sem hat-trick">
-            <span
-              role="img"
-              aria-label="Hat-trick"
-              title="Hat-trick"
-              className="inline-block leading-none opacity-60"
-              style={{ fontSize: 14 }}
-            >
-              🎩
-            </span>
-            <span>—</span>
-          </Chip>
-        ) : (
-          hatList.map((name, i) => (
-            <Chip
-              key={`${name}-${i}`}
-              className="bg-green-50 border-green-200 text-green-700"
-              title={`Hat-trick: ${name}`}
-            >
-              <span
-                role="img"
-                aria-label="Hat-trick"
-                title="Hat-trick"
-                className="inline-block leading-none"
-                style={{ fontSize: 14 }}
-              >
-                🎩
-              </span>
-              <span className="truncate max-w-[180px]">{name}</span>
-            </Chip>
-          ))
-        )}
-
-        <Chip
-          className={`${
-            goalkeeperName ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-400"
-          }`}
-          title={goalkeeperName ? `Goleiro: ${goalkeeperName}` : "Goleiro não identificado"}
-        >
-          <GiGoalKeeper size={14} className={goalkeeperName ? "text-blue-700" : "text-gray-400"} aria-label="Goleiro" />
-          <span className="truncate max-w-[180px]">{goalkeeperName ?? "—"}</span>
-        </Chip>
-
-        <Chip
-          className={`${
-            motmName ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-50 border-gray-200 text-gray-400"
-          }`}
-          title={motmName ? `Man of the Match: ${motmName}` : "Sem Man of the Match"}
-        >
-          <span
-            role="img"
-            aria-label="Man of the Match"
-            title="Man of the Match"
-            className={`${motmName ? "" : "opacity-60"} inline-block leading-none`}
-            style={{ fontSize: 14 }}
-          >
-            🏆
-          </span>
-          <span className="truncate max-w-[180px]">{motmName ?? "—"}</span>
-        </Chip>
-
-        {disconnected && (
-          <Chip className="bg-red-50 border-red-200 text-red-700" title="Clube desconectou">
-            <PlugZap size={14} className="text-red-600" />
-          </Chip>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SummaryCard({ m }: { m: MatchResultDto }) {
-  const a = m.clubASummary;
-  const b = m.clubBSummary;
-  return (
-    <div className="mt-3 pt-3 border-t">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
-        <SummaryItem
-          title={m.clubAName}
-          redCards={a?.redCards ?? m.clubARedCards ?? 0}
-          hatTrickNames={a?.hatTrickPlayerNames}
-          goalkeeperName={a?.goalkeeperPlayerName ?? null}
-          motmName={a?.manOfTheMatchPlayerName ?? null}
-          disconnected={a?.disconnected === true}
-          align="left"
-        />
-        <SummaryItem
-          title={m.clubBName}
-          redCards={b?.redCards ?? m.clubBRedCards ?? 0}
-          hatTrickNames={b?.hatTrickPlayerNames}
-          goalkeeperName={b?.goalkeeperPlayerName ?? null}
-          motmName={b?.manOfTheMatchPlayerName ?? null}
-          disconnected={b?.disconnected === true}
-          align="right"
-        />
-      </div>
     </div>
   );
 }
@@ -671,312 +363,188 @@ function MatchCard({
   fallbackClubName?: string | null;
   fallbackTeamId?: number;
 }) {
-  const patternA = guessPattern(m.clubADetails);
-  const patternB = guessPattern(m.clubBDetails);
-
   const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
   const outcome = p.myGoals === p.oppGoals ? "draw" : p.myGoals > p.oppGoals ? "win" : "loss";
-  const borderClass =
-    outcome === "win"
-      ? "border-l-4 border-l-green-500 border-gray-200"
-      : outcome === "loss"
-      ? "border-l-4 border-l-red-400 border-gray-200"
-      : "border-l-4 border-l-gray-300 border-gray-200";
+  const leftBorder =
+    outcome === "win" ? "border-l-positive" : outcome === "loss" ? "border-l-negative" : "border-l-border-strong";
+  const pillOutcome: Outcome = outcome === "win" ? "W" : outcome === "loss" ? "L" : "D";
 
-  const stadiumName =
-    m.clubADetails?.stadName ?? m.clubADetails?.StadName ?? m.clubADetails?.name ?? m.clubADetails?.Name ?? m.clubAName;
+  const aWin = m.clubAGoals > m.clubBGoals;
+  const bWin = m.clubBGoals > m.clubAGoals;
 
+  const crestA = m.clubADetails?.team?.toString() ?? null;
+  const crestB = m.clubBDetails?.team?.toString() ?? null;
   const divA = m.clubADetails?.currentDivision ?? null;
   const divB = m.clubBDetails?.currentDivision ?? null;
-  const divAUrl = divisionCrestUrl(divA);
-  const divBUrl = divisionCrestUrl(divB);
+  const when = compactWhen(m.timestamp);
 
-  const crestA = m.clubADetails?.team.toString() ?? m.clubADetails?.team.toString() ?? null;
-
-  const crestB = m.clubBDetails?.team.toString() ?? m.clubBDetails?.team.toString() ?? null;
+  const stadiumName = m.clubADetails?.stadName ?? m.clubADetails?.StadName ?? null;
+  const players = `${m.clubAPlayerCount ?? "-"}v${m.clubBPlayerCount ?? "-"}`;
 
   return (
     <Link
       to={`/match/${m.matchId}?matchType=${matchType}`}
-      className={`block bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 border transition shadow-sm hover:shadow ${borderClass}`}
+      className={`block border-l-4 ${leftBorder} transition hover:bg-surface-raised`}
       title="Ver detalhes da partida"
     >
-      {/* Topo: data + selos */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-xs text-gray-500">
-          <span className="hidden sm:inline">{formatDateSafe(m.timestamp)}</span>
-          <span className="sm:hidden">{formatDateSafe(m.timestamp)}</span>
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 pt-2.5 pb-1.5">
+        {/* Data */}
+        <div className="w-11 sm:w-12 shrink-0 leading-tight text-[11px] tabular-nums">
+          <div className="font-medium text-fg-secondary">{when.date}</div>
+          <div className="text-fg-subtle">{when.time}</div>
         </div>
-        <div className="flex items-center gap-2">
-          <OutcomeBadge a={p.myGoals} b={p.oppGoals} />
+
+        {/* Confronto (lado a lado) */}
+        <div className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3">
+          <div className="flex-1 min-w-0 flex items-center justify-end gap-2">
+            <div className="min-w-0 flex flex-col items-end leading-tight">
+              <span
+                className={`truncate max-w-full text-sm ${aWin ? "font-bold text-fg" : "text-fg-secondary"}`}
+                title={m.clubAName}
+              >
+                {m.clubAName}
+              </span>
+              {divA != null && <span className="text-[10px] text-fg-subtle">Divisão {divA}</span>}
+            </div>
+            <Crest src={crestUrl(crestA)} size={24} rounded="rounded-md" />
+          </div>
+
+          <div className="shrink-0 flex items-center gap-1.5 font-display font-bold text-xl sm:text-2xl tabular-nums tracking-tight leading-none">
+            <span className={aWin ? "text-fg" : "text-fg-muted"}>{m.clubAGoals}</span>
+            <span className="text-fg-subtle text-base">–</span>
+            <span className={bWin ? "text-fg" : "text-fg-muted"}>{m.clubBGoals}</span>
+          </div>
+
+          <div className="flex-1 min-w-0 flex items-center gap-2">
+            <Crest src={crestUrl(crestB)} size={24} rounded="rounded-md" />
+            <div className="min-w-0 flex flex-col items-start leading-tight">
+              <span
+                className={`truncate max-w-full text-sm ${bWin ? "font-bold text-fg" : "text-fg-secondary"}`}
+                title={m.clubBName}
+              >
+                {m.clubBName}
+              </span>
+              {divB != null && <span className="text-[10px] text-fg-subtle">Divisão {divB}</span>}
+            </div>
+          </div>
         </div>
+
+        {/* Resultado (perspectiva do clube selecionado) */}
+        <ResultPill outcome={pillOutcome} variant="soft" className="shrink-0" />
       </div>
 
-      {/* DESKTOP */}
-      <div className="hidden sm:grid items-center justify-center grid-cols-[auto_auto_auto] sm:gap-6 sm:max-w-[820px] sm:mx-auto mt-2">
-        {/* A */}
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-10 shrink-0">
-            <img
-              src={crestUrl(crestA)}
-              onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-              alt={`Escudo ${m.clubAName}`}
-              style={{ width: AVATAR_PX, height: AVATAR_PX }}
-              className="rounded-full object-contain bg-white border"
-              loading="lazy"
-            />
-          </div>
+      {/* Contexto: jogadores + estádio, centralizado sob o placar (espelha as colunas da linha) */}
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 pb-2.5">
+        <div className="w-11 sm:w-12 shrink-0" aria-hidden />
+        <div className="flex-1 min-w-0 flex justify-center">
+          <span className="inline-flex items-center gap-1.5 max-w-full text-[11px] text-fg-muted whitespace-nowrap">
+            <span className="tabular-nums font-semibold text-fg-secondary">{players}</span>
+            {stadiumName && (
+              <>
+                <span className="text-fg-subtle">·</span>
+                <span className="truncate">{stadiumName}</span>
+              </>
+            )}
+          </span>
+        </div>
+        <div className="w-6 shrink-0" aria-hidden />
+      </div>
+    </Link>
+  );
+}
+
+/* ======================
+   Placar em destaque (último resultado) — elemento "broadcast"
+====================== */
+function ScoreboardHero({
+  m,
+  matchType,
+  selectedClubIds,
+  fallbackClubName,
+  fallbackTeamId,
+}: {
+  m: MatchResultDto;
+  matchType: MatchTypeFilter;
+  selectedClubIds: number[];
+  fallbackClubName?: string | null;
+  fallbackTeamId?: number;
+}) {
+  const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName, fallbackTeamId);
+  const outcome = p.myGoals === p.oppGoals ? "draw" : p.myGoals > p.oppGoals ? "win" : "loss";
+
+  const crestA = m.clubADetails?.team?.toString() ?? null;
+  const crestB = m.clubBDetails?.team?.toString() ?? null;
+  const divA = m.clubADetails?.currentDivision ?? null;
+  const divB = m.clubBDetails?.currentDivision ?? null;
+  const stadiumName =
+    m.clubADetails?.stadName ?? m.clubADetails?.StadName ?? m.clubADetails?.name ?? m.clubADetails?.Name ?? null;
+
+  const accentBar = outcome === "win" ? "bg-positive" : outcome === "loss" ? "bg-negative" : "bg-warning";
+  const tag =
+    outcome === "win"
+      ? "bg-positive-soft text-positive-fg"
+      : outcome === "loss"
+      ? "bg-negative-soft text-negative-fg"
+      : "bg-warning-soft text-warning-fg";
+  const tagLabel = outcome === "win" ? "Vitória" : outcome === "loss" ? "Derrota" : "Empate";
+
+  const scoreColor = (mine: boolean) =>
+    mine && outcome === "win" ? "text-positive" : mine && outcome === "loss" ? "text-negative" : "text-slate-100";
+
+  return (
+    <Link
+      to={`/match/${m.matchId}?matchType=${matchType}`}
+      className="group relative block overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-slate-900 to-slate-950 text-slate-100 shadow-raised transition hover:brightness-110"
+      title="Ver detalhes da última partida"
+    >
+      <span className={`absolute inset-x-0 top-0 h-1 ${accentBar}`} />
+
+      <div className="flex items-center justify-between px-4 sm:px-6 pt-4 text-[11px] uppercase tracking-widest text-slate-400">
+        <span className="inline-flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-accent" /> Último resultado
+        </span>
+        <span className="tabular-nums">{formatDateSafe(m.timestamp)}</span>
+      </div>
+
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-6 px-4 sm:px-6 py-5">
+        {/* Clube A */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <Crest src={crestUrl(crestA)} size={44} rounded="rounded-xl" />
           <div className="min-w-0">
-            <div className="leading-tight font-medium sm:truncate" title={m.clubAName}>
+            <div className="font-display text-base sm:text-2xl uppercase leading-none tracking-wide truncate" title={m.clubAName}>
               {m.clubAName}
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              {divAUrl && (
-                <img
-                  src={divAUrl}
-                  alt={`Divisão ${divA}`}
-                  width={24}
-                  height={24}
-                  className="h-8 w-8 object-contain"
-                  loading="lazy"
-                  onError={(e) => (e.currentTarget.style.display = 'none')}
-                />
-              )}
-              <div className="w-10 shrink-0 flex justify-center overflow-visible">
-                <KitJersey
-                  colors={[
-                    m.clubADetails?.kitColor1 ?? (m.clubADetails as any)?.KitColor1,
-                    m.clubADetails?.kitColor2 ?? (m.clubADetails as any)?.KitColor2,
-                    m.clubADetails?.kitColor3 ?? (m.clubADetails as any)?.KitColor3,
-                    m.clubADetails?.kitColor4 ?? (m.clubADetails as any)?.KitColor4,
-                  ]}
-                  pattern={patternA}
-                  sizePx={AVATAR_PX}
-                />
-              </div>
-            </div>
+            {divA && <div className="mt-1 text-[11px] text-slate-400">Divisão {divA}</div>}
           </div>
         </div>
 
         {/* Placar */}
-        <div className="justify-self-center place-self-center px-3 py-1 rounded bg-gray-50 font-semibold text-base sm:text-lg border text-center min-w-[72px]">
-          <span
-            className={`${
-              p.isMineA
-                ? p.myGoals > p.oppGoals
-                  ? "text-green-700"
-                  : p.myGoals < p.oppGoals
-                  ? "text-red-700"
-                  : ""
-                : ""
-            }`}
-          >
-            {m.clubAGoals}
-          </span>
-          <span className="text-gray-400"> – </span>
-          <span
-            className={`${
-              !p.isMineA
-                ? p.myGoals > p.oppGoals
-                  ? "text-green-700"
-                  : p.myGoals < p.oppGoals
-                  ? "text-red-700"
-                  : ""
-                : ""
-            }`}
-          >
-            {m.clubBGoals}
+        <div className="flex flex-col items-center">
+          <div className="font-display font-bold text-4xl sm:text-6xl tabular-nums tracking-tight leading-none whitespace-nowrap">
+            <span className={scoreColor(p.isMineA)}>{m.clubAGoals}</span>
+            <span className="text-slate-600 mx-1.5 sm:mx-2">:</span>
+            <span className={scoreColor(!p.isMineA)}>{m.clubBGoals}</span>
+          </div>
+          <span className={`mt-2 inline-flex items-center px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide ${tag}`}>
+            {tagLabel}
           </span>
         </div>
 
-        {/* B */}
-        <div className="flex items-center gap-2 min-w-0 justify-end">
-          <div className="w-10 shrink-0">
-            <img
-              src={crestUrl(crestB)}
-              onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-              alt={`Escudo ${m.clubBName}`}
-              style={{ width: AVATAR_PX, height: AVATAR_PX }}
-              className="rounded-full object-contain bg-white border"
-              loading="lazy"
-            />
-          </div>
-          <div className="min-w-0 text-right">
-            <div className="leading-tight font-medium sm:truncate" title={m.clubBName}>
+        {/* Clube B */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 justify-end text-right">
+          <div className="min-w-0">
+            <div className="font-display text-base sm:text-2xl uppercase leading-none tracking-wide truncate" title={m.clubBName}>
               {m.clubBName}
             </div>
-            <div className="flex items-center gap-2 mt-1 justify-end">
-              {divBUrl && (
-                <img
-                  src={divBUrl}
-                  alt={`Divisão ${divB}`}
-                  width={24}
-                  height={24}
-                  className="h-8 w-8 object-contain"
-                  loading="lazy"
-                  onError={(e) => (e.currentTarget.style.display = 'none')}
-                />
-              )}
-              <div className="w-10 shrink-0 flex justify-end overflow-visible">
-                <KitJersey
-                  colors={[
-                    m.clubBDetails?.kitColor1 ?? (m.clubBDetails as any)?.KitColor1,
-                    m.clubBDetails?.kitColor2 ?? (m.clubBDetails as any)?.KitColor2,
-                    m.clubBDetails?.kitColor3 ?? (m.clubBDetails as any)?.KitColor3,
-                    m.clubBDetails?.kitColor4 ?? (m.clubBDetails as any)?.KitColor4,
-                  ]}
-                  pattern={patternB}
-                  sizePx={AVATAR_PX}
-                />
-              </div>
-            </div>
+            {divB && <div className="mt-1 text-[11px] text-slate-400">Divisão {divB}</div>}
           </div>
+          <Crest src={crestUrl(crestB)} size={44} rounded="rounded-xl" />
         </div>
       </div>
 
-      {/* MOBILE */}
-      <div className="sm:hidden mt-2 space-y-2">
-        {/* Linha 1: nomes + escudos */}
-        <div className="flex items-center justify-between gap-3">
-          {/* A */}
-          <div className="flex items-center gap-2 min-w-0">
-            <img
-              src={crestUrl(crestA)}
-              onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-              alt={`Escudo ${m.clubAName}`}
-              style={{ width: AVATAR_PX, height: AVATAR_PX }}
-              className="rounded-full object-contain bg-white border shrink-0"
-              loading="lazy"
-            />
-            <div className="min-w-0">
-              <div className="font-medium leading-snug whitespace-normal break-words">{m.clubAName}</div>
-              {divAUrl && (
-                <div className="mt-1">
-                  <img
-                    src={divAUrl}
-                    alt={`Divisão ${divA}`}
-                    width={20}
-                    height={20}
-                    className="h-5 w-5 object-contain"
-                    loading="lazy"
-                    onError={(e) => (e.currentTarget.style.display = 'none')}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* B */}
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="min-w-0 text-right">
-              <div className="font-medium leading-snug whitespace-normal break-words">{m.clubBName}</div>
-              {divBUrl && (
-                <div className="mt-1 flex justify-end">
-                  <img
-                    src={divBUrl}
-                    alt={`Divisão ${divB}`}
-                    width={20}
-                    height={20}
-                    className="h-5 w-5 object-contain"
-                    loading="lazy"
-                    onError={(e) => (e.currentTarget.style.display = 'none')}
-                  />
-                </div>
-              )}
-            </div>
-            <img
-              src={crestUrl(crestB)}
-              onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-              alt={`Escudo ${m.clubBName}`}
-              style={{ width: AVATAR_PX, height: AVATAR_PX }}
-              className="rounded-full object-contain bg-white border shrink-0"
-              loading="lazy"
-            />
-          </div>
-        </div>
-
-        {/* Camisas */}
-        <div className="flex items-start justify-between">
-          <div className="flex flex-col items-start gap-1">
-            <KitJersey
-              colors={[
-                m.clubADetails?.kitColor1 ?? (m.clubADetails as any)?.KitColor1,
-                m.clubADetails?.kitColor2 ?? (m.clubADetails as any)?.KitColor2,
-                m.clubADetails?.kitColor3 ?? (m.clubADetails as any)?.KitColor3,
-                m.clubADetails?.kitColor4 ?? (m.clubADetails as any)?.KitColor4,
-              ]}
-              pattern={guessPattern(m.clubADetails)}
-              sizePx={AVATAR_PX}
-            />
-          </div>
-
-          <div className="flex flex-col items-end gap-1">
-            <KitJersey
-              colors={[
-                m.clubBDetails?.kitColor1 ?? (m.clubBDetails as any)?.KitColor1,
-                m.clubBDetails?.kitColor2 ?? (m.clubBDetails as any)?.KitColor2,
-                m.clubBDetails?.kitColor3 ?? (m.clubBDetails as any)?.KitColor3,
-                m.clubBDetails?.kitColor4 ?? (m.clubBDetails as any)?.KitColor4,
-              ]}
-              pattern={guessPattern(m.clubBDetails)}
-              sizePx={AVATAR_PX}
-            />
-          </div>
-        </div>
-
-        {/* Placar centralizado */}
-        <div className="mt-1 px-3 py-2 rounded-lg bg-gray-50 font-semibold text-lg border text-center mx-auto w-40">
-          <span
-            className={`${
-              p.isMineA
-                ? p.myGoals > p.oppGoals
-                  ? "text-green-700"
-                  : p.myGoals < p.oppGoals
-                  ? "text-red-700"
-                  : ""
-                : ""
-            }`}
-          >
-            {m.clubAGoals}
-          </span>
-          <span className="text-gray-400"> – </span>
-          <span
-            className={`${
-              !p.isMineA
-                ? p.myGoals > p.oppGoals
-                  ? "text-green-700"
-                  : p.myGoals < p.oppGoals
-                  ? "text-red-700"
-                  : ""
-                : ""
-            }`}
-          >
-            {m.clubBGoals}
-          </span>
-        </div>
-      </div>
-
-      {/* Jogadores + Estádio (linha unificada) */}
-      <div className="mt-3 flex items-center justify-center gap-2 text-xs sm:text-sm text-gray-600 flex-wrap">
-        <div className="inline-flex items-center gap-1">
-          <PersonIcon className="text-gray-500" />
-          <span className="font-semibold tabular-nums text-gray-700">{m.clubAPlayerCount ?? "-"}</span>
-        </div>
-        <span className="text-gray-400">–</span>
-        <div className="inline-flex items-center gap-1">
-          <span className="font-semibold tabular-nums text-gray-700">{m.clubBPlayerCount ?? "-"}</span>
-          <PersonIcon className="text-gray-500" />
-        </div>
-        {stadiumName && (
-          <>
-            <span className="text-gray-300">·</span>
-            <span className="font-medium">{stadiumName}</span>
-          </>
-        )}
-      </div>
-
-      {/* Resumo */}
-      <SummaryCard m={m} />
+      {stadiumName && (
+        <div className="px-4 sm:px-6 pb-4 text-center text-[11px] text-slate-400 truncate">{stadiumName}</div>
+      )}
     </Link>
   );
 }
@@ -1006,8 +574,11 @@ function DivisionsSelect({
   }, []);
 
   const selectedUrl = divisionCrestUrl(value);
+  const active = value != null;
 
-  const baseBtn = "inline-flex items-center gap-2 border rounded-lg px-2 py-2 bg-white hover:bg-gray-50";
+  const baseBtn = `inline-flex items-center gap-1.5 h-9 pl-3 pr-2 rounded-lg border text-sm transition ${
+    active ? "border-accent/60 bg-accent/5" : "border-border bg-surface-sunken hover:border-border-strong"
+  }`;
 
   return (
     <div ref={ref} className={`relative ${className}`}>
@@ -1019,28 +590,35 @@ function DivisionsSelect({
         className={baseBtn}
         title="Filtrar por divisão do adversário"
       >
+        <span
+          className={`text-[11px] font-semibold uppercase tracking-wide ${
+            active ? "text-accent" : "text-fg-subtle"
+          }`}
+        >
+          Div.
+        </span>
         {selectedUrl ? (
           <img
             src={selectedUrl}
             alt={value ? `Divisão ${value}` : "Todos"}
-            width={28}
-            height={28}
-            className="h-7 w-7 object-contain"
+            width={24}
+            height={24}
+            className="h-6 w-6 object-contain"
             loading="lazy"
           />
         ) : (
-          <span className="text-gray-600">Todos</span>
+          <span className="text-sm font-medium text-fg-secondary">Todos</span>
         )}
-        <span className="text-gray-400">▾</span>
+        <ChevronDown className="w-3.5 h-3.5 text-fg-subtle" />
       </button>
 
       {open && (
-        <div role="listbox" className="absolute z-30 mt-1 w-[260px] rounded-lg border bg-white p-2 shadow-lg">
+        <div role="listbox" className="absolute z-30 mt-1 w-[260px] rounded-lg border bg-surface p-2 shadow-lg">
           {/* Opção: Todos */}
           <button
             role="option"
             aria-selected={!value}
-            className={`w-full text-left px-2 py-2 rounded hover:bg-gray-50 ${!value ? "bg-gray-50" : ""}`}
+            className={`w-full text-left px-2 py-2 rounded hover:bg-surface-raised ${!value ? "bg-surface-raised" : ""}`}
             onClick={() => {
               onChange(null);
               setOpen(false);
@@ -1057,8 +635,8 @@ function DivisionsSelect({
                   key={n}
                   role="option"
                   aria-selected={value === n}
-                  className={`flex items-center justify-center rounded border p-2 hover:bg-gray-50 ${
-                    value === n ? "ring-2 ring-gray-300" : ""
+                  className={`flex items-center justify-center rounded border p-2 hover:bg-surface-raised ${
+                    value === n ? "ring-2 ring-accent border-accent" : ""
                   }`}
                   onClick={() => {
                     onChange(n);
@@ -1459,7 +1037,7 @@ export default function Home() {
     return (
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-gray-600">Itens por página:</span>
+          <span className="text-fg-muted">Itens por página:</span>
           <select
             className="border rounded-lg px-2 py-2"
             value={pageSize}
@@ -1476,34 +1054,34 @@ export default function Home() {
             ))}
           </select>
         </div>
-        <div className="text-sm text-gray-600">
+        <div className="text-sm text-fg-muted">
           Página <span className="font-semibold">{totalPages ? page : 0}</span> de{" "}
           <span className="font-semibold">{totalPages}</span> — {totalCount} partidas
         </div>
         <div className="flex items-center gap-2">
           <button
-            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised disabled:opacity-50"
             onClick={() => goTo(1)}
             disabled={!hasPrev}
           >
             « Primeira
           </button>
           <button
-            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised disabled:opacity-50"
             onClick={prev}
             disabled={!hasPrev}
           >
             ‹ Anterior
           </button>
           <button
-            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised disabled:opacity-50"
             onClick={next}
             disabled={!hasNext}
           >
             Próxima ›
           </button>
           <button
-            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised disabled:opacity-50"
             onClick={() => goTo(totalPages)}
             disabled={!hasNext}
           >
@@ -1518,9 +1096,14 @@ export default function Home() {
     <div className="p-4 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">Resultados das Partidas</h1>
-          <p className="text-sm text-gray-600">{headerRight}</p>
+        <div className="flex items-stretch gap-3 min-w-0">
+          <span className="w-1.5 rounded-sm bg-accent flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="font-display font-bold text-2xl sm:text-3xl uppercase tracking-wide leading-none">
+              Resultados das Partidas
+            </h1>
+            <p className="text-sm text-fg-muted mt-1.5">{headerRight}</p>
+          </div>
         </div>
 
         {hasResults && (
@@ -1546,150 +1129,175 @@ export default function Home() {
         )}
       </div>
 
-      {/* Toolbar */}
-      <div className="sticky top-0 z-20 -mx-4 px-4 py-3 bg-white/80 backdrop-blur border-b">
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3 flex-wrap">
-            <Segmented value={matchType} onChange={setMatchType} />
-            <ToolbarSeparator />
+      {/* Placar em destaque */}
+      {hasResults && !loading && (
+        <div className="mb-4">
+          <ScoreboardHero
+            m={filtered[0]}
+            matchType={matchType}
+            selectedClubIds={selectedClubIds}
+            fallbackClubName={fallbackClubName ?? undefined}
+            fallbackTeamId={fallbackTeamId}
+          />
+        </div>
+      )}
 
-            <div className="relative">
+      {/* Acompanhamento do dia (último dia de /statisticsbydate) */}
+      {hasSelection && (
+        <div className="mb-4">
+          <LatestDayPanel clubIds={selectedClubIds} />
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="sticky top-2 z-20 rounded-xl border border-border bg-surface-raised/95 backdrop-blur px-3 py-3">
+        <div className="flex flex-col gap-2.5">
+          {/* Linha 1: tipo de partida + busca + atualizar */}
+          <div className="flex items-center gap-2.5">
+            <Segmented value={matchType} onChange={setMatchType} />
+
+            <div className="relative flex-1 min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle" />
               <input
                 ref={searchRef}
                 id="search"
                 type="text"
-                placeholder="Buscar clube A ou B (atalho: /)"
+                placeholder="Buscar clube (atalho: /)"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="border rounded-lg pl-9 pr-8 py-2 w-72 max-w-[90vw]"
+                className="w-full h-9 rounded-lg border border-border bg-surface-sunken pl-9 pr-8 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
               />
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
               {search && (
                 <button
                   aria-label="Limpar busca"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-secondary"
                   onClick={() => setSearch("")}
                 >
-                  ×
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
 
-            {/* Filtro vermelhos */}
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-600">Verm.:</span>
-              <select
-                className="border rounded-lg px-2 py-2"
-                value={redFilter}
-                onChange={(e) => setRedFilter(e.target.value as RedCardFilter)}
-              >
-                <option value="all">Todos</option>
-                <option value="none">Nenhum</option>
-                <option value="1plus">1+</option>
-                <option value="2plus">2+</option>
-              </select>
-            </div>
-
-            {/* Filtro por quantidade do adversário */}
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-600">Jog. adv.:</span>
-              <select
-                className="border rounded-lg px-2 py-2"
-                value={opponentCount ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v === "") setOpponentCount(null);
-                  else {
-                    const n = Number(v);
-                    setOpponentCount(n >= 2 && n <= 11 ? n : null);
-                  }
-                }}
-              >
-                <option value="">Todos</option>
-                {Array.from({ length: 10 }, (_, i) => i + 2).map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filtro por divisão do adversário */}
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-600">Div. adv.:</span>
-              <DivisionsSelect value={opponentDivision} onChange={setOpponentDivision} />
-            </div>
-
-            {/* Ordenação */}
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-600">Ordenar:</span>
-              <select
-                className="border rounded-lg px-2 py-2"
-                value={sortKey}
-                onChange={(e) => setSortKey(e.target.value as SortKey)}
-              >
-                <option value="recent">Mais recentes</option>
-                <option value="oldest">Mais antigas</option>
-                <option value="gf">Mais gols feitos</option>
-                <option value="ga">Mais gols recebidos</option>
-              </select>
-            </div>
+            <button
+              className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border border-border bg-surface text-sm font-medium text-fg-secondary hover:bg-surface-raised transition shrink-0"
+              onClick={refresh}
+              title="Recarregar resultados"
+            >
+              <RotateCw className="w-4 h-4" />
+              <span className="hidden sm:inline">Atualizar</span>
+            </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50" onClick={refresh}>
-              Atualizar
-            </button>
+          {/* Linha 2: filtros */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="hidden sm:inline text-[11px] font-semibold uppercase tracking-wide text-fg-subtle mr-0.5">
+              Filtros
+            </span>
+
+            <SelectField
+              label="Verm."
+              title="Filtrar por cartões vermelhos"
+              active={redFilter !== "all"}
+              value={redFilter}
+              onChange={(e) => setRedFilter(e.target.value as RedCardFilter)}
+            >
+              <option value="all">Todos</option>
+              <option value="none">Nenhum</option>
+              <option value="1plus">1+</option>
+              <option value="2plus">2+</option>
+            </SelectField>
+
+            <SelectField
+              label="Jog. adv."
+              title="Filtrar pela quantidade de jogadores do adversário"
+              active={!!opponentCount}
+              value={opponentCount ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "") setOpponentCount(null);
+                else {
+                  const n = Number(v);
+                  setOpponentCount(n >= 2 && n <= 11 ? n : null);
+                }
+              }}
+            >
+              <option value="">Todos</option>
+              {Array.from({ length: 10 }, (_, i) => i + 2).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </SelectField>
+
+            <DivisionsSelect value={opponentDivision} onChange={setOpponentDivision} />
+
+            <SelectField
+              label="Ordenar"
+              title="Ordenar resultados"
+              active={sortKey !== "recent"}
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+            >
+              <option value="recent">Mais recentes</option>
+              <option value="oldest">Mais antigas</option>
+              <option value="gf">Mais gols feitos</option>
+              <option value="ga">Mais gols recebidos</option>
+            </SelectField>
+
+            {(redFilter !== "all" ||
+              !!opponentCount ||
+              opponentDivision != null ||
+              sortKey !== "recent" ||
+              search.trim() !== "") && (
+              <button
+                onClick={() => {
+                  setSearch("");
+                  setRedFilter("all");
+                  setOpponentCount(null);
+                  setOpponentDivision(null);
+                  setSortKey("recent");
+                }}
+                className="h-9 inline-flex items-center gap-1 px-2.5 rounded-lg text-xs font-semibold text-accent hover:bg-accent/10 transition"
+              >
+                <X className="w-3.5 h-3.5" /> Limpar
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Estados */}
       {loading && (
-        <div className="grid gap-2 mt-4">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="bg-white rounded-xl border border-l-4 border-l-gray-200 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <Skeleton className="h-3 w-28" />
-                <Skeleton className="h-6 w-16 rounded-full" />
+        <div className="mt-4 rounded-2xl border border-border bg-surface shadow-card overflow-hidden divide-y divide-border">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3">
+              <Skeleton className="h-7 w-10" />
+              <div className="flex-1 flex items-center justify-center gap-3">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-7 w-7 rounded-md" />
+                <Skeleton className="h-7 w-12" />
+                <Skeleton className="h-7 w-7 rounded-md" />
+                <Skeleton className="h-4 w-24" />
               </div>
-              <div className="hidden sm:flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-10 w-10 rounded-full" />
-                  <Skeleton className="h-4 w-28" />
-                </div>
-                <Skeleton className="h-8 w-16 rounded" />
-                <div className="flex items-center gap-2 justify-end">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-10 w-10 rounded-full" />
-                </div>
-              </div>
-              <div className="flex items-center justify-center gap-2">
-                <Skeleton className="h-3 w-8" />
-                <Skeleton className="h-3 w-40" />
-              </div>
-              <div className="border-t pt-3 flex gap-4">
-                <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-3 w-24" />
-              </div>
+              <Skeleton className="h-6 w-6 rounded-md" />
             </div>
           ))}
         </div>
       )}
 
       {error && (
-        <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center justify-between">
+        <div className="mt-4 p-3 bg-negative-soft border border-negative/40 text-negative-fg rounded-lg flex items-center justify-between">
           <span>{error}</span>
-          <button className="px-3 py-1.5 rounded-lg border bg-white hover:bg-red-50" onClick={refresh}>
+          <button className="px-3 py-1.5 rounded-lg border bg-surface hover:bg-surface-raised" onClick={refresh}>
             Tentar novamente
           </button>
         </div>
       )}
 
       {!loading && !error && hasSelection && filtered.length === 0 && (
-        <div className="mt-4 p-3 bg-gray-50 border rounded text-gray-700">
+        <div className="mt-4 p-3 bg-surface-raised border rounded text-fg-secondary">
           Nenhum resultado encontrado.
-          <ul className="list-disc ml-5 mt-2 text-sm text-gray-600">
+          <ul className="list-disc ml-5 mt-2 text-sm text-fg-muted">
             <li>Verifique a grafia dos clubes.</li>
             <li>Altere o tipo (Todos/Liga/Playoff).</li>
             <li>Ajuste os filtros de cartões, jogadores ou divisão.</li>
@@ -1698,24 +1306,26 @@ export default function Home() {
       )}
 
       {!hasSelection && (
-        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
+        <div className="mt-4 p-3 bg-warning-soft border border-warning/40 rounded-lg text-warning-fg">
           Selecione clubes no menu (botão “Clubes”) para começar.
         </div>
       )}
 
       {/* Lista */}
-      <div className="mt-4 grid gap-2">
-        {(isServerPaged ? filtered : filtered.slice(0, visible)).map((m) => (
-          <MatchCard
-            key={m.matchId}
-            m={m}
-            matchType={matchType}
-            selectedClubIds={selectedClubIds}
-            fallbackClubName={fallbackClubName ?? undefined}
-            fallbackTeamId={fallbackTeamId}
-          />
-        ))}
-      </div>
+      {hasResults && (
+        <div className="mt-4 rounded-2xl border border-border bg-surface shadow-card overflow-hidden divide-y divide-border">
+          {(isServerPaged ? filtered : filtered.slice(0, visible)).map((m) => (
+            <MatchCard
+              key={m.matchId}
+              m={m}
+              matchType={matchType}
+              selectedClubIds={selectedClubIds}
+              fallbackClubName={fallbackClubName ?? undefined}
+              fallbackTeamId={fallbackTeamId}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Paginação */}
       {isServerPaged ? (
@@ -1725,7 +1335,7 @@ export default function Home() {
         visible < filtered.length && (
           <div className="flex justify-center mt-4">
             <button
-              className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
+              className="px-4 py-2 rounded-lg border bg-surface hover:bg-surface-raised"
               onClick={() => setVisible((v) => v + 30)}
             >
               Mostrar mais ({Math.min(filtered.length - visible, 30)})
@@ -1736,12 +1346,12 @@ export default function Home() {
 
       {/* Rodapé de contagem */}
       {isServerPaged ? (
-        <div className="mt-6 text-xs text-gray-500 text-center">
+        <div className="mt-6 text-xs text-fg-muted text-center">
           Página {totalPages ? page : 0} de {totalPages} — {totalCount} partidas.
         </div>
       ) : (
         filtered.length > 0 && (
-          <div className="mt-6 text-xs text-gray-500 text-center">
+          <div className="mt-6 text-xs text-fg-muted text-center">
             Exibindo {Math.min(visible, filtered.length)} de {filtered.length} partidas.
           </div>
         )

@@ -78,22 +78,22 @@ function getWeekStart(d: Date) { const dow = (d.getDay() + 6) % 7; const ws = ne
 // ===== UI =====
 function ResultPill({ r }: { r: "W" | "D" | "L" | "-" }) {
     const map: Record<string, string> = {
-        W: "bg-green-100 text-green-700 border-green-200",
-        D: "bg-yellow-100 text-yellow-700 border-yellow-200",
-        L: "bg-red-100 text-red-700 border-red-200",
-        "-": "bg-gray-100 text-gray-600 border-gray-200",
+        W: "bg-positive-soft text-positive-fg border-positive/30",
+        D: "bg-warning-soft text-warning-fg border-warning/30",
+        L: "bg-negative-soft text-negative-fg border-negative/30",
+        "-": "bg-surface-sunken text-fg-muted border-border",
     };
     const label = r === "W" ? "Vitória" : r === "D" ? "Empate" : r === "L" ? "Derrota" : "-";
     return <span className={`px-2 py-0.5 rounded-full text-xs border ${map[r]}`}>{label}</span>;
 }
 function Crest({ id, alt }: { id?: string | null; alt: string }) {
     const url = crestUrl(id);
-    if (!url) return <div className="w-6 h-6 rounded-full bg-gray-100" aria-hidden />;
+    if (!url) return <div className="w-6 h-6 rounded-full bg-surface-sunken" aria-hidden />;
     return (
-        <img src={url} alt={alt} className="w-6 h-6 rounded-full bg-gray-100 object-contain" loading="lazy" decoding="async" />
+        <img src={url} alt={alt} className="w-6 h-6 rounded-full bg-surface-sunken object-contain" loading="lazy" decoding="async" />
     );
 }
-function Skeleton({ className = "" }: { className?: string }) { return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />; }
+function Skeleton({ className = "" }: { className?: string }) { return <div className={`animate-pulse bg-surface-sunken rounded ${className}`} />; }
 
 
 // ===== Página =====
@@ -357,10 +357,10 @@ export default function CalendarPage() {
     function cellTone(summary?: CalendarDaySummaryDto) {
         if (!summary || summary.matchesCount <= 0) return "";
         const { wins, draws, losses } = summary;
-        if (wins > losses && wins > draws) return "bg-green-50";
-        if (losses > wins && losses > draws) return "bg-red-50";
-        if (draws > 0 && draws >= wins && draws >= losses) return "bg-amber-50";
-        return "bg-blue-50/40";
+        if (wins > losses && wins > draws) return "bg-positive-soft";
+        if (losses > wins && losses > draws) return "bg-negative-soft";
+        if (draws > 0 && draws >= wins && draws >= losses) return "bg-warning-soft";
+        return "bg-accent/10";
     }
 
     const ROWS = viewMode === "monthly" ? 6 : 1;
@@ -373,43 +373,43 @@ export default function CalendarPage() {
             {/* Header */}
             <div ref={headerRef} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                 <div className="flex items-center gap-2">
-                    <button onClick={() => { if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, -1)); else { const newStart = addDays(referenceWeekStart, -7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); } }} className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50" aria-label={viewMode === "monthly" ? "Mês anterior" : "Semana anterior"}>◀</button>
-                    <button onClick={() => { const today = new Date(); setReferenceMonth(startOfMonth(today)); setReferenceWeekStart(getWeekStart(today)); }} className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50">Hoje</button>
-                    <button onClick={() => { if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, 1)); else { const newStart = addDays(referenceWeekStart, 7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); } }} className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50" aria-label={viewMode === "monthly" ? "Próximo mês" : "Próxima semana"}>▶</button>
+                    <button onClick={() => { if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, -1)); else { const newStart = addDays(referenceWeekStart, -7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); } }} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised" aria-label={viewMode === "monthly" ? "Mês anterior" : "Semana anterior"}>◀</button>
+                    <button onClick={() => { const today = new Date(); setReferenceMonth(startOfMonth(today)); setReferenceWeekStart(getWeekStart(today)); }} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised">Hoje</button>
+                    <button onClick={() => { if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, 1)); else { const newStart = addDays(referenceWeekStart, 7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); } }} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised" aria-label={viewMode === "monthly" ? "Próximo mês" : "Próxima semana"}>▶</button>
 
-                    <h1 className="text-2xl font-bold ml-2">{viewMode === "monthly" ? `${ptMonth.format(referenceMonth)} de ${referenceMonth.getFullYear()}` : `Semana: ${weekTitle}`}</h1>
+                    <h1 className="text-2xl font-display font-bold uppercase tracking-wide text-fg ml-2">{viewMode === "monthly" ? `${ptMonth.format(referenceMonth)} de ${referenceMonth.getFullYear()}` : `Semana: ${weekTitle}`}</h1>
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-fg-muted">
                         Clube atual: <span className="font-semibold">{headerLabel}</span>
                     </div>
                     <div role="tablist" aria-label="Modo de visualização" className="inline-flex rounded-lg border overflow-hidden">
-                        <button role="tab" aria-selected={viewMode === "monthly"} onClick={() => setViewMode("monthly")} className={`px-3 py-1.5 text-sm ${viewMode === "monthly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>Mensal</button>
-                        <button role="tab" aria-selected={viewMode === "weekly"} onClick={() => setViewMode("weekly")} className={`px-3 py-1.5 text-sm border-l ${viewMode === "weekly" ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>Semanal</button>
+                        <button role="tab" aria-selected={viewMode === "monthly"} onClick={() => setViewMode("monthly")} className={`px-3 py-1.5 text-sm ${viewMode === "monthly" ? "bg-accent text-accent-fg" : "bg-surface text-fg-secondary hover:bg-surface-raised"}`}>Mensal</button>
+                        <button role="tab" aria-selected={viewMode === "weekly"} onClick={() => setViewMode("weekly")} className={`px-3 py-1.5 text-sm border-l ${viewMode === "weekly" ? "bg-accent text-accent-fg" : "bg-surface text-fg-secondary hover:bg-surface-raised"}`}>Semanal</button>
                     </div>
                 </div>
             </div>
 
             {/* Aviso quando não há clube definido */}
             {!hasAnyClub && (
-                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
+                <div className="p-4 bg-warning-soft border border-warning/30 rounded text-warning-fg">
                     Defina um <b>clubId</b> ou <b>clubIds</b> no topo para visualizar o calendário.
                 </div>
             )}
 
             {/* Legenda/ajuda */}
-            <div ref={legendRef} className="flex items-center gap-3 text-xs text-gray-600 mt-3 mb-2">
-                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400/70" />Partidas no dia</span>
-                <span className="px-1 rounded bg-green-100 text-green-700">V</span>
-                <span className="px-1 rounded bg-yellow-100 text-yellow-700">E</span>
-                <span className="px-1 rounded bg-red-100 text-red-700">D</span>
+            <div ref={legendRef} className="flex items-center gap-3 text-xs text-fg-muted mt-3 mb-2">
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-accent/70" />Partidas no dia</span>
+                <span className="px-1 rounded bg-positive-soft text-positive-fg">V</span>
+                <span className="px-1 rounded bg-warning-soft text-warning-fg">E</span>
+                <span className="px-1 rounded bg-negative-soft text-negative-fg">D</span>
                 <span className="ml-auto">Atalhos: ← → navegar • T hoje • M mensal • S semanal</span>
             </div>
 
             {/* Cabeçalhos dos dias da semana */}
             <div className="grid grid-cols-7 gap-2 text-center mb-2">
-                {weekdays.map((w) => (<div key={w} className="text-[11px] sm:text-xs font-semibold text-gray-600 uppercase tracking-wide">{w}</div>))}
+                {weekdays.map((w) => (<div key={w} className="text-[11px] sm:text-xs font-semibold text-fg-muted uppercase tracking-wide">{w}</div>))}
             </div>
 
             {/* Grid */}
@@ -428,12 +428,12 @@ export default function CalendarPage() {
                             className={[
                                 "relative border p-1 sm:p-2 rounded-xl transition focus:outline-none h-full",
                                 selectedDate === ymd
-                                    ? "bg-blue-50"
+                                    ? "bg-accent/10"
                                     : viewMode === "monthly"
-                                    ? (inMonth ? (summary ? cellTone(summary) : "bg-white") : "bg-gray-50")
-                                    : (summary ? cellTone(summary) : "bg-white"),
+                                    ? (inMonth ? (summary ? cellTone(summary) : "bg-surface") : "bg-surface-raised")
+                                    : (summary ? cellTone(summary) : "bg-surface"),
                                 disabled ? "opacity-60 cursor-default" : "hover:shadow-md cursor-pointer",
-                                selectedDate === ymd ? "ring-2 ring-blue-600" : isToday ? "ring-2 ring-blue-500" : "",
+                                selectedDate === ymd ? "ring-2 ring-accent" : isToday ? "ring-2 ring-accent/60" : "",
                                 "overflow-hidden w-full flex flex-col"
                             ].join(" ")}
                             aria-disabled={disabled}
@@ -443,11 +443,11 @@ export default function CalendarPage() {
                         >
                             <div className="flex items-start justify-between min-w-0">
                                 <div className="flex items-center gap-1">
-                                    <span className={`font-semibold ${inMonth ? "text-gray-900" : "text-gray-400"} text-xs sm:text-sm`}>
+                                    <span className={`font-semibold ${inMonth ? "text-fg" : "text-fg-subtle"} text-xs sm:text-sm`}>
                                         {ptDay.format(d)}
                                     </span>
                                     {isToday && (
-                                        <span className="text-[8px] sm:text-[9px] font-bold text-blue-600 leading-none uppercase tracking-wide">Hoje</span>
+                                        <span className="text-[8px] sm:text-[9px] font-bold text-accent leading-none uppercase tracking-wide">Hoje</span>
                                     )}
                                 </div>
                                 {loadingMonth && !monthData && <Skeleton className="w-6 sm:w-8 h-3 sm:h-4" />}
@@ -456,16 +456,16 @@ export default function CalendarPage() {
                             {summary && hasAnyClub && (
                                 <div className="flex-1 flex flex-col justify-center gap-0.5 px-0.5 mt-1">
                                     <div className="flex items-center justify-center gap-1">
-                                        <span className="px-1 rounded bg-green-100 text-green-700 text-[9px] sm:text-[10px]">V {summary.wins}</span>
-                                        <span className="px-1 rounded bg-amber-100 text-amber-700 text-[9px] sm:text-[10px]">E {summary.draws}</span>
-                                        <span className="px-1 rounded bg-red-100 text-red-700 text-[9px] sm:text-[10px]">D {summary.losses}</span>
+                                        <span className="px-1 rounded bg-positive-soft text-positive-fg text-[9px] sm:text-[10px]">V {summary.wins}</span>
+                                        <span className="px-1 rounded bg-warning-soft text-warning-fg text-[9px] sm:text-[10px]">E {summary.draws}</span>
+                                        <span className="px-1 rounded bg-negative-soft text-negative-fg text-[9px] sm:text-[10px]">D {summary.losses}</span>
                                     </div>
-                                    <div className={`text-[8px] sm:text-[9px] text-gray-500 text-center ${viewMode === "weekly" ? "block" : "hidden sm:block"}`}>
+                                    <div className={`text-[8px] sm:text-[9px] text-fg-muted text-center ${viewMode === "weekly" ? "block" : "hidden sm:block"}`}>
                                         GP {summary.goalsFor} · GC {summary.goalsAgainst}
                                     </div>
                                     {viewMode === "weekly" && (
                                         <div className="text-[9px] sm:text-[10px] text-center font-semibold">
-                                            <span className={summary.goalsFor >= summary.goalsAgainst ? "text-green-600" : "text-red-500"}>
+                                            <span className={summary.goalsFor >= summary.goalsAgainst ? "text-positive" : "text-negative"}>
                                                 {summary.goalsFor - summary.goalsAgainst >= 0 ? "+" : ""}{summary.goalsFor - summary.goalsAgainst}
                                             </span>
                                         </div>
@@ -479,7 +479,7 @@ export default function CalendarPage() {
 
             {/* Estados */}
             {errorMonth && (
-                <div className="mt-4 p-3 bg-red-50 text-red-700 rounded border border-red-200 flex items-center justify-between">
+                <div className="mt-4 p-3 bg-negative-soft text-negative-fg rounded border border-negative/30 flex items-center justify-between">
                     <span>{errorMonth}</span>
                     <button className="px-2 py-1 text-sm rounded border" onClick={() => { delete monthCacheRef.current[monthKey]; setReferenceMonth(new Date(referenceMonth)); }}>
                         Tentar novamente
@@ -487,36 +487,36 @@ export default function CalendarPage() {
                 </div>
             )}
             {!loadingMonth && monthData && monthData.days.length === 0 && (
-                <div className="mt-4 p-3 bg-gray-50 text-gray-700 rounded border">Sem jogos neste mês.</div>
+                <div className="mt-4 p-3 bg-surface-raised text-fg-secondary rounded border">Sem jogos neste mês.</div>
             )}
 
             {/* Drawer do dia */}
             {selectedDate && (
                 <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-labelledby={dialogTitleId}>
                     <div className="absolute inset-0 bg-black/30" onClick={() => { setSelectedDate(null); setDayData(null); lastActiveButton?.focus(); }} />
-                    <div className="absolute right-0 top-0 h-full w-full sm:w-[560px] bg-white shadow-xl p-4 overflow-y-auto">
+                    <div className="absolute right-0 top-0 h-full w-full sm:w-[560px] bg-surface shadow-xl p-4 overflow-y-auto">
                         <div className="flex items-center justify-between mb-3">
                             <div>
                                 <h2 id={dialogTitleId} className="text-xl font-semibold">{ptDay.format(fromYmd(selectedDate))} {ptMonth.format(fromYmd(selectedDate))}</h2>
                                 {dayData && (
                                     <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                                        <span className="text-sm text-gray-500">{dayData.totalMatches} jogo(s)</span>
-                                        <span className="text-gray-300">·</span>
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">V {dayData.wins}</span>
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">E {dayData.draws}</span>
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-200">D {dayData.losses}</span>
-                                        <span className="text-gray-300">·</span>
-                                        <span className="text-xs text-gray-500">GP {dayData.goalsFor} · GC {dayData.goalsAgainst}</span>
+                                        <span className="text-sm text-fg-muted">{dayData.totalMatches} jogo(s)</span>
+                                        <span className="text-fg-subtle">·</span>
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-positive-soft text-positive-fg border border-positive/30">V {dayData.wins}</span>
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-warning-soft text-warning-fg border border-warning/30">E {dayData.draws}</span>
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-negative-soft text-negative-fg border border-negative/30">D {dayData.losses}</span>
+                                        <span className="text-fg-subtle">·</span>
+                                        <span className="text-xs text-fg-muted">GP {dayData.goalsFor} · GC {dayData.goalsAgainst}</span>
                                     </div>
                                 )}
                             </div>
-                            <button className="px-3 py-2 rounded-lg border hover:bg-gray-50" onClick={() => { setSelectedDate(null); setDayData(null); lastActiveButton?.focus(); }}>Fechar</button>
+                            <button className="px-3 py-2 rounded-lg border hover:bg-surface-raised" onClick={() => { setSelectedDate(null); setDayData(null); lastActiveButton?.focus(); }}>Fechar</button>
                         </div>
 
                         {loadingDay && (<div className="space-y-3" aria-live="polite"><Skeleton className="h-16" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div>)}
 
                         {errorDay && (
-                            <div className="p-3 bg-red-50 text-red-700 rounded border border-red-200 flex items-center justify-between">
+                            <div className="p-3 bg-negative-soft text-negative-fg rounded border border-negative/30 flex items-center justify-between">
                                 <span>{errorDay}</span>
                                 <button className="px-2 py-1 text-sm rounded border" onClick={() => { if (!selectedDate) return; const cacheKey = `${selectedDate}|${clubKey}`; delete dayCacheRef.current[cacheKey]; setDayData(null); setSelectedDate(selectedDate); }}>
                                     Tentar novamente
@@ -524,7 +524,7 @@ export default function CalendarPage() {
                             </div>
                         )}
 
-                        {!loadingDay && dayData && dayData.matches.length === 0 && (<div className="p-3 bg-gray-50 text-gray-700 rounded border">Nenhuma partida neste dia.</div>)}
+                        {!loadingDay && dayData && dayData.matches.length === 0 && (<div className="p-3 bg-surface-raised text-fg-secondary rounded border">Nenhuma partida neste dia.</div>)}
 
                         {!loadingDay && dayData && dayData.matches.length > 0 && (
                             <div className="space-y-3">
@@ -533,9 +533,9 @@ export default function CalendarPage() {
                                     const aWon = m.clubAGoals > m.clubBGoals;
                                     const bWon = m.clubBGoals > m.clubAGoals;
                                     const resultBorder =
-                                        m.resultForClub === "W" ? "border-l-4 border-l-green-500"
-                                        : m.resultForClub === "L" ? "border-l-4 border-l-red-400"
-                                        : m.resultForClub === "D" ? "border-l-4 border-l-amber-400"
+                                        m.resultForClub === "W" ? "border-l-4 border-l-positive"
+                                        : m.resultForClub === "L" ? "border-l-4 border-l-negative"
+                                        : m.resultForClub === "D" ? "border-l-4 border-l-warning"
                                         : "";
                                     return (
                                         <div key={m.matchId} className={`border rounded-xl p-3 hover:shadow ${resultBorder}`}>
@@ -543,31 +543,31 @@ export default function CalendarPage() {
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <Crest id={m.clubACrestAssetId} alt={m.clubAName} />
                                                     <span className="font-medium truncate max-w-[34%]" title={m.clubAName}>{m.clubAName}</span>
-                                                    <span className={`font-semibold ${aWon ? "text-green-700" : bWon ? "text-red-600" : ""}`}>{m.clubAGoals}</span>
-                                                    <span className="text-gray-400">–</span>
-                                                    <span className={`font-semibold ${bWon ? "text-green-700" : aWon ? "text-red-600" : ""}`}>{m.clubBGoals}</span>
+                                                    <span className={`font-semibold ${aWon ? "text-positive" : bWon ? "text-negative" : ""}`}>{m.clubAGoals}</span>
+                                                    <span className="text-fg-subtle">–</span>
+                                                    <span className={`font-semibold ${bWon ? "text-positive" : aWon ? "text-negative" : ""}`}>{m.clubBGoals}</span>
                                                     <span className="font-medium truncate max-w-[34%]" title={m.clubBName}>{m.clubBName}</span>
                                                     <Crest id={m.clubBCrestAssetId} alt={m.clubBName} />
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
-                                                    {kickoff && <span className="text-xs text-gray-500">{kickoff}</span>}
+                                                    {kickoff && <span className="text-xs text-fg-muted">{kickoff}</span>}
                                                     <ResultPill r={m.resultForClub} />
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-gray-700">
-                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Chutes</span><span className="font-semibold">{m.stats.totalShots}</span></div>
-                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Gols</span><span className="font-semibold">{m.stats.totalGoals}</span></div>
-                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Passes Certos</span><span className="font-semibold">{m.stats.totalPassesMade}</span></div>
-                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Passes (%)</span><span className="font-semibold">{m.stats.passAccuracyPercent.toFixed(0)}%</span></div>
-                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between"><span>Desarmes (%)</span><span className="font-semibold">{m.stats.tackleSuccessPercent.toFixed(0)}%</span></div>
-                                                <div className="bg-gray-50 rounded p-2 flex items-center justify-between border border-gray-200"><span className="font-medium">Nota Média</span><span className="font-bold">{m.stats.avgRating.toFixed(2)}</span></div>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-fg-secondary">
+                                                <div className="bg-surface-raised rounded p-2 flex items-center justify-between"><span>Chutes</span><span className="font-semibold">{m.stats.totalShots}</span></div>
+                                                <div className="bg-surface-raised rounded p-2 flex items-center justify-between"><span>Gols</span><span className="font-semibold">{m.stats.totalGoals}</span></div>
+                                                <div className="bg-surface-raised rounded p-2 flex items-center justify-between"><span>Passes Certos</span><span className="font-semibold">{m.stats.totalPassesMade}</span></div>
+                                                <div className="bg-surface-raised rounded p-2 flex items-center justify-between"><span>Passes (%)</span><span className="font-semibold">{m.stats.passAccuracyPercent.toFixed(0)}%</span></div>
+                                                <div className="bg-surface-raised rounded p-2 flex items-center justify-between"><span>Desarmes (%)</span><span className="font-semibold">{m.stats.tackleSuccessPercent.toFixed(0)}%</span></div>
+                                                <div className="bg-surface-raised rounded p-2 flex items-center justify-between border border-border"><span className="font-medium">Nota Média</span><span className="font-bold">{m.stats.avgRating.toFixed(2)}</span></div>
                                             </div>
 
                                             <div className="mt-2 flex justify-end">
                                                 <Link
                                                     to={`/match/${m.matchId}`}
-                                                    className="inline-flex items-center gap-1 text-xs border rounded-lg px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
+                                                    className="inline-flex items-center gap-1 text-xs border rounded-lg px-3 py-1.5 bg-surface hover:bg-surface-raised text-fg-secondary shadow-sm"
                                                 >
                                                     Ver detalhes →
                                                 </Link>

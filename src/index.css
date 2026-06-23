@@ -2,6 +2,139 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================================
+   EAFC Tracker — "Broadcast" design tokens
+   Values are stored as space-separated RGB *channels* so Tailwind can compose
+   them with alpha utilities (e.g. bg-surface/80). Map lives in tailwind.config.
+   ========================================================================== */
+@layer base {
+  :root {
+    /* surfaces & text (light) */
+    --color-bg: 241 245 249;             /* #F1F5F9 page bg          */
+    --color-surface: 255 255 255;        /* #FFFFFF cards            */
+    --color-surface-raised: 248 250 252; /* #F8FAFC headers / zebra  */
+    --color-surface-sunken: 241 245 249; /* #F1F5F9 inputs / tracks  */
+
+    --color-fg: 15 23 42;                /* #0F172A primary text     */
+    --color-fg-secondary: 51 65 85;      /* #334155                  */
+    --color-fg-muted: 100 116 139;       /* #64748B                  */
+    --color-fg-subtle: 148 163 184;      /* #94A3B8                  */
+
+    --color-border: 226 232 240;         /* #E2E8F0                  */
+    --color-border-strong: 203 213 225;  /* #CBD5E1                  */
+
+    /* brand accent — interactive only (kept off green/red) */
+    --color-accent: 46 139 255;          /* #2E8BFF                  */
+    --color-accent-fg: 255 255 255;
+    --color-ring: 46 139 255;
+
+    /* semantic state — W/D/L + rating quality */
+    --color-positive: 22 163 74;         /* #16A34A win              */
+    --color-positive-soft: 220 252 231;  /* green-100 chip bg        */
+    --color-positive-fg: 21 128 61;      /* green-700 chip text      */
+    --color-warning: 202 138 4;          /* #CA8A04 draw             */
+    --color-warning-soft: 254 243 199;
+    --color-warning-fg: 180 83 9;
+    --color-negative: 220 38 38;         /* #DC2626 loss             */
+    --color-negative-soft: 254 226 226;
+    --color-negative-fg: 185 28 28;
+
+    /* rating quality ladder (statClassifier) */
+    --color-quality-poor: 220 38 38;     /* red-600    */
+    --color-quality-decent: 234 88 12;   /* orange-600 */
+    --color-quality-good: 22 163 74;     /* green-600  */
+    --color-quality-great: 37 99 235;    /* blue-600   */
+
+    /* records / MOTM */
+    --color-gold: 202 154 4;             /* #CA9A04 */
+    --color-gold-soft: 254 249 195;      /* yellow-100 */
+    --color-gold-fg: 161 98 7;           /* yellow-700 */
+
+    /* crest chip — stays light in BOTH themes so transparent crests read */
+    --color-crest-chip: 255 255 255;
+
+    /* chart chrome (read from JS, see utils/themeColors) */
+    --chart-grid: 15 23 42;              /* used at low alpha */
+    --chart-axis: 100 116 139;
+  }
+
+  .dark {
+    --color-bg: 11 18 32;                /* #0B1220 deep ink navy    */
+    --color-surface: 21 32 51;           /* #152033                  */
+    --color-surface-raised: 30 42 64;    /* #1E2A40                  */
+    --color-surface-sunken: 11 18 32;    /* #0B1220                  */
+
+    --color-fg: 226 232 240;             /* #E2E8F0                  */
+    --color-fg-secondary: 203 213 225;   /* #CBD5E1                  */
+    --color-fg-muted: 148 163 184;       /* #94A3B8                  */
+    --color-fg-subtle: 100 116 139;      /* #64748B                  */
+
+    --color-border: 36 48 67;            /* #243043                  */
+    --color-border-strong: 51 65 85;     /* #334155                  */
+
+    --color-accent: 59 151 255;          /* #3B97FF brighter blue    */
+    --color-accent-fg: 11 18 32;         /* ink text on bright blue  */
+    --color-ring: 59 151 255;
+
+    --color-positive: 34 197 94;         /* #22C55E */
+    --color-positive-soft: 20 83 45;     /* green-900 */
+    --color-positive-fg: 134 239 172;    /* green-300 */
+    --color-warning: 251 191 36;         /* #FBBF24 */
+    --color-warning-soft: 120 53 15;     /* amber-900 */
+    --color-warning-fg: 252 211 77;      /* amber-300 */
+    --color-negative: 248 113 113;       /* #F87171 */
+    --color-negative-soft: 127 29 29;    /* red-900 */
+    --color-negative-fg: 252 165 165;    /* red-300 */
+
+    --color-quality-poor: 248 113 113;   /* red-400    */
+    --color-quality-decent: 251 146 60;  /* orange-400 */
+    --color-quality-good: 74 222 128;    /* green-400  */
+    --color-quality-great: 96 165 250;   /* blue-400   */
+
+    --color-gold: 250 204 21;            /* #FACC15 */
+    --color-gold-soft: 66 32 6;          /* amber-950-ish */
+    --color-gold-fg: 253 224 71;         /* yellow-300 */
+
+    --color-crest-chip: 241 245 249;     /* near-white tile */
+
+    --chart-grid: 255 255 255;
+    --chart-axis: 148 163 184;
+  }
+
+  /* bare `border` utilities track the theme without per-call edits */
+  * {
+    border-color: rgb(var(--color-border));
+  }
+
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-bg text-fg;
+  }
+
+  /* visible keyboard focus in both themes */
+  :focus-visible {
+    outline: 2px solid rgb(var(--color-ring));
+    outline-offset: 2px;
+  }
+
+  /* smooth theme swap, disabled for reduced-motion users */
+  @media (prefers-reduced-motion: no-preference) {
+    *,
+    ::before,
+    ::after {
+      transition-property: background-color, border-color, color, fill, stroke;
+      transition-duration: 150ms;
+      transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  }
+}
+
 @layer utilities {
   .scroll-touch-x {
     -webkit-overflow-scrolling: touch;

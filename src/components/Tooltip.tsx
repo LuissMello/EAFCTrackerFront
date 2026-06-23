@@ -179,7 +179,7 @@ export function Tooltip({
   }, []);
 
   const tooltipClasses = `
-    fixed z-[9999] px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded shadow-lg
+    fixed z-[9999] px-2 py-1 text-xs font-medium text-bg bg-fg rounded shadow-lg
     pointer-events-none whitespace-pre-line
     transition-[opacity,transform] duration-150 ease-out transform-gpu
     ${isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95"}

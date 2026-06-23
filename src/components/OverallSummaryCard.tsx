@@ -1,6 +1,7 @@
 import React from "react";
 import api from "../services/api.ts";
 import { crestUrl, divisionCrestUrl, reputationTierUrl, FALLBACK_LOGO } from "../config/urls.ts";
+import { Crest } from "./ui.tsx";
 
 export type PlayoffAchievementDto = {
     seasonId: string;
@@ -85,9 +86,9 @@ const HIGHEST_PLACEMENT_LABELS: Record<string, string> = {
     "6": "Participant",
 };
 const PLAYOFF_BORDER_CLASS: Record<string, string> = {
-    "1": "border-yellow-400 bg-yellow-50",
-    "2": "border-gray-400 bg-gray-50",
-    "3": "border-amber-600 bg-amber-50",
+    "1": "border-gold bg-gold-soft",
+    "2": "border-border-strong bg-surface-raised",
+    "3": "border-amber-600 bg-amber-50 dark:bg-amber-950/40",
 };
 
 /** "CLUBS_LEAGUE_SEASON_07" / "8" → "Temporada 7" (extrai o número final). */
@@ -102,12 +103,12 @@ const TinyBar: React.FC<{ pct: number; className?: string; title?: string; color
     pct,
     className = "",
     title,
-    color = "bg-blue-600",
+    color = "bg-accent",
 }) => {
     const w = Math.max(0, Math.min(100, pct));
     return (
         <div className={`w-full ${className}`} title={title} aria-label={title}>
-            <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-surface-sunken rounded-full overflow-hidden">
                 <div className={`h-full ${color}`} style={{ width: `${w}%` }} />
             </div>
         </div>
@@ -116,15 +117,15 @@ const TinyBar: React.FC<{ pct: number; className?: string; title?: string; color
 
 const RecordBar: React.FC<{ wins: number; draws: number; losses: number }> = ({ wins, draws, losses }) => {
     const total = wins + draws + losses;
-    if (total === 0) return <div className="h-2 bg-gray-200 rounded-full" />;
+    if (total === 0) return <div className="h-2 bg-surface-sunken rounded-full" />;
     const wPct = (wins / total) * 100;
     const dPct = (draws / total) * 100;
     const lPct = (losses / total) * 100;
     return (
         <div className="flex h-2 rounded-full overflow-hidden w-full gap-px">
-            {wins > 0 && <div className="bg-green-500" style={{ width: `${wPct}%` }} title={`${wins} vitórias`} />}
-            {draws > 0 && <div className="bg-gray-400" style={{ width: `${dPct}%` }} title={`${draws} empates`} />}
-            {losses > 0 && <div className="bg-red-500" style={{ width: `${lPct}%` }} title={`${losses} derrotas`} />}
+            {wins > 0 && <div className="bg-positive" style={{ width: `${wPct}%` }} title={`${wins} vitórias`} />}
+            {draws > 0 && <div className="bg-fg-subtle" style={{ width: `${dPct}%` }} title={`${draws} empates`} />}
+            {losses > 0 && <div className="bg-negative" style={{ width: `${lPct}%` }} title={`${losses} derrotas`} />}
         </div>
     );
 };
@@ -132,8 +133,8 @@ const RecordBar: React.FC<{ wins: number; draws: number; losses: number }> = ({ 
 function SkeletonCard({ colSpan = 1 }: { colSpan?: number }) {
     return (
         <div className={`p-2 rounded-lg border animate-pulse ${colSpan === 2 ? "col-span-2" : ""}`}>
-            <div className="h-2.5 bg-gray-200 rounded w-1/2 mb-2" />
-            <div className="h-5 bg-gray-200 rounded w-3/4" />
+            <div className="h-2.5 bg-surface-sunken rounded w-1/2 mb-2" />
+            <div className="h-5 bg-surface-sunken rounded w-3/4" />
         </div>
     );
 }
@@ -209,20 +210,15 @@ const OverallSummaryCard: React.FC<Props> = ({
     const hpPct = Number.isFinite(hpNum) ? ((6 - hpNum) / 5) * 100 : 0;
 
     return (
-        <div className={`rounded-xl border p-3 bg-white ${className ?? ""}`}>
+        <div className={`rounded-xl border p-3 bg-surface ${className ?? ""}`}>
             {/* Cabeçalho */}
             <div className="flex items-center justify-between pb-2 border-b mb-3">
                 <div className="flex items-center gap-2">
-                    <img
-                        src={crestUrl(crestAssetId)}
-                        onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                        alt={`Escudo ${clubName}`}
-                        className="w-8 h-8 rounded-full bg-white border"
-                    />
+                    <Crest src={crestUrl(crestAssetId)} alt={`Escudo ${clubName}`} size={32} rounded="rounded-full" />
                     <div className="font-semibold">{clubName ?? `Clube ${clubId}`}</div>
                 </div>
                 {o?.updatedAtUtc && (
-                    <span className="text-xs text-gray-400" title={new Date(o.updatedAtUtc).toLocaleString()}>
+                    <span className="text-xs text-fg-subtle" title={new Date(o.updatedAtUtc).toLocaleString()}>
                         Atualizado {formatTimeAgo(o.updatedAtUtc)}
                     </span>
                 )}
@@ -243,25 +239,25 @@ const OverallSummaryCard: React.FC<Props> = ({
                     <SkeletonCard colSpan={2} />
                 </div>
             ) : error ? (
-                <div className="mt-3 text-sm text-red-700">{error}</div>
+                <div className="mt-3 text-sm text-negative">{error}</div>
             ) : !o ? (
-                <div className="mt-3 text-sm text-gray-600">Sem dados históricos para este clube.</div>
+                <div className="mt-3 text-sm text-fg-muted">Sem dados históricos para este clube.</div>
             ) : (
                 <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 text-sm">
                     {/* Skill Rating + Reputation */}
                     <div className="p-2 rounded-lg border">
-                        <div className="text-xs text-gray-500 mb-1">Skill Rating</div>
-                        <div className="text-xl font-bold text-gray-900">{o?.skillRating ?? "–"}</div>
+                        <div className="text-xs text-fg-muted mb-1">Skill Rating</div>
+                        <div className="text-xl font-bold text-fg">{o?.skillRating ?? "–"}</div>
                         <TinyBar pct={repPct} className="mt-1.5" title={`Reputation: ${repLabel}`} />
                         <div className="mt-1.5 flex items-center justify-between">
-                            <div className="text-[11px] text-gray-600">{repLabel}</div>
+                            <div className="text-[11px] text-fg-muted">{repLabel}</div>
                             {repUrl && <img src={repUrl} alt={`Reputação ${repKey}`} className="w-8 h-8 object-contain" />}
                         </div>
                     </div>
 
                     {/* Divisão Atual */}
                     <div className="p-2 rounded-lg border flex flex-col">
-                        <div className="text-xs text-gray-500 mb-1">Divisão Atual</div>
+                        <div className="text-xs text-fg-muted mb-1">Divisão Atual</div>
                         <div className="flex-1 flex flex-col items-center justify-center">
                             {currDivUrl ? (
                                 <>
@@ -273,17 +269,17 @@ const OverallSummaryCard: React.FC<Props> = ({
                                     />
                                 </>
                             ) : (
-                                <div className="text-sm text-gray-400">–</div>
+                                <div className="text-sm text-fg-subtle">–</div>
                             )}
                         </div>
                     </div>
 
                     {/* Melhor Divisão */}
                     <div className="p-2 rounded-lg border">
-                        <div className="text-xs text-gray-500 mb-1">Melhor Divisão</div>
+                        <div className="text-xs text-fg-muted mb-1">Melhor Divisão</div>
                         <TinyBar pct={hpPct} className="mt-0.5" title={`Placement: ${highestLabel}`} />
                         <div className="mt-1.5 flex items-center justify-between">
-                            <div className="text-[11px] font-medium text-gray-700">{highestLabel}</div>
+                            <div className="text-[11px] font-medium text-fg-secondary">{highestLabel}</div>
                             {bestDivUrl && (
                                 <img
                                     src={bestDivUrl}
@@ -297,7 +293,7 @@ const OverallSummaryCard: React.FC<Props> = ({
 
                     {/* Jogos */}
                     <div className="p-2 rounded-lg border">
-                        <div className="text-xs text-gray-500 mb-1">Jogos (Total / Liga / Playoff)</div>
+                        <div className="text-xs text-fg-muted mb-1">Jogos (Total / Liga / Playoff)</div>
                         <div className="font-semibold">
                             {games} / {toNum(o?.leagueAppearances)} / {toNum(o?.gamesPlayedPlayoff)}
                         </div>
@@ -305,55 +301,55 @@ const OverallSummaryCard: React.FC<Props> = ({
 
                     {/* V/E/D com RecordBar */}
                     <div className="p-2 rounded-lg border col-span-2">
-                        <div className="text-xs text-gray-500 mb-1.5">Resultados</div>
+                        <div className="text-xs text-fg-muted mb-1.5">Resultados</div>
                         <RecordBar wins={wins} draws={draws} losses={losses} />
                         <div className="mt-1.5 flex items-center justify-between text-xs">
                             <span className="flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-                                <span className="font-semibold text-green-700">{wins}V</span>
+                                <span className="w-2 h-2 rounded-full bg-positive inline-block" />
+                                <span className="font-semibold text-positive">{wins}V</span>
                             </span>
                             <span className="flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-gray-400 inline-block" />
-                                <span className="font-semibold text-gray-600">{draws}E</span>
+                                <span className="w-2 h-2 rounded-full bg-fg-subtle inline-block" />
+                                <span className="font-semibold text-fg-muted">{draws}E</span>
                             </span>
                             <span className="flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-                                <span className="font-semibold text-red-700">{losses}D</span>
+                                <span className="w-2 h-2 rounded-full bg-negative inline-block" />
+                                <span className="font-semibold text-negative">{losses}D</span>
                             </span>
-                            <span className="text-gray-400">{winPct.toFixed(1)}% vitórias</span>
+                            <span className="text-fg-subtle">{winPct.toFixed(1)}% vitórias</span>
                         </div>
                     </div>
 
                     {/* Gols com diferença */}
                     <div className="p-2 rounded-lg border col-span-2">
-                        <div className="text-xs text-gray-500 mb-1">Gols</div>
+                        <div className="text-xs text-fg-muted mb-1">Gols</div>
                         <div className="flex items-center gap-3">
                             <span className="font-semibold">
-                                {goalsFor} <span className="text-gray-400 font-normal text-xs">feitos</span>
+                                {goalsFor} <span className="text-fg-subtle font-normal text-xs">feitos</span>
                             </span>
-                            <span className="text-gray-300">/</span>
+                            <span className="text-fg-subtle">/</span>
                             <span className="font-semibold">
-                                {goalsAgainst} <span className="text-gray-400 font-normal text-xs">sofridos</span>
+                                {goalsAgainst} <span className="text-fg-subtle font-normal text-xs">sofridos</span>
                             </span>
-                            <span className={`ml-auto text-sm font-bold ${goalDiff > 0 ? "text-green-600" : goalDiff < 0 ? "text-red-600" : "text-gray-400"}`}>
+                            <span className={`ml-auto text-sm font-bold ${goalDiff > 0 ? "text-positive" : goalDiff < 0 ? "text-negative" : "text-fg-subtle"}`}>
                                 {goalDiff > 0 ? `+${goalDiff}` : goalDiff}
                             </span>
                         </div>
                     </div>
 
                     {/* Promoções */}
-                    <div className={`p-2 rounded-lg border ${promotions > 0 ? "bg-green-50 border-green-200" : ""}`}>
-                        <div className="text-xs text-gray-500 mb-1">Promoções</div>
-                        <div className={`font-semibold flex items-center gap-1 ${promotions > 0 ? "text-green-700" : "text-gray-700"}`}>
+                    <div className={`p-2 rounded-lg border ${promotions > 0 ? "bg-positive-soft border-positive/30" : ""}`}>
+                        <div className="text-xs text-fg-muted mb-1">Promoções</div>
+                        <div className={`font-semibold flex items-center gap-1 ${promotions > 0 ? "text-positive-fg" : "text-fg-secondary"}`}>
                             {promotions > 0 && <span>↑</span>}
                             {promotions}
                         </div>
                     </div>
 
                     {/* Rebaixamentos */}
-                    <div className={`p-2 rounded-lg border ${relegations > 0 ? "bg-red-50 border-red-200" : ""}`}>
-                        <div className="text-xs text-gray-500 mb-1">Rebaixamentos</div>
-                        <div className={`font-semibold flex items-center gap-1 ${relegations > 0 ? "text-red-700" : "text-gray-700"}`}>
+                    <div className={`p-2 rounded-lg border ${relegations > 0 ? "bg-negative-soft border-negative/30" : ""}`}>
+                        <div className="text-xs text-fg-muted mb-1">Rebaixamentos</div>
+                        <div className={`font-semibold flex items-center gap-1 ${relegations > 0 ? "text-negative-fg" : "text-fg-secondary"}`}>
                             {relegations > 0 && <span>↓</span>}
                             {relegations}
                         </div>
@@ -361,8 +357,8 @@ const OverallSummaryCard: React.FC<Props> = ({
 
                     {/* Win Streak */}
                     <div className="p-2 rounded-lg border">
-                        <div className="text-xs text-gray-500 mb-1">Win Streak</div>
-                        <div className={`font-semibold flex items-center gap-1 ${wstreak >= 5 ? "text-orange-600" : wstreak > 0 ? "text-green-700" : "text-gray-700"}`}>
+                        <div className="text-xs text-fg-muted mb-1">Win Streak</div>
+                        <div className={`font-semibold flex items-center gap-1 ${wstreak >= 5 ? "text-gold" : wstreak > 0 ? "text-positive" : "text-fg-secondary"}`}>
                             {wstreak > 0 && <span>{wstreak >= 5 ? "🔥" : "✓"}</span>}
                             {wstreak}
                         </div>
@@ -370,8 +366,8 @@ const OverallSummaryCard: React.FC<Props> = ({
 
                     {/* Unbeaten Streak */}
                     <div className="p-2 rounded-lg border">
-                        <div className="text-xs text-gray-500 mb-1">Sem Derrota</div>
-                        <div className={`font-semibold flex items-center gap-1 ${unbeaten >= 10 ? "text-orange-600" : unbeaten > 0 ? "text-green-700" : "text-gray-700"}`}>
+                        <div className="text-xs text-fg-muted mb-1">Sem Derrota</div>
+                        <div className={`font-semibold flex items-center gap-1 ${unbeaten >= 10 ? "text-gold" : unbeaten > 0 ? "text-positive" : "text-fg-secondary"}`}>
                             {unbeaten > 0 && <span>{unbeaten >= 10 ? "🔥" : "✓"}</span>}
                             {unbeaten}
                         </div>
@@ -379,16 +375,16 @@ const OverallSummaryCard: React.FC<Props> = ({
 
                     {/* Histórico de Playoffs */}
                     <div className="p-2 rounded-lg border col-span-2 xl:col-span-4">
-                        <div className="text-xs text-gray-500 mb-1.5">Histórico de Playoffs</div>
+                        <div className="text-xs text-fg-muted mb-1.5">Histórico de Playoffs</div>
                         {(po ?? []).length === 0 ? (
-                            <div className="text-xs text-gray-600">Sem temporadas concluídas.</div>
+                            <div className="text-xs text-fg-muted">Sem temporadas concluídas.</div>
                         ) : (
                             <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
                                 {(po ?? []).slice(0, maxPlayoffs).map((p) => {
                                     const crest = divisionCrestUrl(p.bestDivision) ?? FALLBACK_LOGO;
                                     const hpKey = asNonNegativeIntString(p.bestFinishGroup) ?? "";
                                     const hpLabel = HIGHEST_PLACEMENT_LABELS[hpKey] ?? p.bestFinishGroup ?? "–";
-                                    const cardCls = PLAYOFF_BORDER_CLASS[hpKey] ?? "border-gray-200 bg-white";
+                                    const cardCls = PLAYOFF_BORDER_CLASS[hpKey] ?? "border-border bg-surface";
                                     const seasonLabel = formatSeasonLabel(p.seasonName, p.seasonId);
                                     return (
                                         <div
@@ -403,7 +399,7 @@ const OverallSummaryCard: React.FC<Props> = ({
                                                 className="w-9 h-9 object-contain"
                                             />
                                             <div className="mt-1 text-[10px] leading-tight font-semibold">{hpLabel}</div>
-                                            <div className="text-[9px] text-gray-500 leading-tight whitespace-nowrap">{seasonLabel}</div>
+                                            <div className="text-[9px] text-fg-muted leading-tight whitespace-nowrap">{seasonLabel}</div>
                                         </div>
                                     );
                                 })}

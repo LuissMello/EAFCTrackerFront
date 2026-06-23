@@ -104,7 +104,7 @@ export default function MultiClubPicker() {
             {/* Botão trigger */}
             <button
                 onClick={() => setOpen((o) => !o)}
-                className="flex items-center gap-2 bg-white text-blue-600 px-2 py-1 rounded border"
+                className="flex items-center gap-2 bg-white/10 hover:bg-white/15 text-slate-200 px-2 py-1 rounded border border-white/10 transition-colors"
                 title={
                     selectedClubs.length > 0
                         ? selectedClubs.map((c) => c.clubName ?? c.clubId).join(", ")
@@ -120,7 +120,7 @@ export default function MultiClubPicker() {
                                     src={crestUrl(c.crestAssetId)}
                                     onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_LOGO)}
                                     alt=""
-                                    className="w-6 h-6 rounded-full border bg-white"
+                                    className="w-6 h-6 rounded-full border bg-surface"
                                 />
                             ))}
                         </div>
@@ -144,7 +144,7 @@ export default function MultiClubPicker() {
 
             {/* Dropdown — sempre montado para animação */}
             <div
-                className={`absolute right-0 mt-2 w-96 bg-white text-black rounded-xl shadow-lg border z-50 origin-top transition-all duration-150 ${
+                className={`absolute right-0 mt-2 w-96 bg-surface text-fg rounded-xl shadow-lg border z-50 origin-top transition-all duration-150 ${
                     open ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none"
                 }`}
             >
@@ -155,11 +155,11 @@ export default function MultiClubPicker() {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder="Buscar por nome ou ID…"
-                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 pr-8 text-sm"
+                        className="w-full px-3 py-2 bg-surface-sunken border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent pr-8 text-sm"
                     />
                     {query && (
                         <button
-                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-muted text-lg leading-none"
                             onClick={() => setQuery("")}
                             tabIndex={-1}
                         >
@@ -168,14 +168,14 @@ export default function MultiClubPicker() {
                     )}
                 </div>
 
-                {loading && <div className="p-3 text-sm text-gray-500">Carregando…</div>}
-                {err && <div className="p-3 text-sm text-red-600">{err}</div>}
+                {loading && <div className="p-3 text-sm text-fg-muted">Carregando…</div>}
+                {err && <div className="p-3 text-sm text-negative">{err}</div>}
 
                 {!loading && !err && (
                     <>
                         <ul className="max-h-80 overflow-auto">
                             {filtered.length === 0 && (
-                                <li className="p-3 text-sm text-gray-600">Nenhum clube encontrado.</li>
+                                <li className="p-3 text-sm text-fg-muted">Nenhum clube encontrado.</li>
                             )}
                             {filtered.map((c) => {
                                 const checked = selectedIds.has(c.clubId);
@@ -184,19 +184,19 @@ export default function MultiClubPicker() {
                                         key={c.clubId}
                                         className={`px-3 py-2 cursor-pointer flex items-center gap-2 transition-colors border-l-2 ${
                                             checked
-                                                ? "bg-blue-50 border-l-blue-500"
-                                                : "border-l-transparent hover:bg-blue-50"
+                                                ? "bg-accent/10 border-l-accent"
+                                                : "border-l-transparent hover:bg-surface-raised"
                                         }`}
                                         onClick={() => toggleClub(c)}
                                     >
                                         {/* Checkbox customizado */}
                                         <span
                                             className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
-                                                checked ? "bg-blue-500 border-blue-500" : "bg-white border-gray-300"
+                                                checked ? "bg-accent border-accent" : "bg-surface border-border-strong"
                                             }`}
                                         >
                                             {checked && (
-                                                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                <svg className="w-2.5 h-2.5 text-accent-fg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                                 </svg>
                                             )}
@@ -205,11 +205,11 @@ export default function MultiClubPicker() {
                                             src={crestUrl(c.crestAssetId)}
                                             onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_LOGO)}
                                             alt=""
-                                            className="w-7 h-7 rounded-full border bg-white flex-shrink-0"
+                                            className="w-7 h-7 rounded-full border bg-surface flex-shrink-0"
                                         />
                                         <div className="min-w-0 flex-1">
-                                            <div className="font-medium leading-tight truncate text-sm text-gray-900">{c.name}</div>
-                                            <div className="text-xs text-gray-500">ID: {c.clubId}</div>
+                                            <div className="font-medium leading-tight truncate text-sm text-fg">{c.name}</div>
+                                            <div className="text-xs text-fg-muted">ID: {c.clubId}</div>
                                         </div>
                                     </li>
                                 );
@@ -218,7 +218,7 @@ export default function MultiClubPicker() {
 
                         {/* Footer com contagem */}
                         <div className="p-2 border-t flex items-center justify-between">
-                            <span className="text-xs text-gray-400">
+                            <span className="text-xs text-fg-subtle">
                                 {selectedClubs.length > 0
                                     ? `${selectedClubs.length} selecionado${selectedClubs.length !== 1 ? "s" : ""} de ${clubs.length}`
                                     : `${clubs.length} clube${clubs.length !== 1 ? "s" : ""}`}
@@ -226,14 +226,14 @@ export default function MultiClubPicker() {
                             <div className="flex items-center gap-2">
                                 {selectedClubs.length > 0 && (
                                     <button
-                                        className="text-sm px-2 py-1 rounded border text-red-600 hover:bg-red-50"
+                                        className="text-sm px-2 py-1 rounded border text-negative hover:bg-negative-soft"
                                         onClick={clearAll}
                                     >
                                         Limpar
                                     </button>
                                 )}
                                 <button
-                                    className="text-sm px-2 py-1 rounded border hover:bg-gray-50"
+                                    className="text-sm px-2 py-1 rounded border hover:bg-surface-raised"
                                     onClick={() => setOpen(false)}
                                 >
                                     Fechar

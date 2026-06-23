@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../services/api.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { useClub } from "../hooks/useClub.tsx";
+import { Card, SectionHeader, RatingPill } from "../components/ui.tsx";
 
 interface RecordMatchDto {
     matchId: number;
@@ -56,64 +57,68 @@ function fmtDate(iso: string) {
 }
 
 const KpiCard: React.FC<{ label: string; value: number | string; sub?: string }> = ({ label, value, sub }) => (
-    <div className="rounded-xl border bg-white p-4 flex flex-col gap-1 shadow-sm">
-        <div className="text-2xl font-black tabular-nums text-gray-900">{value}</div>
-        <div className="text-xs font-medium text-gray-500">{label}</div>
-        {sub && <div className="text-[11px] text-gray-400">{sub}</div>}
-    </div>
+    <Card className="p-4 flex flex-col gap-1">
+        <div className="text-2xl font-display font-black tabular-nums text-fg">{value}</div>
+        <div className="text-xs font-medium text-fg-muted">{label}</div>
+        {sub && <div className="text-[11px] text-fg-subtle">{sub}</div>}
+    </Card>
 );
 
 const StreakCard: React.FC<{ label: string; value: number; highlight?: boolean }> = ({ label, value, highlight }) => (
-    <div className={`rounded-xl border p-4 flex flex-col gap-1 shadow-sm ${highlight ? "bg-gray-900 text-white border-gray-700" : "bg-white"}`}>
-        <div className={`text-2xl font-black tabular-nums ${highlight ? "text-white" : "text-gray-900"}`}>{value}</div>
-        <div className={`text-xs font-medium ${highlight ? "text-gray-400" : "text-gray-500"}`}>{label}</div>
-    </div>
+    <Card className={`p-4 flex flex-col gap-1 ${highlight ? "border-gold/40 bg-gold-soft" : ""}`}>
+        <div className={`text-2xl font-display font-black tabular-nums ${highlight ? "text-gold-fg" : "text-fg"}`}>{value}</div>
+        <div className={`text-xs font-medium ${highlight ? "text-gold-fg/80" : "text-fg-muted"}`}>{label}</div>
+    </Card>
 );
 
 const MatchRecordCard: React.FC<{ title: string; match: RecordMatchDto | null }> = ({ title, match }) => (
-    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b bg-gray-50">
-            <span className="font-semibold text-gray-800 text-sm">{title}</span>
+    <Card className="overflow-hidden">
+        <div className="px-4 py-3 border-b border-border bg-surface-raised">
+            <span className="font-semibold text-fg text-sm">{title}</span>
         </div>
         <div className="px-4 py-4">
             {match ? (
                 <div className="flex flex-col gap-1">
-                    <Link to={`/match/${match.matchId}`} className="text-xl font-black text-gray-900 hover:text-blue-700 transition-colors">
+                    <Link to={`/match/${match.matchId}`} className="text-xl font-display font-black text-fg hover:text-accent transition-colors">
                         {match.goalsFor} — {match.goalsAgainst}
                     </Link>
-                    <div className="text-sm text-gray-600">vs {match.opponentName ?? "Adversário"}</div>
-                    <div className="text-xs text-gray-400">{fmtDate(match.timestamp)}</div>
+                    <div className="text-sm text-fg-muted">vs {match.opponentName ?? "Adversário"}</div>
+                    <div className="text-xs text-fg-subtle">{fmtDate(match.timestamp)}</div>
                 </div>
             ) : (
-                <div className="text-sm text-gray-400">Sem dados</div>
+                <div className="text-sm text-fg-subtle">Sem dados</div>
             )}
         </div>
-    </div>
+    </Card>
 );
 
-const PlayerRecordCard: React.FC<{ title: string; record: RecordPlayerMatchDto | null; unit?: string }> = ({ title, record, unit }) => (
-    <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 min-w-0">
-        <div className="px-4 py-3 border-b bg-gray-50">
-            <span className="font-semibold text-gray-800 text-sm">{title}</span>
+const PlayerRecordCard: React.FC<{ title: string; record: RecordPlayerMatchDto | null; unit?: string; rating?: boolean }> = ({ title, record, unit, rating }) => (
+    <Card className="overflow-hidden flex-1 min-w-0">
+        <div className="px-4 py-3 border-b border-border bg-surface-raised">
+            <span className="font-semibold text-fg text-sm">{title}</span>
         </div>
         <div className="px-4 py-4">
             {record ? (
                 <div className="flex flex-col gap-1">
-                    <div className="text-2xl font-black text-gray-900">{record.value}{unit ? ` ${unit}` : ""}</div>
-                    <div className="text-sm font-semibold text-gray-700">{record.playerName}</div>
-                    <Link to={`/match/${record.matchId}`} className="text-xs text-gray-400 hover:text-blue-600 underline underline-offset-2">
+                    {rating ? (
+                        <RatingPill value={record.value} size="lg" className="self-start" />
+                    ) : (
+                        <div className="text-2xl font-display font-black text-fg">{record.value}{unit ? ` ${unit}` : ""}</div>
+                    )}
+                    <div className="text-sm font-semibold text-fg-secondary">{record.playerName}</div>
+                    <Link to={`/match/${record.matchId}`} className="text-xs text-fg-subtle hover:text-accent underline underline-offset-2">
                         {fmtDate(record.timestamp)}
                     </Link>
                 </div>
             ) : (
-                <div className="text-sm text-gray-400">Sem dados</div>
+                <div className="text-sm text-fg-subtle">Sem dados</div>
             )}
         </div>
-    </div>
+    </Card>
 );
 
 const SkeletonBlock: React.FC<{ h?: string }> = ({ h = "h-20" }) => (
-    <div className={`rounded-xl border bg-gray-100 animate-pulse ${h}`} />
+    <div className={`rounded-xl border bg-surface-sunken animate-pulse ${h}`} />
 );
 
 export default function Records() {
@@ -147,24 +152,21 @@ export default function Records() {
     if (activeClubIds.length === 0) {
         return (
             <div className="p-6 max-w-5xl mx-auto">
-                <div className="bg-white rounded-xl border shadow-sm p-10 text-center text-gray-500">
+                <Card className="p-10 text-center text-fg-muted">
                     <div className="text-4xl mb-3">🏆</div>
                     <div className="font-semibold">Nenhum clube selecionado</div>
                     <div className="text-sm mt-1">Selecione um clube no menu superior para ver os recordes.</div>
-                </div>
+                </Card>
             </div>
         );
     }
 
     return (
         <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
-            <div>
-                <h1 className="text-xl font-black text-gray-900 tracking-tight">Recordes & Curiosidades</h1>
-                <p className="text-sm text-gray-500 mt-0.5">Melhores e piores momentos do clube</p>
-            </div>
+            <SectionHeader eyebrow="Clube" title="Recordes & Curiosidades" />
 
             {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">{error}</div>
+                <div className="bg-negative-soft border border-negative/30 rounded-xl p-4 text-sm text-negative-fg">{error}</div>
             )}
 
             {loading && (
@@ -184,7 +186,7 @@ export default function Records() {
             {!loading && data && (
                 <>
                     <div>
-                        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Totais Gerais</h2>
+                        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wide mb-3">Totais Gerais</h2>
                         <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
                             <KpiCard label="Partidas" value={data.totalMatches} />
                             <KpiCard label="Vitórias" value={data.totalWins} />
@@ -196,7 +198,7 @@ export default function Records() {
                     </div>
 
                     <div>
-                        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Recordes de Partidas</h2>
+                        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wide mb-3">Recordes de Partidas</h2>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <MatchRecordCard title="Maior Goleada" match={data.biggestWin} />
                             <MatchRecordCard title="Maior Derrota" match={data.biggestLoss} />
@@ -205,7 +207,7 @@ export default function Records() {
                     </div>
 
                     <div>
-                        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Sequências</h2>
+                        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wide mb-3">Sequências</h2>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             <StreakCard label="Maior Sequência de Vitórias" value={data.longestWinStreak} />
                             <StreakCard label="Maior Sequência Invicta" value={data.longestUnbeatenStreak} />
@@ -217,60 +219,60 @@ export default function Records() {
                     </div>
 
                     <div>
-                        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Recordes Individuais por Partida</h2>
+                        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wide mb-3">Recordes Individuais por Partida</h2>
                         <div className="flex flex-col sm:flex-row gap-3">
                             <PlayerRecordCard title="Mais Gols numa Partida" record={data.mostGoalsInMatch} />
                             <PlayerRecordCard title="Mais Assistências numa Partida" record={data.mostAssistsInMatch} />
-                            <PlayerRecordCard title="Maior Nota" record={data.highestRating} />
+                            <PlayerRecordCard title="Maior Nota" record={data.highestRating} rating />
                             <PlayerRecordCard title="Mais Defesas (GK)" record={data.mostSavesInMatch} />
                         </div>
                     </div>
 
                     <div>
-                        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Recordes de Carreira</h2>
+                        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wide mb-3">Recordes de Carreira</h2>
                         <div className="flex flex-col sm:flex-row gap-3">
                             <PlayerRecordCard title="Mais Cartões Vermelhos (Carreira)" record={data.mostRedCardsCareer} />
                             <PlayerRecordCard title="Mais MoM (Carreira)" record={data.mostMoMCareer} />
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-                        <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
-                            <span className="font-semibold text-gray-800">Hat-tricks</span>
+                    <Card className="overflow-hidden">
+                        <div className="px-4 py-3 border-b border-border bg-surface-raised flex items-center justify-between">
+                            <span className="font-semibold text-gold-fg">⚽ Hat-tricks</span>
                             {data.hatTricks.length > 0 && (
-                                <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{data.hatTricks.length}</span>
+                                <span className="text-xs bg-gold-soft text-gold-fg px-2 py-0.5 rounded-full">{data.hatTricks.length}</span>
                             )}
                         </div>
                         {data.hatTricks.length === 0 ? (
-                            <div className="px-4 py-10 text-center text-sm text-gray-400">
+                            <div className="px-4 py-10 text-center text-sm text-fg-subtle">
                                 Nenhum hat-trick registrado ainda.
                             </div>
                         ) : (
-                            <div className="divide-y">
+                            <div className="divide-y divide-border">
                                 {data.hatTricks.map((ht, i) => (
-                                    <div key={i} className="px-4 py-3 hover:bg-gray-50 flex items-center gap-3 transition-colors">
+                                    <div key={i} className="px-4 py-3 hover:bg-surface-raised flex items-center gap-3 transition-colors">
                                         <Link
                                             to={`/match/${ht.matchId}`}
-                                            className="text-xs text-gray-400 hover:text-gray-700 underline underline-offset-2 whitespace-nowrap"
+                                            className="text-xs text-fg-subtle hover:text-fg-secondary underline underline-offset-2 whitespace-nowrap"
                                         >
                                             {fmtDate(ht.timestamp)}
                                         </Link>
-                                        <span className="font-semibold text-gray-800 flex-1">{ht.playerName}</span>
-                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                        <span className="font-semibold text-fg flex-1">{ht.playerName}</span>
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-gold-soft text-gold-fg border border-gold/30">
                                             {ht.goals} gols
                                         </span>
                                     </div>
                                 ))}
                             </div>
                         )}
-                    </div>
+                    </Card>
                 </>
             )}
 
             {!loading && !data && !error && activeClubIds.length > 0 && (
-                <div className="bg-white rounded-xl border shadow-sm p-10 text-center text-gray-500">
+                <Card className="p-10 text-center text-fg-muted">
                     <div className="font-semibold">Sem dados para exibir</div>
-                </div>
+                </Card>
             )}
         </div>
     );

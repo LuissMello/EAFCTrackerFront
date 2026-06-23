@@ -20,44 +20,44 @@ function useNumberFormats() {
 }
 
 function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-200 rounded-2xl ${className}`} />;
+  return <div className={`animate-pulse bg-surface-sunken rounded-2xl ${className}`} />;
 }
 
 function qualityBarColor(level: string): string {
   switch (level) {
-    case "poor":    return "bg-red-500";
-    case "decent":  return "bg-orange-500";
-    case "good":    return "bg-green-500";
-    case "veryGood":return "bg-blue-500";
-    default:        return "bg-blue-500";
+    case "poor":    return "bg-quality-poor";
+    case "decent":  return "bg-quality-decent";
+    case "good":    return "bg-quality-good";
+    case "veryGood":return "bg-quality-great";
+    default:        return "bg-quality-great";
   }
 }
 
 function ratingColor(rating: number): string {
-  if (rating >= 7.5) return "text-blue-600";
-  if (rating >= 7.0) return "text-green-600";
-  if (rating >= 6.0) return "text-orange-500";
-  return "text-red-600";
+  if (rating >= 7.5) return "text-quality-great";
+  if (rating >= 7.0) return "text-quality-good";
+  if (rating >= 6.0) return "text-quality-decent";
+  return "text-quality-poor";
 }
 
 function ratingBarColor(rating: number): string {
-  if (rating >= 7.5) return "bg-blue-500";
-  if (rating >= 7.0) return "bg-green-500";
-  if (rating >= 6.0) return "bg-orange-500";
-  return "bg-red-500";
+  if (rating >= 7.5) return "bg-quality-great";
+  if (rating >= 7.0) return "bg-quality-good";
+  if (rating >= 6.0) return "bg-quality-decent";
+  return "bg-quality-poor";
 }
 
 const QUALITY_TEXT_COLOR: Record<string, string> = {
-  poor:    "text-red-600",
-  decent:  "text-orange-500",
-  good:    "text-green-600",
-  veryGood:"text-blue-600",
+  poor:    "text-quality-poor",
+  decent:  "text-quality-decent",
+  good:    "text-quality-good",
+  veryGood:"text-quality-great",
 };
 
-function TinyBar({ value, color = "bg-blue-500" }: { value: number; color?: string }) {
+function TinyBar({ value, color = "bg-quality-great" }: { value: number; color?: string }) {
   const w = Math.max(0, Math.min(100, value));
   return (
-    <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden mt-1.5">
+    <div className="w-full h-1 bg-surface-sunken rounded-full overflow-hidden mt-1.5">
       <div className={`h-full rounded-full ${color}`} style={{ width: `${w}%` }} />
     </div>
   );
@@ -65,12 +65,12 @@ function TinyBar({ value, color = "bg-blue-500" }: { value: number; color?: stri
 
 function RecordBar({ wins, draws, losses }: { wins: number; draws: number; losses: number }) {
   const total = wins + draws + losses;
-  if (total === 0) return <div className="h-1 bg-gray-100 rounded-full mt-1.5" />;
+  if (total === 0) return <div className="h-1 bg-surface-sunken rounded-full mt-1.5" />;
   return (
     <div className="flex h-1 rounded-full overflow-hidden w-full gap-px mt-1.5">
-      {wins   > 0 && <div className="bg-green-500" style={{ width: `${(wins   / total) * 100}%` }} />}
-      {draws  > 0 && <div className="bg-gray-400"  style={{ width: `${(draws  / total) * 100}%` }} />}
-      {losses > 0 && <div className="bg-red-500"   style={{ width: `${(losses / total) * 100}%` }} />}
+      {wins   > 0 && <div className="bg-positive" style={{ width: `${(wins   / total) * 100}%` }} />}
+      {draws  > 0 && <div className="bg-fg-subtle"  style={{ width: `${(draws  / total) * 100}%` }} />}
+      {losses > 0 && <div className="bg-negative"   style={{ width: `${(losses / total) * 100}%` }} />}
     </div>
   );
 }
@@ -96,14 +96,14 @@ function StatCard({
   subQuality?: QualityInfo | null;
 }) {
   const quality = statType && rawValue !== undefined ? classifyStat(statType, rawValue) : null;
-  const subColorClass = subQuality ? QUALITY_TEXT_COLOR[subQuality.level] : "text-gray-500";
+  const subColorClass = subQuality ? QUALITY_TEXT_COLOR[subQuality.level] : "text-fg-muted";
   const sizeClass = valueSize === "2xl" ? "text-2xl" : valueSize === "xl" ? "text-xl" : "text-lg";
 
   return (
-    <div className="rounded-2xl border bg-white shadow-sm p-4 flex flex-col gap-1 hover:shadow-md transition-shadow min-w-0">
+    <div className="rounded-2xl border bg-surface shadow-sm p-4 flex flex-col gap-1 hover:shadow-md transition-shadow min-w-0">
       {/* Header: label + quality dot */}
       <div className="flex items-center justify-between gap-1 min-w-0">
-        <div className="text-xs text-gray-500 truncate leading-tight">{label}</div>
+        <div className="text-xs text-fg-muted truncate leading-tight">{label}</div>
         {quality && (
           <StatQualityIndicator quality={quality} size="small" statType={statType} value={rawValue} />
         )}
@@ -143,7 +143,7 @@ export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }
   if (!loading && !clubStats && !error) {
     return (
       <section className="mb-6">
-        <div className="p-3 bg-gray-50 rounded border text-gray-700">Sem estatísticas de clube disponíveis.</div>
+        <div className="p-3 bg-surface-raised rounded border text-fg-secondary">Sem estatísticas de clube disponíveis.</div>
       </section>
     );
   }
@@ -151,7 +151,7 @@ export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }
   if (error) {
     return (
       <section className="mb-6">
-        <div className="p-3 bg-red-50 rounded border border-red-200 text-red-700">{error}</div>
+        <div className="p-3 bg-negative-soft rounded border border-negative/30 text-negative-fg">{error}</div>
       </section>
     );
   }
@@ -184,12 +184,12 @@ export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }
       value: int.format(clubStats.totalGoals),
       valueSize: "2xl" as const,
       sub: (
-        <span className="flex flex-wrap gap-x-2 gap-y-0.5 text-gray-500">
-          <span><strong className="text-gray-700">{int.format(clubStats.totalAssists)}</strong> assist.</span>
+        <span className="flex flex-wrap gap-x-2 gap-y-0.5 text-fg-muted">
+          <span><strong className="text-fg-secondary">{int.format(clubStats.totalAssists)}</strong> assist.</span>
           <span>·</span>
-          <span><strong className="text-gray-700">{int.format(clubStats.totalPreAssists ?? 0)}</strong> pré</span>
+          <span><strong className="text-fg-secondary">{int.format(clubStats.totalPreAssists ?? 0)}</strong> pré</span>
           <span>·</span>
-          <span className={goalDiff > 0 ? "text-green-600 font-medium" : goalDiff < 0 ? "text-red-600 font-medium" : ""}>
+          <span className={goalDiff > 0 ? "text-positive font-medium" : goalDiff < 0 ? "text-negative font-medium" : ""}>
             {goalDiff > 0 ? `+${goalDiff}` : goalDiff} saldo
           </span>
         </span>
@@ -203,7 +203,7 @@ export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }
       sub: `${p1.format(clubStats.goalAccuracyPercent)}% de conversão`,
       statType: "shotToGoalConversion",
       rawValue: clubStats.goalAccuracyPercent,
-      bar: <TinyBar value={clubStats.goalAccuracyPercent} color={shotQuality ? qualityBarColor(shotQuality.level) : "bg-blue-500"} />,
+      bar: <TinyBar value={clubStats.goalAccuracyPercent} color={shotQuality ? qualityBarColor(shotQuality.level) : "bg-quality-great"} />,
       subQuality: shotQuality,
     },
     {
@@ -214,7 +214,7 @@ export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }
       sub: `${p1.format(passPct)}% de acerto`,
       statType: "passCompletion",
       rawValue: passPct,
-      bar: <TinyBar value={passPct} color={passQuality ? qualityBarColor(passQuality.level) : "bg-blue-500"} />,
+      bar: <TinyBar value={passPct} color={passQuality ? qualityBarColor(passQuality.level) : "bg-quality-great"} />,
       subQuality: passQuality,
     },
     {
@@ -225,7 +225,7 @@ export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }
       sub: `${p1.format(tacklePct)}% de sucesso`,
       statType: "tackleDuelWin",
       rawValue: tacklePct,
-      bar: <TinyBar value={tacklePct} color={tackleQuality ? qualityBarColor(tackleQuality.level) : "bg-blue-500"} />,
+      bar: <TinyBar value={tacklePct} color={tackleQuality ? qualityBarColor(tackleQuality.level) : "bg-quality-great"} />,
       subQuality: tackleQuality,
     },
     {
@@ -235,18 +235,18 @@ export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }
       value: (
         <div className="flex items-end gap-2">
           <div className="flex flex-col items-center leading-none">
-            <span className="text-2xl font-bold text-green-600">{int.format(wins)}</span>
-            <span className="text-[10px] text-gray-400 font-medium mt-0.5">V</span>
+            <span className="text-2xl font-bold text-positive">{int.format(wins)}</span>
+            <span className="text-[10px] text-fg-subtle font-medium mt-0.5">V</span>
           </div>
-          <span className="text-gray-200 text-xl mb-3">/</span>
+          <span className="text-border-strong text-xl mb-3">/</span>
           <div className="flex flex-col items-center leading-none">
-            <span className="text-2xl font-bold text-gray-500">{int.format(draws)}</span>
-            <span className="text-[10px] text-gray-400 font-medium mt-0.5">E</span>
+            <span className="text-2xl font-bold text-fg-muted">{int.format(draws)}</span>
+            <span className="text-[10px] text-fg-subtle font-medium mt-0.5">E</span>
           </div>
-          <span className="text-gray-200 text-xl mb-3">/</span>
+          <span className="text-border-strong text-xl mb-3">/</span>
           <div className="flex flex-col items-center leading-none">
-            <span className="text-2xl font-bold text-red-600">{int.format(losses)}</span>
-            <span className="text-[10px] text-gray-400 font-medium mt-0.5">D</span>
+            <span className="text-2xl font-bold text-negative">{int.format(losses)}</span>
+            <span className="text-[10px] text-fg-subtle font-medium mt-0.5">D</span>
           </div>
         </div>
       ),
@@ -262,13 +262,13 @@ export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }
       value: (
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-center leading-none">
-            <span className="text-2xl font-bold text-red-600">{int.format(clubStats.totalRedCards)}</span>
-            <span className="text-[10px] text-gray-400 font-medium mt-0.5">vermelhos</span>
+            <span className="text-2xl font-bold text-negative">{int.format(clubStats.totalRedCards)}</span>
+            <span className="text-[10px] text-fg-subtle font-medium mt-0.5">vermelhos</span>
           </div>
-          <span className="text-gray-200 text-xl pb-4">/</span>
+          <span className="text-border-strong text-xl pb-4">/</span>
           <div className="flex flex-col items-center leading-none">
-            <span className="text-2xl font-bold text-yellow-500">{int.format(clubStats.totalMom)}</span>
-            <span className="text-[10px] text-gray-400 font-medium mt-0.5">MOM 🏆</span>
+            <span className="text-2xl font-bold text-gold">{int.format(clubStats.totalMom)}</span>
+            <span className="text-[10px] text-fg-subtle font-medium mt-0.5">MOM 🏆</span>
           </div>
         </div>
       ),

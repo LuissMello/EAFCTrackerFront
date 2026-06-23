@@ -26,10 +26,10 @@ export function StatQualityIndicator({
   };
 
   const dotColors = {
-    poor: "bg-red-500",
-    decent: "bg-orange-500",
-    good: "bg-green-500",
-    veryGood: "bg-blue-500",
+    poor: "bg-quality-poor",
+    decent: "bg-quality-decent",
+    good: "bg-quality-good",
+    veryGood: "bg-quality-great",
   };
 
   return (

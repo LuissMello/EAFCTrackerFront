@@ -16,6 +16,8 @@ import { Line } from "react-chartjs-2";
 import { useClub } from "../hooks/useClub.tsx";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import OverallSummaryCard, { ClubOverallRow } from "../components/OverallSummaryCard.tsx";
+import { useTheme } from "../hooks/useTheme.tsx";
+import { chartTheme, cssVar } from "../utils/themeColors.ts";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
@@ -126,8 +128,11 @@ type MatchResult = "W" | "D" | "L";
 const resultOf = (p: OverallPoint): MatchResult =>
   p.goalsFor > p.goalsAgainst ? "W" : p.goalsFor < p.goalsAgainst ? "L" : "D";
 
-// verde = vitória, amarelo = empate, vermelho = derrota
-const RESULT_COLOR: Record<MatchResult, string> = { W: "#16a34a", D: "#ca8a04", L: "#dc2626" };
+// verde = vitória, amarelo = empate, vermelho = derrota (lidos do tema ativo)
+const resultColors = (): Record<MatchResult, string> => {
+  const t = chartTheme();
+  return { W: t.positive, D: t.warning, L: t.negative };
+};
 
 type SrMarker = { text: string; color: string } | null;
 
@@ -201,6 +206,10 @@ const dayZonesPlugin = {
     if (!opt?.enabled || !groups.length) return;
     const { ctx, chartArea } = chart;
     const x = chart.scales.x;
+    const t = chartTheme();
+    const zonePos = cssVar("--color-positive", 0.08);
+    const zoneNeg = cssVar("--color-negative", 0.08);
+    const zoneNeutral = cssVar("--color-fg-muted", 0.08);
     const boundsFor = (g: DayZone, gi: number) => {
       const left =
         gi === 0 ? chartArea.left : (x.getPixelForValue(g.start - 1) + x.getPixelForValue(g.start)) / 2;
@@ -213,11 +222,10 @@ const dayZonesPlugin = {
     ctx.save();
     groups.forEach((g, gi) => {
       const { left, right } = boundsFor(g, gi);
-      ctx.fillStyle =
-        g.delta > 0 ? "rgba(16,185,129,0.08)" : g.delta < 0 ? "rgba(244,63,94,0.08)" : "rgba(148,163,184,0.08)";
+      ctx.fillStyle = g.delta > 0 ? zonePos : g.delta < 0 ? zoneNeg : zoneNeutral;
       ctx.fillRect(left, chartArea.top, right - left, chartArea.bottom - chartArea.top);
       if (gi < groups.length - 1) {
-        ctx.strokeStyle = "rgba(0,0,0,0.10)";
+        ctx.strokeStyle = t.grid;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(right, chartArea.top);
@@ -233,6 +241,7 @@ const dayZonesPlugin = {
     if (!opt?.enabled || !groups.length) return;
     const { ctx, chartArea } = chart;
     const x = chart.scales.x;
+    const t = chartTheme();
     ctx.save();
     ctx.textAlign = "center";
     groups.forEach((g, gi) => {
@@ -245,12 +254,12 @@ const dayZonesPlugin = {
       const cx = (left + right) / 2;
       if (right - left < 26) return; // estreito demais p/ rótulo
       ctx.font = "600 10px sans-serif";
-      ctx.fillStyle = "#6b7280";
+      ctx.fillStyle = t.fgMuted;
       ctx.textBaseline = "top";
       ctx.fillText(g.label, cx, chartArea.top + 3);
       const deltaText = g.delta > 0 ? `+${g.delta}` : `${g.delta}`;
       ctx.font = "bold 11px sans-serif";
-      ctx.fillStyle = g.delta > 0 ? "#16a34a" : g.delta < 0 ? "#dc2626" : "#6b7280";
+      ctx.fillStyle = g.delta > 0 ? t.positive : g.delta < 0 ? t.negative : t.fgMuted;
       ctx.fillText(`${deltaText} SR`, cx, chartArea.top + 15);
     });
     ctx.restore();
@@ -266,6 +275,7 @@ type ChartKind = "line" | "area";
 
 export default function OverallEvolution() {
   const { club, selectedClubIds, selectedClubs } = useClub();
+  const { resolvedTheme } = useTheme();
 
   // ids efetivos (multi). Se nenhum selecionado, tenta o single legacy.
   const idsToUse = useMemo<number[]>(
@@ -416,6 +426,7 @@ export default function OverallEvolution() {
   // construir datasets por métrica
   const chartData = useMemo(() => {
     const fill = chartKind === "area";
+    const RESULT_COLOR = resultColors();
 
     const datasets: any[] = clubsWithData.map((c) => {
       const raw = c.points.map((p) =>
@@ -453,8 +464,8 @@ export default function OverallEvolution() {
       datasets.push({
         label: "SR adversário",
         data: pad(oppVals, maxLen),
-        borderColor: "rgba(100,116,139,0.8)",
-        backgroundColor: "rgba(148,163,184,0.10)",
+        borderColor: cssVar("--color-fg-muted", 0.8),
+        backgroundColor: cssVar("--color-fg-muted", 0.1),
         borderWidth: 1.5,
         borderDash: [5, 4],
         tension: 0.2,
@@ -463,10 +474,12 @@ export default function OverallEvolution() {
       });
     }
     return { labels: xLabels, datasets };
-  }, [clubsWithData, singleClub, metric, chartKind, smooth, xLabels, maxLen, pointRadius, manyPoints]);
+  }, [clubsWithData, singleClub, metric, chartKind, smooth, xLabels, maxLen, pointRadius, manyPoints, resolvedTheme]);
 
   const baseOptions: any = useMemo(
-    () => ({
+    () => {
+    const t = chartTheme();
+    return {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
@@ -474,8 +487,13 @@ export default function OverallEvolution() {
       plugins: {
         resultMarkers: { enabled: showResults },
         dayZones: { enabled: dayZonesEnabled, groups: dayZones },
-        legend: { display: true, position: "top" },
+        legend: { display: true, position: "top", labels: { color: t.fg } },
         tooltip: {
+          backgroundColor: t.surface,
+          titleColor: t.fg,
+          bodyColor: t.fg,
+          borderColor: t.border,
+          borderWidth: 1,
           callbacks: {
             title: (items: any[]) => {
               if (!items?.length) return "";
@@ -495,16 +513,17 @@ export default function OverallEvolution() {
       },
       scales: {
         x: {
-          grid: { display: false },
-          ticks: { autoSkip: true, maxTicksLimit: 8 },
+          grid: { display: false, color: t.grid },
+          ticks: { autoSkip: true, maxTicksLimit: 8, color: t.fgMuted },
         },
         y: {
           beginAtZero: false,
           reverse: metric === "division", // divisão 1 = melhor → topo
-          grid: { color: "rgba(0,0,0,0.05)" },
+          grid: { color: t.grid },
           ticks: {
             precision: 0,
             callback: (val: any) => `${val}`,
+            color: t.fgMuted,
           },
         },
       },
@@ -512,8 +531,9 @@ export default function OverallEvolution() {
         point: { radius: pointRadius },
         line: { borderJoinStyle: "round", borderCapStyle: "round" },
       },
-    }),
-    [effectiveXMode, singleClub, metric, pointRadius, showResults, dayZonesEnabled, dayZones]
+    };
+    },
+    [effectiveXMode, singleClub, metric, pointRadius, showResults, dayZonesEnabled, dayZones, resolvedTheme]
   );
 
   const quickSizes = [20, 50, 100];
@@ -527,23 +547,23 @@ export default function OverallEvolution() {
     <div className="p-4 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">Evolução do Overall — {headerTitle}</h1>
+          <h1 className="font-display font-bold uppercase tracking-wide text-2xl sm:text-3xl text-fg">Evolução do Overall — {headerTitle}</h1>
           {idsToUse.length > 0 && (
-            <div className="text-xs text-gray-600 mt-1">
+            <div className="text-xs text-fg-muted mt-1">
               Clubes ativos: <span className="font-mono">{idsToUse.join(", ")}</span>
             </div>
           )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-gray-700">Últimas</span>
+          <span className="text-sm text-fg-secondary">Últimas</span>
           <div className="flex items-center gap-1">
             {quickSizes.map((n) => (
               <button
                 key={n}
                 onClick={() => setPageSize(n)}
                 className={`text-sm px-2.5 py-1 rounded-lg border shadow-sm transition-colors ${
-                  pageSize === n ? "bg-blue-600 text-white border-blue-600" : "bg-white hover:bg-gray-50"
+                  pageSize === n ? "bg-accent text-accent-fg border-accent" : "bg-surface text-fg-secondary hover:bg-surface-raised"
                 }`}
                 aria-pressed={pageSize === n}
               >
@@ -558,10 +578,10 @@ export default function OverallEvolution() {
             value={pageSize}
             onChange={(e) => setPageSize(Math.max(5, parseInt(e.target.value) || 5))}
           />
-          <span className="text-sm text-gray-700">partidas</span>
+          <span className="text-sm text-fg-secondary">partidas</span>
           <button
             onClick={forceReload}
-            className="ml-2 text-sm px-3 py-1 rounded border bg-white hover:bg-gray-50"
+            className="ml-2 text-sm px-3 py-1 rounded border bg-surface hover:bg-surface-raised"
             title="Recarregar"
           >
             Recarregar
@@ -570,23 +590,23 @@ export default function OverallEvolution() {
       </div>
 
       {idsToUse.length === 0 && (
-        <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded">
+        <div className="p-3 bg-warning-soft border border-warning/40 text-warning-fg rounded">
           Selecione um clube no menu para ver a evolução do overall.
         </div>
       )}
 
       {idsToUse.length > 0 && loading && (
         <div className="grid gap-3">
-          <div className="animate-pulse bg-white border rounded-xl p-4 h-12" />
-          <div className="animate-pulse bg-white border rounded-xl p-4 h-[360px]" />
-          <div className="animate-pulse bg-white border rounded-xl p-4 h-48" />
+          <div className="animate-pulse bg-surface border rounded-xl p-4 h-12" />
+          <div className="animate-pulse bg-surface border rounded-xl p-4 h-[360px]" />
+          <div className="animate-pulse bg-surface border rounded-xl p-4 h-48" />
         </div>
       )}
 
       {idsToUse.length > 0 && error && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center justify-between">
+        <div className="p-3 bg-negative-soft border border-negative/40 text-negative-fg rounded flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={forceReload} className="text-sm px-3 py-1 rounded border bg-white hover:bg-gray-50">
+          <button onClick={forceReload} className="text-sm px-3 py-1 rounded border bg-surface hover:bg-surface-raised">
             Tentar novamente
           </button>
         </div>
@@ -595,9 +615,9 @@ export default function OverallEvolution() {
       {idsToUse.length > 0 && !loading && !error && clubsWithData.length > 0 && (
         <>
           {/* CONTROLES DO GRÁFICO */}
-          <div className="bg-white border rounded-xl p-4">
-            <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 pb-3">
-              <label className="text-sm text-gray-700">
+          <div className="bg-surface border rounded-xl p-4">
+            <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
+              <label className="text-sm text-fg-secondary">
                 Métrica
                 <select
                   className="ml-2 border rounded px-2 py-1 text-sm"
@@ -610,14 +630,14 @@ export default function OverallEvolution() {
               </label>
 
               <div className="flex items-center gap-1.5">
-                <span className="text-sm text-gray-700">Visual</span>
+                <span className="text-sm text-fg-secondary">Visual</span>
                 {(["line", "area"] as const).map((k) => (
                   <button
                     key={k}
                     type="button"
                     onClick={() => setChartKind(k)}
                     className={`text-xs px-2.5 py-1 rounded-lg border shadow-sm transition-colors ${
-                      chartKind === k ? "bg-gray-800 text-white border-gray-800" : "bg-white hover:bg-gray-50"
+                      chartKind === k ? "bg-accent text-accent-fg border-accent" : "bg-surface text-fg-secondary hover:bg-surface-raised"
                     }`}
                   >
                     {k === "line" ? "Linha" : "Área"}
@@ -626,14 +646,14 @@ export default function OverallEvolution() {
               </div>
 
               {metric === "sr" && (
-                <label className="text-sm text-gray-700 flex items-center gap-1.5">
+                <label className="text-sm text-fg-secondary flex items-center gap-1.5">
                   <input type="checkbox" checked={smooth} onChange={(e) => setSmooth(e.target.checked)} />
                   Suavizar
                 </label>
               )}
 
               {metric === "sr" && (
-                <label className="text-sm text-gray-700 flex items-center gap-1.5">
+                <label className="text-sm text-fg-secondary flex items-center gap-1.5">
                   <input type="checkbox" checked={showResults} onChange={(e) => setShowResults(e.target.checked)} />
                   Mostrar Δ SR
                 </label>
@@ -641,7 +661,7 @@ export default function OverallEvolution() {
 
               {!!singleClub && (
                 <label
-                  className="text-sm text-gray-700 flex items-center gap-1.5"
+                  className="text-sm text-fg-secondary flex items-center gap-1.5"
                   title="Agrupa as partidas por dia em faixas, com a variação líquida de SR no dia."
                 >
                   <input type="checkbox" checked={showDayZones} onChange={(e) => setShowDayZones(e.target.checked)} />
@@ -649,7 +669,7 @@ export default function OverallEvolution() {
                 </label>
               )}
 
-              <label className="text-sm text-gray-700">
+              <label className="text-sm text-fg-secondary">
                 Eixo X
                 <select
                   className="ml-2 border rounded px-2 py-1 text-sm"
@@ -666,21 +686,21 @@ export default function OverallEvolution() {
 
             {/* GRÁFICO PRINCIPAL */}
             <div className="mt-4 h-[360px]">
-              <Line data={chartData as any} options={baseOptions} plugins={[dayZonesPlugin, resultMarkersPlugin]} />
+              <Line key={resolvedTheme} data={chartData as any} options={baseOptions} plugins={[dayZonesPlugin, resultMarkersPlugin]} />
             </div>
             {showResults && metric === "sr" && (
-              <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
+              <div className="mt-2 flex items-center gap-3 text-xs text-fg-muted">
                 <span>Δ SR vs. jogo anterior:</span>
-                <span className="font-semibold text-green-600">vitória</span>
-                <span className="font-semibold text-yellow-600">empate</span>
-                <span className="font-semibold text-red-600">derrota</span>
+                <span className="font-semibold text-positive">vitória</span>
+                <span className="font-semibold text-warning">empate</span>
+                <span className="font-semibold text-negative">derrota</span>
               </div>
             )}
           </div>
 
           {/* SNAPSHOT ATUAL POR CLUBE */}
           <div>
-            <div className="text-xs text-gray-500 mb-2">Situação atual</div>
+            <div className="text-xs text-fg-muted mb-2">Situação atual</div>
             <div
               className={`grid gap-3 ${
                 clubsWithData.length === 1

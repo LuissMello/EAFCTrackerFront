@@ -81,19 +81,19 @@ function isGk(pos?: string | null) {
 
 /******** UI atômicos ********/
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
-    <div className={`bg-white rounded-2xl shadow-sm border p-4 ${className}`}>{children}</div>
+    <div className={`bg-surface rounded-2xl shadow-sm border p-4 ${className}`}>{children}</div>
 );
 function Skeleton({ className = "" }: { className?: string }) {
-    return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
+    return <div className={`animate-pulse bg-surface-sunken rounded ${className}`} />;
 }
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
     return (
-        <div className="mx-auto my-8 max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
-            <div className="text-red-600 font-semibold">Erro ao carregar</div>
-            <p className="mt-2 text-sm text-gray-600">{message}</p>
+        <div className="mx-auto my-8 max-w-xl rounded-2xl border bg-surface p-6 text-center shadow-sm">
+            <div className="text-negative font-semibold">Erro ao carregar</div>
+            <p className="mt-2 text-sm text-fg-muted">{message}</p>
             <button
                 onClick={onRetry}
-                className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
+                className="mt-4 rounded-xl bg-accent px-4 py-2 text-accent-fg hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-accent/30"
             >
                 Tentar novamente
             </button>
@@ -102,15 +102,15 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 }
 function ProgressBar({ value, label }: { value: number; label: string }) {
     const pct = clamp01to100(value);
-    const color = pct < 40 ? "bg-rose-500" : pct < 70 ? "bg-amber-400" : "bg-emerald-500";
+    const color = pct < 40 ? "bg-quality-poor" : pct < 70 ? "bg-quality-decent" : "bg-quality-great";
     return (
         <div className="mb-3" aria-label={`${label}: ${Math.round(pct)}`}>
-            <label className="block text-[11px] sm:text-xs font-semibold text-gray-700 mb-1 tracking-wide">{label}</label>
+            <label className="block text-[11px] sm:text-xs font-semibold text-fg-secondary mb-1 tracking-wide">{label}</label>
             <div className="relative flex items-center">
-                <div className="w-full bg-gray-200/70 rounded-full h-2.5 overflow-hidden">
+                <div className="w-full bg-surface-sunken/70 rounded-full h-2.5 overflow-hidden">
                     <div className={`h-2.5 rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
                 </div>
-                <span className="ml-2 text-xs sm:text-sm font-semibold text-gray-700 w-10 text-right">{Math.round(pct)}</span>
+                <span className="ml-2 text-xs sm:text-sm font-semibold text-fg-secondary w-10 text-right">{Math.round(pct)}</span>
             </div>
         </div>
     );
@@ -239,7 +239,7 @@ export default function PlayerAttributesPage() {
         <div className="p-4 max-w-6xl mx-auto">
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-blue-800">
+                <h1 className="text-2xl sm:text-3xl font-display font-bold uppercase tracking-wide text-fg">
                     Atributos do Clube {clubName ? `— ${clubName}` : `#${clubId}`}
                 </h1>
             </div>
@@ -305,7 +305,7 @@ export default function PlayerAttributesPage() {
                     <Card>
                         <h3 className="text-base font-semibold mb-3">Atributos — {base?.playerName ?? "—"}</h3>
                         {base?.statistics && Object.values(base.statistics).some((v) => v && v !== 0) ? (
-                            <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-sm text-gray-700">
+                            <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-sm text-fg-secondary">
                                 {(Object.keys(ATTR_LABELS) as (keyof PlayerMatchStats)[]).map((key) => (
                                     <li key={String(key)} className="col-span-1">
                                         <ProgressBar
@@ -316,7 +316,7 @@ export default function PlayerAttributesPage() {
                                 ))}
                             </ul>
                         ) : (
-                            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                            <div className="text-sm text-warning-fg bg-warning-soft border border-warning/30 rounded-lg p-3">
                                 Dados de atributos não disponíveis para este jogador.
                             </div>
                         )}
@@ -342,10 +342,10 @@ export default function PlayerAttributesPage() {
                                     const isBelow = diff < -EPS;
 
                                     const badgeClass = isEqual
-                                        ? "bg-blue-100 text-blue-800"
+                                        ? "bg-warning-soft text-warning-fg"
                                         : isAbove
-                                            ? "bg-emerald-100 text-emerald-800"
-                                            : "bg-rose-100 text-rose-800";
+                                            ? "bg-positive-soft text-positive-fg"
+                                            : "bg-negative-soft text-negative-fg";
 
                                     const badgeText = isEqual ? "Igual" : isAbove ? "Acima" : "Abaixo";
 
@@ -356,7 +356,7 @@ export default function PlayerAttributesPage() {
                                     return (
                                         <div key={String(key)} className="rounded-xl border p-3">
                                             <div className="flex items-center justify-between text-sm">
-                                                <span className="font-medium text-gray-800">
+                                                <span className="font-medium text-fg">
                                                     {ATTR_LABELS[key]}
                                                 </span>
                                                 <span className={`text-xs px-2 py-0.5 rounded-full ${badgeClass}`}>
@@ -365,22 +365,22 @@ export default function PlayerAttributesPage() {
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-gray-500">
+                                                <div className="text-[11px] text-fg-muted">
                                                     Base: {Math.round(mine)}
                                                 </div>
-                                                <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
-                                                    <div className="h-2 bg-blue-600" style={{ width: `${mine}%` }} />
+                                                <div className="w-full bg-surface-sunken rounded h-2 overflow-hidden">
+                                                    <div className="h-2 bg-accent" style={{ width: `${mine}%` }} />
                                                 </div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-gray-500">
+                                                <div className="text-[11px] text-fg-muted">
                                                     {compareMode === "media" ? "Clube (média)" : "Comparação"}:{" "}
                                                     {Math.round(other)}
                                                 </div>
-                                                <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
+                                                <div className="w-full bg-surface-sunken rounded h-2 overflow-hidden">
                                                     <div
-                                                        className="h-2 bg-slate-500"
+                                                        className="h-2 bg-fg-muted"
                                                         style={{ width: `${other}%` }}
                                                     />
                                                 </div>
@@ -390,7 +390,7 @@ export default function PlayerAttributesPage() {
                                 })}
                             </div>
                         ) : (
-                            <div className="text-sm text-gray-600">
+                            <div className="text-sm text-fg-muted">
                                 {compareMode === "player"
                                     ? "Selecione um jogador para comparar."
                                     : "Sem dados para média."}

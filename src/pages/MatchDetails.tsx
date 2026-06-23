@@ -9,7 +9,8 @@ import { GoalLinkingSection } from "../components/GoalLinkingSection.tsx";
 import { MatchEaPostGameStats } from "../components/MatchEaPostGameStats.tsx";
 import { ClubStats, PlayerStats } from "../types/stats.ts";
 import { MatchEventAggregatesResponseDto } from "../types/matchEventAggregates.ts";
-import { crestUrl, FALLBACK_LOGO, API_ENDPOINTS } from "../config/urls.ts";
+import { crestUrl, API_ENDPOINTS } from "../config/urls.ts";
+import { Crest, ResultPill } from "../components/ui.tsx";
 
 // ======================
 // Tipos (espelham /api/Matches/{matchId}/statistics)
@@ -131,13 +132,13 @@ const Badge: React.FC<{ className?: string; children: React.ReactNode; title?: s
 );
 
 const Skeleton: React.FC<{ className?: string }> = ({ className = "h-5 w-full" }) => (
-  <div className={`animate-pulse rounded bg-gray-200 ${className}`} />
+  <div className={`animate-pulse rounded bg-surface-sunken ${className}`} />
 );
 
 const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className = "", ...props }) => (
   <button
     {...props}
-    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm shadow-sm hover:bg-gray-50 disabled:opacity-60 ${className}`}
+    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm shadow-sm hover:bg-surface-raised disabled:opacity-60 ${className}`}
   />
 );
 
@@ -332,12 +333,12 @@ export default function MatchDetails() {
 
   const selectedWon = (leftIsSelected && leftWon) || (rightIsSelected && rightWon);
   const selectedLost = (leftIsSelected && rightWon) || (rightIsSelected && leftWon);
-  const heroBg = selectedWon ? "bg-green-50/40" : selectedLost ? "bg-red-50/30" : "";
+  const heroBg = selectedWon ? "bg-positive-soft/30" : selectedLost ? "bg-negative-soft/30" : "";
   const heroBorderClass = selectedWon
-    ? "border-l-4 border-l-green-500"
+    ? "border-l-4 border-l-positive"
     : selectedLost
-    ? "border-l-4 border-l-red-400"
-    : "border-l-4 border-l-gray-300";
+    ? "border-l-4 border-l-negative"
+    : "border-l-4 border-l-border-strong";
 
   // Identificar goleiro por clube
   const gkByClub = useMemo(() => {
@@ -365,8 +366,8 @@ export default function MatchDetails() {
     const b = Number(vb ?? 0);
     if (a === b) return { a: "", b: "" };
     return a > b
-      ? { a: "bg-emerald-50 font-semibold", b: "bg-red-50" }
-      : { a: "bg-red-50", b: "bg-emerald-50 font-semibold" };
+      ? { a: "bg-positive-soft/60 text-positive-fg font-semibold", b: "bg-negative-soft/50 text-negative-fg" }
+      : { a: "bg-negative-soft/50 text-negative-fg", b: "bg-positive-soft/60 text-positive-fg font-semibold" };
   };
 
   const mom = (stats?.players ?? []).find((p) => (p.totalMom ?? 0) > 0);
@@ -378,7 +379,7 @@ export default function MatchDetails() {
           <Skeleton className="h-7 w-52" />
           <Skeleton className="h-5 w-24" />
         </div>
-        <div className="bg-white shadow-sm rounded-xl p-4 border space-y-4">
+        <div className="bg-surface shadow-sm rounded-xl p-4 border space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <Skeleton className="h-10 w-64" />
             <Skeleton className="h-6 w-16" />
@@ -395,7 +396,7 @@ export default function MatchDetails() {
   if (error) {
     return (
       <div className="p-4">
-        <div className="max-w-xl rounded-lg border p-4 bg-red-50 text-red-800">
+        <div className="max-w-xl rounded-lg border border-negative/40 p-4 bg-negative-soft text-negative-fg">
           <div className="font-semibold">Ocorreu um erro</div>
           <div className="text-sm mt-1">{error}</div>
           <div className="mt-3">
@@ -416,34 +417,29 @@ export default function MatchDetails() {
       <div className="flex items-center gap-2 flex-wrap">
         <Link
           to="/"
-          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-white hover:bg-gray-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-surface hover:bg-surface-raised"
         >
           ← Voltar
         </Link>
-        <span className="text-gray-400 text-sm">Detalhes da Partida</span>
+        <span className="text-fg-subtle text-sm">Detalhes da Partida</span>
         <div className="flex-1" />
         <Link
           to={`/match/${matchId}/goals`}
-          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-white hover:bg-gray-50 font-medium"
+          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-surface hover:bg-surface-raised font-medium"
         >
           ⚽ Análise de Gols
         </Link>
       </div>
 
       {/* Painel Overall (toggle) */}
-      <div className="bg-white shadow-sm rounded-xl p-4 border">
+      <div className="bg-surface shadow-sm rounded-xl p-4 border">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-base font-semibold text-gray-700">Histórico dos clubes</h2>
+            <h2 className="text-base font-semibold text-fg-secondary">Histórico dos clubes</h2>
             {orderedClubs.slice(0, 2).map((c) => (
               <div key={c.clubId} className="flex items-center gap-1.5">
-                <img
-                  src={crestUrl(c.clubCrestAssetId)}
-                  onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                  alt={c.clubName}
-                  className="w-6 h-6 rounded-full bg-white border object-contain"
-                />
-                <span className="text-sm text-gray-600 font-medium">{c.clubName}</span>
+                <Crest src={crestUrl(c.clubCrestAssetId)} alt={c.clubName} size={24} rounded="rounded-full" />
+                <span className="text-sm text-fg-muted font-medium">{c.clubName}</span>
               </div>
             ))}
           </div>
@@ -455,7 +451,7 @@ export default function MatchDetails() {
         {showOverallPanel && (
           <>
             {overallErr && (
-              <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">{overallErr}</div>
+              <div className="mt-3 text-sm text-negative-fg bg-negative-soft border border-negative/30 rounded p-2">{overallErr}</div>
             )}
             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
               {orderedClubs.slice(0, 2).map((c) => (
@@ -469,23 +465,23 @@ export default function MatchDetails() {
                 />
               ))}
             </div>
-            {overallBusy && <div className="mt-3 text-sm text-gray-600">Carregando histórico do(s) clube(s)…</div>}
+            {overallBusy && <div className="mt-3 text-sm text-fg-muted">Carregando histórico do(s) clube(s)…</div>}
           </>
         )}
       </div>
 
       {/* Team Stats Section */}
       {haveTwoClubs && clubsWithGoalsConceded.length >= 2 && (
-        <div className="bg-white shadow-sm rounded-xl p-4 border">
+        <div className="bg-surface shadow-sm rounded-xl p-4 border">
           <h2 className="text-lg font-semibold mb-4">Estatísticas da Partida</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div>
               <h3 className="text-base font-medium mb-2 flex items-center gap-2">
-                <img
+                <Crest
                   src={crestUrl(clubsWithGoalsConceded[0]?.clubCrestAssetId)}
-                  onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                   alt={`Escudo ${clubsWithGoalsConceded[0]?.clubName ?? "Clube A"}`}
-                  className="w-6 h-6 rounded-full bg-white border"
+                  size={24}
+                  rounded="rounded-full"
                 />
                 {clubsWithGoalsConceded[0]?.clubName ?? "Clube A"}
               </h3>
@@ -498,11 +494,11 @@ export default function MatchDetails() {
             </div>
             <div>
               <h3 className="text-base font-medium mb-2 flex items-center gap-2">
-                <img
+                <Crest
                   src={crestUrl(clubsWithGoalsConceded[1]?.clubCrestAssetId)}
-                  onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                   alt={`Escudo ${clubsWithGoalsConceded[1]?.clubName ?? "Clube B"}`}
-                  className="w-6 h-6 rounded-full bg-white border"
+                  size={24}
+                  rounded="rounded-full"
                 />
                 {clubsWithGoalsConceded[1]?.clubName ?? "Clube B"}
               </h3>
@@ -519,37 +515,43 @@ export default function MatchDetails() {
 
 
       {/* Cabeçalho dos clubes + placar e highlights */}
-      <div className={`bg-white shadow-sm rounded-xl p-4 border ${heroBorderClass} ${heroBg}`}>
+      <div className={`bg-surface shadow-sm rounded-xl p-4 border ${heroBorderClass} ${heroBg}`}>
         {haveTwoClubs ? (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
               {/* Esquerda */}
               <div className="flex items-center gap-3 px-2 py-1 justify-center sm:justify-start">
-                <img
+                <Crest
                   src={crestUrl(orderedClubs[0]?.clubCrestAssetId)}
-                  onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                   alt={`Escudo ${orderedClubs[0]?.clubName ?? "Clube A"}`}
-                  className="w-12 h-12 rounded-full bg-white border object-contain shrink-0"
+                  size={48}
+                  rounded="rounded-full"
                 />
                 <div className="min-w-0">
                   <div className="font-semibold leading-tight truncate">
                     {orderedClubs[0]?.clubName ?? "Clube A"}
                   </div>
                   {leftIsSelected && (
-                    <span className="text-[11px] text-blue-600 font-medium">Clube selecionado</span>
+                    <span className="text-[11px] text-accent font-medium">Clube selecionado</span>
                   )}
                 </div>
               </div>
 
               {/* Placar */}
               <div className="flex items-center justify-center gap-3">
-                <span className={`text-3xl sm:text-4xl font-bold tabular-nums ${leftWon ? "text-green-700" : rightWon ? "text-red-600" : "text-gray-700"}`}>
+                {haveScore && (
+                  <ResultPill outcome={leftWon ? "W" : rightWon ? "L" : "D"} variant="solid" />
+                )}
+                <span className={`font-display text-4xl sm:text-5xl font-bold tabular-nums leading-none ${leftWon ? "text-positive" : rightWon ? "text-negative" : "text-fg-secondary"}`}>
                   {goalsA}
                 </span>
-                <span className="text-gray-400 text-xl font-light">–</span>
-                <span className={`text-3xl sm:text-4xl font-bold tabular-nums ${rightWon ? "text-green-700" : leftWon ? "text-red-600" : "text-gray-700"}`}>
+                <span className="text-fg-subtle text-xl font-light">–</span>
+                <span className={`font-display text-4xl sm:text-5xl font-bold tabular-nums leading-none ${rightWon ? "text-positive" : leftWon ? "text-negative" : "text-fg-secondary"}`}>
                   {goalsB}
                 </span>
+                {haveScore && (
+                  <ResultPill outcome={rightWon ? "W" : leftWon ? "L" : "D"} variant="solid" />
+                )}
               </div>
 
               {/* Direita */}
@@ -559,14 +561,14 @@ export default function MatchDetails() {
                     {orderedClubs[1]?.clubName ?? "Clube B"}
                   </div>
                   {rightIsSelected && (
-                    <span className="text-[11px] text-blue-600 font-medium">Clube selecionado</span>
+                    <span className="text-[11px] text-accent font-medium">Clube selecionado</span>
                   )}
                 </div>
-                <img
+                <Crest
                   src={crestUrl(orderedClubs[1]?.clubCrestAssetId)}
-                  onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                   alt={`Escudo ${orderedClubs[1]?.clubName ?? "Clube B"}`}
-                  className="w-12 h-12 rounded-full bg-white border object-contain shrink-0"
+                  size={48}
+                  rounded="rounded-full"
                 />
               </div>
             </div>
@@ -575,7 +577,7 @@ export default function MatchDetails() {
             <div className="overflow-x-auto mt-4">
               <table className="w-full table-fixed text-xs sm:text-sm border text-center">
                 <thead>
-                  <tr className="bg-gray-50">
+                  <tr className="bg-surface-raised">
                     <th className="p-1.5 sm:p-2 w-1/3">{orderedClubs[0]?.clubName ?? "Clube A"}</th>
                     <th className="p-1.5 sm:p-2 w-1/3">Estatística</th>
                     <th className="p-1.5 sm:p-2 w-1/3">{orderedClubs[1]?.clubName ?? "Clube B"}</th>
@@ -594,21 +596,21 @@ export default function MatchDetails() {
                         <td className={`p-2 tabular-nums ${heat.a}`}>
                           <div className="flex flex-col items-center gap-0.5">
                             <span>{fmt(va)}</span>
-                            <div className="w-full h-1 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="w-full h-1 rounded-full bg-surface-sunken overflow-hidden">
                               <div
-                                className={`h-full ${va > vb ? "bg-green-400" : va < vb ? "bg-red-300" : "bg-gray-300"}`}
+                                className={`h-full ${va > vb ? "bg-positive" : va < vb ? "bg-negative" : "bg-border"}`}
                                 style={{ width: `${barA}%` }}
                               />
                             </div>
                           </div>
                         </td>
-                        <td className="p-2 font-medium text-gray-600">{label}</td>
+                        <td className="p-2 font-medium text-fg-muted">{label}</td>
                         <td className={`p-2 tabular-nums ${heat.b}`}>
                           <div className="flex flex-col items-center gap-0.5">
                             <span>{fmt(vb)}</span>
-                            <div className="w-full h-1 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="w-full h-1 rounded-full bg-surface-sunken overflow-hidden">
                               <div
-                                className={`h-full ${vb > va ? "bg-green-400" : vb < va ? "bg-red-300" : "bg-gray-300"}`}
+                                className={`h-full ${vb > va ? "bg-positive" : vb < va ? "bg-negative" : "bg-border"}`}
                                 style={{ width: `${barB}%` }}
                               />
                             </div>
@@ -624,10 +626,10 @@ export default function MatchDetails() {
             {/* MVP */}
             {mom && (
               <div className="mt-4 flex items-center gap-2 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-400 bg-amber-100 text-amber-800 text-sm font-semibold">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-gold/40 bg-gold-soft text-gold-fg text-sm font-semibold">
                   🏆 {mom.playerName}
                 </span>
-                <span className="text-xs text-gray-500">Man of the Match</span>
+                <span className="text-xs text-fg-muted">Man of the Match</span>
               </div>
             )}
           </>
@@ -635,20 +637,20 @@ export default function MatchDetails() {
           // Fallback quando só há 1 clube na resposta
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 px-2 py-1 rounded">
-              <img
+              <Crest
                 src={crestUrl(orderedClubs[0]?.clubCrestAssetId)}
-                onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                 alt={`Escudo ${orderedClubs[0]?.clubName ?? "Clube"}`}
-                className="w-8 h-8 rounded-full bg-white border"
+                size={32}
+                rounded="rounded-full"
               />
               <div className="font-semibold flex items-center gap-2">
                 {orderedClubs[0]?.clubName ?? "Clube"}
                 {leftIsSelected && (
-                  <Badge className="bg-blue-100 text-blue-700 border-blue-200">Clube selecionado</Badge>
+                  <Badge className="bg-accent text-accent-fg border-accent">Clube selecionado</Badge>
                 )}
               </div>
             </div>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-fg-muted">
               Sem dados do adversário para esta partida. Alguns painéis ficam indisponíveis.
             </div>
           </div>
@@ -669,19 +671,19 @@ export default function MatchDetails() {
         const clubWon = haveTwoClubs && !!opponent && clubRow.totalGoals > opponent.totalGoals;
         const clubLost = haveTwoClubs && !!opponent && clubRow.totalGoals < opponent.totalGoals;
         const clubBorderClass = clubWon
-          ? "border-l-4 border-l-green-500"
+          ? "border-l-4 border-l-positive"
           : clubLost
-          ? "border-l-4 border-l-red-400"
-          : "border-l-4 border-l-gray-300";
+          ? "border-l-4 border-l-negative"
+          : "border-l-4 border-l-border-strong";
 
         return (
-          <div key={clubRow.clubId} className={`bg-white shadow-sm rounded-xl p-4 border ${clubBorderClass}`}>
+          <div key={clubRow.clubId} className={`bg-surface shadow-sm rounded-xl p-4 border ${clubBorderClass}`}>
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <img
+              <Crest
                 src={crestUrl(clubRow?.clubCrestAssetId)}
-                onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
                 alt={`Escudo ${clubRow?.clubName ?? "Clube"}`}
-                className="w-6 h-6 rounded-full bg-white border"
+                size={24}
+                rounded="rounded-full"
               />
               {clubRow?.clubName ?? "Clube"} - Jogadores
             </h3>
@@ -703,7 +705,7 @@ export default function MatchDetails() {
               showPagination={false}
               showSearch={false}
               showTitle={false}
-              hiddenColumns={["matchesPlayed", "totalWins", "totalLosses", "totalDraws", "winPercent", "totalMom"]}
+              hiddenColumns={["matchesPlayed", "totalSecondsPlayed", "totalWins", "totalLosses", "totalDraws", "winPercent", "totalMom"]}
               onSortChange={(key, order) => {
                 setSortKey(key);
                 setSortOrder(order);

@@ -16,6 +16,8 @@ import {
   Filler,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
+import { useTheme } from "../hooks/useTheme.tsx";
+import { chartTheme } from "../utils/themeColors.ts";
 
 ChartJS.register(
   CategoryScale,
@@ -127,14 +129,14 @@ function RecordBar({ wins, draws, losses }: { wins: number; draws: number; losse
   return (
     <div className="flex flex-col gap-1">
       <div className="flex h-2 rounded-full overflow-hidden">
-        <div style={{ width: `${(wins / total) * 100}%` }} className="bg-green-500" />
-        <div style={{ width: `${(draws / total) * 100}%` }} className="bg-amber-400" />
-        <div style={{ width: `${(losses / total) * 100}%` }} className="bg-red-400" />
+        <div style={{ width: `${(wins / total) * 100}%` }} className="bg-positive" />
+        <div style={{ width: `${(draws / total) * 100}%` }} className="bg-warning" />
+        <div style={{ width: `${(losses / total) * 100}%` }} className="bg-negative" />
       </div>
       <div className="flex gap-3 text-[11px]">
-        <span className="text-green-700 font-semibold">V {wins}</span>
-        <span className="text-amber-600 font-semibold">E {draws}</span>
-        <span className="text-red-600 font-semibold">D {losses}</span>
+        <span className="text-positive font-semibold">V {wins}</span>
+        <span className="text-warning font-semibold">E {draws}</span>
+        <span className="text-negative font-semibold">D {losses}</span>
       </div>
     </div>
   );
@@ -148,6 +150,7 @@ function ChartCard({
   labels,
   decimals = 1,
   showStats,
+  themeKey,
 }: {
   label: string;
   color: string;
@@ -156,33 +159,34 @@ function ChartCard({
   labels: string[];
   decimals?: number;
   showStats: boolean;
+  themeKey?: string;
 }) {
   const primaryData = (datasets[0]?.data ?? []) as (number | null)[];
   const trend = showStats ? trendArrow(primaryData) : null;
   const stats = showStats ? miniStats(primaryData, decimals) : null;
 
   return (
-    <div className="bg-white border rounded-xl p-4 hover:shadow-md transition-shadow">
+    <div className="bg-surface border rounded-xl p-4 hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span
             className="inline-block w-8 h-1.5 rounded-full flex-shrink-0"
             style={{ backgroundColor: color }}
           />
-          <span className="text-sm font-medium text-gray-700">{label}</span>
+          <span className="text-sm font-medium text-fg-secondary">{label}</span>
         </div>
         {trend && (
           <span className={`text-base font-bold leading-none ${trend.cls}`}>{trend.arrow}</span>
         )}
       </div>
       <div className="h-56">
-        <Line data={{ labels, datasets }} options={options} />
+        <Line key={themeKey} data={{ labels, datasets }} options={options} />
       </div>
       {stats && (
-        <div className="mt-2 flex gap-3 text-[11px] text-gray-400 border-t pt-1.5">
-          <span>Mín: <span className="font-medium text-gray-500">{stats.min}</span></span>
-          <span>Méd: <span className="font-medium text-gray-500">{stats.avg}</span></span>
-          <span>Máx: <span className="font-medium text-gray-500">{stats.max}</span></span>
+        <div className="mt-2 flex gap-3 text-[11px] text-fg-subtle border-t pt-1.5">
+          <span>Mín: <span className="font-medium text-fg-muted">{stats.min}</span></span>
+          <span>Méd: <span className="font-medium text-fg-muted">{stats.avg}</span></span>
+          <span>Máx: <span className="font-medium text-fg-muted">{stats.max}</span></span>
         </div>
       )}
     </div>
@@ -260,15 +264,15 @@ function movingAvg(arr: number[], win = 3): number[] {
 
 function trendArrow(data: (number | null)[]): { arrow: string; cls: string } {
   const vals = data.filter((v): v is number => v !== null && Number.isFinite(v));
-  if (vals.length < 4) return { arrow: "→", cls: "text-gray-400" };
+  if (vals.length < 4) return { arrow: "→", cls: "text-fg-subtle" };
   const n = Math.max(1, Math.min(3, Math.floor(vals.length / 3)));
   const first = vals.slice(0, n).reduce((a, b) => a + b, 0) / n;
   const last = vals.slice(-n).reduce((a, b) => a + b, 0) / n;
   const base = Math.abs(first) > 0.001 ? first : 1;
   const diff = (last - first) / base;
-  if (diff > 0.05) return { arrow: "↑", cls: "text-green-500" };
-  if (diff < -0.05) return { arrow: "↓", cls: "text-red-400" };
-  return { arrow: "→", cls: "text-gray-400" };
+  if (diff > 0.05) return { arrow: "↑", cls: "text-positive" };
+  if (diff < -0.05) return { arrow: "↓", cls: "text-negative" };
+  return { arrow: "→", cls: "text-fg-subtle" };
 }
 
 function miniStats(data: (number | null)[], decimals = 1): { min: string; avg: string; max: string } | null {
@@ -408,6 +412,7 @@ function buildGameRows(baseItems: PlayerStats[]): GameRow[] {
 }
 
 export default function PlayerStatisticsByPlayerPage() {
+  const { resolvedTheme } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -865,7 +870,9 @@ export default function PlayerStatisticsByPlayerPage() {
     };
   }, [selectedPlayerIds, perDayByPlayer, playerOptions]);
 
-  const createChartOptions = (maxY?: number, showLegend = false) => ({
+  const createChartOptions = (maxY?: number, showLegend = false) => {
+    const t = chartTheme();
+    return {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: "index" as const, intersect: false },
@@ -873,9 +880,14 @@ export default function PlayerStatisticsByPlayerPage() {
       legend: {
         display: showLegend,
         position: "top" as const,
-        labels: { boxWidth: 12, padding: 8, font: { size: 10 } },
+        labels: { boxWidth: 12, padding: 8, font: { size: 10 }, color: t.fg },
       },
       tooltip: {
+        backgroundColor: t.surface,
+        titleColor: t.fg,
+        bodyColor: t.fg,
+        borderColor: t.border,
+        borderWidth: 1,
         callbacks: {
           label: (ctx: any) => {
             const v = ctx.raw as number;
@@ -886,24 +898,26 @@ export default function PlayerStatisticsByPlayerPage() {
     },
     scales: {
       x: {
-        grid: { display: false },
-        ticks: { maxRotation: 45, minRotation: 45, font: { size: 10 } },
+        grid: { display: false, color: t.grid },
+        ticks: { maxRotation: 45, minRotation: 45, font: { size: 10 }, color: t.fgMuted },
       },
       y: {
-        grid: { color: "rgba(0,0,0,0.05)" },
+        grid: { color: t.grid },
         ticks: {
           padding: 8,
+          color: t.fgMuted,
         },
         grace: "10%",
         ...(maxY !== undefined && { max: maxY }),
       },
     },
-  });
+    };
+  };
 
   const isComparing = selectedPlayerIds.length > 1;
-  const chartOptionsDefault = useMemo(() => createChartOptions(undefined, isComparing), [isComparing]);
-  const chartOptionsPercent = useMemo(() => createChartOptions(100, isComparing), [isComparing]);
-  const chartOptionsRating = useMemo(() => createChartOptions(10, isComparing), [isComparing]);
+  const chartOptionsDefault = useMemo(() => createChartOptions(undefined, isComparing), [isComparing, resolvedTheme]);
+  const chartOptionsPercent = useMemo(() => createChartOptions(100, isComparing), [isComparing, resolvedTheme]);
+  const chartOptionsRating = useMemo(() => createChartOptions(10, isComparing), [isComparing, resolvedTheme]);
 
   // Todas as partidas (flatten dos jogos por dia)
   const allGames: PlayerStats[] = useMemo(() => {
@@ -1214,21 +1228,21 @@ export default function PlayerStatisticsByPlayerPage() {
 
   const modeBadgeClass =
     "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border " +
-    (useDaysRanking ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-sky-50 text-sky-700 border-sky-200");
+    (useDaysRanking ? "bg-positive-soft text-positive-fg border-positive/40" : "bg-accent/10 text-accent border-accent/30");
 
   const modeLabel = useDaysRanking ? "Modo: dias" : "Modo: jogos";
 
   const qbCls = (key: string) =>
     `text-xs border rounded-lg px-2.5 py-1 shadow-sm transition-colors ${
       activeQuickRange === key
-        ? "bg-gray-800 text-white border-gray-800"
-        : "bg-white hover:bg-gray-50"
+        ? "bg-accent text-accent-fg border-accent"
+        : "bg-surface text-fg-secondary hover:bg-surface-raised"
     }`;
 
   const rankTopClass =
-    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-green-50 text-green-700 border-green-200";
+    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-positive-soft text-positive-fg border-positive/40";
   const rankWorstClass =
-    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-red-50 text-red-700 border-red-200";
+    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-negative-soft text-negative-fg border-negative/40";
 
   return (
     <div className="p-4 flex flex-col gap-6">
@@ -1238,11 +1252,11 @@ export default function PlayerStatisticsByPlayerPage() {
           <div className="flex items-center gap-2">
               <Link
                 to="/"
-                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-white hover:bg-gray-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-surface hover:bg-surface-raised"
               >
                 ← Voltar
               </Link>
-              <span className="text-gray-400 text-sm">Estatísticas individuais por data</span>
+              <span className="text-fg-subtle text-sm">Estatísticas individuais por data</span>
             </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
             <div className="flex gap-2 items-center">
@@ -1282,7 +1296,7 @@ export default function PlayerStatisticsByPlayerPage() {
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm font-medium">Jogador</span>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-fg-muted">
                 {selectedPlayerIds.length === 0
                   ? "Selecione até 2 jogadores para comparar"
                   : selectedPlayerIds.length === 1
@@ -1291,7 +1305,7 @@ export default function PlayerStatisticsByPlayerPage() {
               </span>
             </div>
             {playerOptions.length === 0 ? (
-              <div className="text-xs text-gray-500 italic">Nenhum jogador encontrado no período.</div>
+              <div className="text-xs text-fg-muted italic">Nenhum jogador encontrado no período.</div>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {playerOptions.map((p) => {
@@ -1305,8 +1319,8 @@ export default function PlayerStatisticsByPlayerPage() {
                       className={
                         "px-3 py-1 rounded-full text-xs sm:text-sm border transition-colors " +
                         (isActive
-                          ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                          : "bg-white text-gray-800 border-gray-300 hover:bg-gray-50")
+                          ? "bg-accent text-accent-fg border-accent shadow-sm"
+                          : "bg-surface text-fg border-border-strong hover:bg-surface-raised")
                       }
                     >
                       {p.name}
@@ -1327,7 +1341,7 @@ export default function PlayerStatisticsByPlayerPage() {
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm font-medium">Dia</span>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-fg-muted">
                 Clique em um dia para ver jogo a jogo, ou em <strong>Todos</strong> para o resumo.
               </span>
             </div>
@@ -1339,8 +1353,8 @@ export default function PlayerStatisticsByPlayerPage() {
                 className={
                   "px-3 py-1 rounded-full text-xs sm:text-sm border transition-colors " +
                   (selectedDayKey === "all"
-                    ? "bg-gray-800 text-white border-gray-800 shadow-sm"
-                    : "bg-white text-gray-800 border-gray-300 hover:bg-gray-50")
+                    ? "bg-accent text-accent-fg border-accent shadow-sm"
+                    : "bg-surface text-fg border-border-strong hover:bg-surface-raised")
                 }
               >
                 Todos os dias
@@ -1363,7 +1377,7 @@ export default function PlayerStatisticsByPlayerPage() {
                     onClick={() => setSelectedDayKey(d)}
                     className={
                       "px-3 py-1 rounded-full text-xs sm:text-sm border transition-transform " +
-                      (isActive ? "ring-2 ring-offset-1 ring-offset-white" : "")
+                      (isActive ? "ring-2 ring-accent ring-offset-1 ring-offset-bg" : "")
                     }
                     style={{
                       backgroundColor: c.bg,
@@ -1394,42 +1408,42 @@ export default function PlayerStatisticsByPlayerPage() {
               </h2>
               <span className={modeBadgeClass}>{modeLabel}</span>
             </div>
-            <span className="text-xs text-gray-500">Intervalo: {summary.scopeLabel}</span>
+            <span className="text-xs text-fg-muted">Intervalo: {summary.scopeLabel}</span>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             {/* Jogos */}
-            <div className="bg-white rounded-lg border px-3 py-2 flex flex-col gap-1">
-              <span className="text-xs uppercase tracking-wide text-gray-500">Jogos</span>
+            <div className="bg-surface rounded-lg border px-3 py-2 flex flex-col gap-1">
+              <span className="text-xs uppercase tracking-wide text-fg-muted">Jogos</span>
               <span className="text-2xl font-bold">{summary.totalMatches}</span>
               {selectedDayKey === "all" && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-fg-muted">
                   {summary.daysCount} dia(s); {summary.matchesPerDay.toFixed(2)} jogos/dia
                 </span>
               )}
             </div>
 
             {/* Resultados */}
-            <div className="bg-white rounded-lg border px-3 py-2 flex flex-col gap-1">
-              <span className="text-xs uppercase tracking-wide text-gray-500">Resultados</span>
+            <div className="bg-surface rounded-lg border px-3 py-2 flex flex-col gap-1">
+              <span className="text-xs uppercase tracking-wide text-fg-muted">Resultados</span>
               <RecordBar wins={summary.totalWins} draws={summary.totalDraws} losses={summary.totalLosses} />
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-fg-muted">
                 Win {summary.totalMatches > 0 ? ((summary.totalWins * 100) / summary.totalMatches).toFixed(1) : "0.0"}%
               </span>
             </div>
 
             {/* Gols / Assistências / Pré-Assistências */}
-            <div className="bg-white rounded-lg border px-3 py-2 flex flex-col gap-1">
-              <span className="text-xs uppercase tracking-wide text-gray-500">Gols, Assist. &amp; Pré-Assist.</span>
+            <div className="bg-surface rounded-lg border px-3 py-2 flex flex-col gap-1">
+              <span className="text-xs uppercase tracking-wide text-fg-muted">Gols, Assist. &amp; Pré-Assist.</span>
               <span className="text-sm">
                 G: <strong>{summary.totalGoals}</strong> — A: <strong>{summary.totalAssists}</strong> — PA: <strong>{summary.totalPreAssists}</strong>
               </span>
-              <span className="text-xs text-gray-500">{summary.goalsPerGame.toFixed(2)} gol/jogo</span>
+              <span className="text-xs text-fg-muted">{summary.goalsPerGame.toFixed(2)} gol/jogo</span>
             </div>
 
             {/* Passes / Desarmes / Nota */}
-            <div className="bg-white rounded-lg border px-3 py-2 flex flex-col gap-1">
-              <span className="text-xs uppercase tracking-wide text-gray-500">Passe, desarme e nota</span>
+            <div className="bg-surface rounded-lg border px-3 py-2 flex flex-col gap-1">
+              <span className="text-xs uppercase tracking-wide text-fg-muted">Passe, desarme e nota</span>
               <span className="text-xs">
                 Passe: <strong>{summary.passPct.toFixed(1)}%</strong> ({summary.totalPassesMade}/
                 {summary.totalPassAttempts})
@@ -1438,7 +1452,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 Desarme: <strong>{summary.tacklePct.toFixed(1)}%</strong> ({summary.totalTacklesMade}/
                 {summary.totalTackleAttempts})
               </span>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-fg-muted">
                 Nota média: {summary.avgRating.toFixed(2)} — Defesas: {summary.totalSaves}
               </span>
             </div>
@@ -1458,14 +1472,14 @@ export default function PlayerStatisticsByPlayerPage() {
 
           {/* Melhor dia */}
           {bestDay && (
-            <div className="rounded-lg border border-l-4 border-l-amber-400 bg-amber-50/40 p-3 flex flex-col gap-2">
+            <div className="rounded-lg border border-l-4 border-l-gold bg-gold-soft/40 p-3 flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-wide text-gray-500">
+                <span className="text-xs uppercase tracking-wide text-fg-muted">
                   Melhor dia do jogador (part. = gols + assist. + pré-assist.)
                 </span>
                 <DateBadge dateISO={bestDay.date.slice(0, 10)} colorMap={dateColorMap} />
               </div>
-              <div className="flex flex-wrap gap-4 text-xs sm:text-sm text-gray-700 mt-1">
+              <div className="flex flex-wrap gap-4 text-xs sm:text-sm text-fg-secondary mt-1">
                 <span>
                   Jogos: <strong>{bestDay.matches}</strong>
                 </span>
@@ -1504,14 +1518,14 @@ export default function PlayerStatisticsByPlayerPage() {
               {/* TOP 5 */}
               <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {/* Gols */}
-                <div className="border rounded-xl bg-white shadow-sm p-4">
+                <div className="border rounded-xl bg-surface shadow-sm p-4">
                   <div className="mb-2">
                     <span className={rankTopClass}>
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM GOLS" : "TOP 5 JOGOS EM GOLS"}
                     </span>
                   </div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="text-[11px] text-gray-500">
+                    <thead className="text-[11px] text-fg-muted">
                       <tr>
                         <th className="text-left pb-1 w-[45%]">Data/Hora</th>
                         <th className="text-right pb-1 w-[25%]">Gols</th>
@@ -1520,13 +1534,13 @@ export default function PlayerStatisticsByPlayerPage() {
                     </thead>
                     <tbody>
                       {topGoalsList.map((g) => (
-                        <tr key={`tg-${g.id}`} className="hover:bg-gray-50">
+                        <tr key={`tg-${g.id}`} className="hover:bg-surface-raised">
                           <td className="py-0.5 pr-2">
                             {g.dateISO ? (
                               <>
                                 <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
                                 {g.time && !useDaysRanking && (
-                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                  <span className="ml-1 text-[11px] text-fg-muted">{g.time}</span>
                                 )}
                               </>
                             ) : (
@@ -1534,7 +1548,7 @@ export default function PlayerStatisticsByPlayerPage() {
                             )}
                           </td>
                           <td className="py-0.5 text-right">{g.goals}</td>
-                          <td className="py-0.5 text-right text-gray-600">{g.rating.toFixed(2)}</td>
+                          <td className="py-0.5 text-right text-fg-muted">{g.rating.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1542,14 +1556,14 @@ export default function PlayerStatisticsByPlayerPage() {
                 </div>
 
                 {/* Assistências */}
-                <div className="border rounded-xl bg-white shadow-sm p-4">
+                <div className="border rounded-xl bg-surface shadow-sm p-4">
                   <div className="mb-2">
                     <span className={rankTopClass}>
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM ASSISTÊNCIAS" : "TOP 5 JOGOS EM ASSISTÊNCIAS"}
                     </span>
                   </div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="text-[11px] text-gray-500">
+                    <thead className="text-[11px] text-fg-muted">
                       <tr>
                         <th className="text-left pb-1 w-[45%]">Data/Hora</th>
                         <th className="text-right pb-1 w-[25%]">Ast</th>
@@ -1558,13 +1572,13 @@ export default function PlayerStatisticsByPlayerPage() {
                     </thead>
                     <tbody>
                       {topAssistsList.map((g) => (
-                        <tr key={`ta-${g.id}`} className="hover:bg-gray-50">
+                        <tr key={`ta-${g.id}`} className="hover:bg-surface-raised">
                           <td className="py-0.5 pr-2">
                             {g.dateISO ? (
                               <>
                                 <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
                                 {g.time && !useDaysRanking && (
-                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                  <span className="ml-1 text-[11px] text-fg-muted">{g.time}</span>
                                 )}
                               </>
                             ) : (
@@ -1572,7 +1586,7 @@ export default function PlayerStatisticsByPlayerPage() {
                             )}
                           </td>
                           <td className="py-0.5 text-right">{g.assists}</td>
-                          <td className="py-0.5 text-right text-gray-600">{g.rating.toFixed(2)}</td>
+                          <td className="py-0.5 text-right text-fg-muted">{g.rating.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1580,14 +1594,14 @@ export default function PlayerStatisticsByPlayerPage() {
                 </div>
 
                 {/* Pré-Assistências */}
-                <div className="border rounded-xl bg-white shadow-sm p-4">
+                <div className="border rounded-xl bg-surface shadow-sm p-4">
                   <div className="mb-2">
                     <span className={rankTopClass}>
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM PRÉ-ASSIST." : "TOP 5 JOGOS EM PRÉ-ASSIST."}
                     </span>
                   </div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="text-[11px] text-gray-500">
+                    <thead className="text-[11px] text-fg-muted">
                       <tr>
                         <th className="text-left pb-1 w-[45%]">Data/Hora</th>
                         <th className="text-right pb-1 w-[25%]">Pré-Ast</th>
@@ -1596,13 +1610,13 @@ export default function PlayerStatisticsByPlayerPage() {
                     </thead>
                     <tbody>
                       {topPreAssistsList.map((g) => (
-                        <tr key={`tpa-${g.id}`} className="hover:bg-gray-50">
+                        <tr key={`tpa-${g.id}`} className="hover:bg-surface-raised">
                           <td className="py-0.5 pr-2">
                             {g.dateISO ? (
                               <>
                                 <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
                                 {g.time && !useDaysRanking && (
-                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                  <span className="ml-1 text-[11px] text-fg-muted">{g.time}</span>
                                 )}
                               </>
                             ) : (
@@ -1610,7 +1624,7 @@ export default function PlayerStatisticsByPlayerPage() {
                             )}
                           </td>
                           <td className="py-0.5 text-right">{g.preAssists}</td>
-                          <td className="py-0.5 text-right text-gray-600">{g.rating.toFixed(2)}</td>
+                          <td className="py-0.5 text-right text-fg-muted">{g.rating.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1618,14 +1632,14 @@ export default function PlayerStatisticsByPlayerPage() {
                 </div>
 
                 {/* Desarmes */}
-                <div className="border rounded-xl bg-white shadow-sm p-4">
+                <div className="border rounded-xl bg-surface shadow-sm p-4">
                   <div className="mb-2">
                     <span className={rankTopClass}>
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM DESARMES" : "TOP 5 JOGOS EM DESARMES"}
                     </span>
                   </div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="text-[11px] text-gray-500">
+                    <thead className="text-[11px] text-fg-muted">
                       <tr>
                         <th className="text-left pb-1 w-[45%]">Data/Hora</th>
                         <th className="text-right pb-1 w-[25%]">Des.</th>
@@ -1634,13 +1648,13 @@ export default function PlayerStatisticsByPlayerPage() {
                     </thead>
                     <tbody>
                       {topTacklesList.map((g) => (
-                        <tr key={`tt-${g.id}`} className="hover:bg-gray-50">
+                        <tr key={`tt-${g.id}`} className="hover:bg-surface-raised">
                           <td className="py-0.5 pr-2">
                             {g.dateISO ? (
                               <>
                                 <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
                                 {g.time && !useDaysRanking && (
-                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                  <span className="ml-1 text-[11px] text-fg-muted">{g.time}</span>
                                 )}
                               </>
                             ) : (
@@ -1648,7 +1662,7 @@ export default function PlayerStatisticsByPlayerPage() {
                             )}
                           </td>
                           <td className="py-0.5 text-right">{g.tacklesMade}</td>
-                          <td className="py-0.5 text-right text-gray-600">{g.tacklePct.toFixed(1)}%</td>
+                          <td className="py-0.5 text-right text-fg-muted">{g.tacklePct.toFixed(1)}%</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1656,14 +1670,14 @@ export default function PlayerStatisticsByPlayerPage() {
                 </div>
 
                 {/* Passes */}
-                <div className="border rounded-xl bg-white shadow-sm p-4">
+                <div className="border rounded-xl bg-surface shadow-sm p-4">
                   <div className="mb-2">
                     <span className={rankTopClass}>
                       {useDaysRanking ? "TOP 5 MELHORES DIAS EM PASSES" : "TOP 5 JOGOS EM PASSES"}
                     </span>
                   </div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="text-[11px] text-gray-500">
+                    <thead className="text-[11px] text-fg-muted">
                       <tr>
                         <th className="text-left pb-1 w-[40%]">Data/Hora</th>
                         <th className="text-right pb-1 w-[30%]">Passes C/T</th>
@@ -1672,13 +1686,13 @@ export default function PlayerStatisticsByPlayerPage() {
                     </thead>
                     <tbody>
                       {topPassesList.map((g) => (
-                        <tr key={`tp-${g.id}`} className="hover:bg-gray-50">
+                        <tr key={`tp-${g.id}`} className="hover:bg-surface-raised">
                           <td className="py-0.5 pr-2">
                             {g.dateISO ? (
                               <>
                                 <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
                                 {g.time && !useDaysRanking && (
-                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                  <span className="ml-1 text-[11px] text-fg-muted">{g.time}</span>
                                 )}
                               </>
                             ) : (
@@ -1688,7 +1702,7 @@ export default function PlayerStatisticsByPlayerPage() {
                           <td className="py-0.5 text-right">
                             {g.passesMade} / {g.passesAttempted}
                           </td>
-                          <td className="py-0.5 text-right text-gray-600">{g.passPct.toFixed(1)}%</td>
+                          <td className="py-0.5 text-right text-fg-muted">{g.passPct.toFixed(1)}%</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1699,14 +1713,14 @@ export default function PlayerStatisticsByPlayerPage() {
               {/* PIORES 5 */}
               <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {/* Gols */}
-                <div className="border rounded-xl bg-white shadow-sm p-4">
+                <div className="border rounded-xl bg-surface shadow-sm p-4">
                   <div className="mb-2">
                     <span className={rankWorstClass}>
                       {useDaysRanking ? "PIORES 5 DIAS EM GOLS" : "PIORES 5 JOGOS EM GOLS"}
                     </span>
                   </div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="text-[11px] text-gray-500">
+                    <thead className="text-[11px] text-fg-muted">
                       <tr>
                         <th className="text-left pb-1 w-[45%]">Data/Hora</th>
                         <th className="text-right pb-1 w-[25%]">Gols</th>
@@ -1715,13 +1729,13 @@ export default function PlayerStatisticsByPlayerPage() {
                     </thead>
                     <tbody>
                       {worstGoalsList.map((g) => (
-                        <tr key={`wg-${g.id}`} className="hover:bg-gray-50">
+                        <tr key={`wg-${g.id}`} className="hover:bg-surface-raised">
                           <td className="py-0.5 pr-2">
                             {g.dateISO ? (
                               <>
                                 <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
                                 {g.time && !useDaysRanking && (
-                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                  <span className="ml-1 text-[11px] text-fg-muted">{g.time}</span>
                                 )}
                               </>
                             ) : (
@@ -1729,7 +1743,7 @@ export default function PlayerStatisticsByPlayerPage() {
                             )}
                           </td>
                           <td className="py-0.5 text-right">{g.goals}</td>
-                          <td className="py-0.5 text-right text-gray-600">{g.rating.toFixed(2)}</td>
+                          <td className="py-0.5 text-right text-fg-muted">{g.rating.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1737,14 +1751,14 @@ export default function PlayerStatisticsByPlayerPage() {
                 </div>
 
                 {/* Assistências */}
-                <div className="border rounded-xl bg-white shadow-sm p-4">
+                <div className="border rounded-xl bg-surface shadow-sm p-4">
                   <div className="mb-2">
                     <span className={rankWorstClass}>
                       {useDaysRanking ? "PIORES 5 DIAS EM ASSISTÊNCIAS" : "PIORES 5 JOGOS EM ASSISTÊNCIAS"}
                     </span>
                   </div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="text-[11px] text-gray-500">
+                    <thead className="text-[11px] text-fg-muted">
                       <tr>
                         <th className="text-left pb-1 w-[45%]">Data/Hora</th>
                         <th className="text-right pb-1 w-[25%]">Ast</th>
@@ -1753,13 +1767,13 @@ export default function PlayerStatisticsByPlayerPage() {
                     </thead>
                     <tbody>
                       {worstAssistsList.map((g) => (
-                        <tr key={`wa-${g.id}`} className="hover:bg-gray-50">
+                        <tr key={`wa-${g.id}`} className="hover:bg-surface-raised">
                           <td className="py-0.5 pr-2">
                             {g.dateISO ? (
                               <>
                                 <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
                                 {g.time && !useDaysRanking && (
-                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                  <span className="ml-1 text-[11px] text-fg-muted">{g.time}</span>
                                 )}
                               </>
                             ) : (
@@ -1767,7 +1781,7 @@ export default function PlayerStatisticsByPlayerPage() {
                             )}
                           </td>
                           <td className="py-0.5 text-right">{g.assists}</td>
-                          <td className="py-0.5 text-right text-gray-600">{g.rating.toFixed(2)}</td>
+                          <td className="py-0.5 text-right text-fg-muted">{g.rating.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1775,14 +1789,14 @@ export default function PlayerStatisticsByPlayerPage() {
                 </div>
 
                 {/* Pré-Assistências */}
-                <div className="border rounded-xl bg-white shadow-sm p-4">
+                <div className="border rounded-xl bg-surface shadow-sm p-4">
                   <div className="mb-2">
                     <span className={rankWorstClass}>
                       {useDaysRanking ? "PIORES 5 DIAS EM PRÉ-ASSIST." : "PIORES 5 JOGOS EM PRÉ-ASSIST."}
                     </span>
                   </div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="text-[11px] text-gray-500">
+                    <thead className="text-[11px] text-fg-muted">
                       <tr>
                         <th className="text-left pb-1 w-[45%]">Data/Hora</th>
                         <th className="text-right pb-1 w-[25%]">Pré-Ast</th>
@@ -1791,13 +1805,13 @@ export default function PlayerStatisticsByPlayerPage() {
                     </thead>
                     <tbody>
                       {worstPreAssistsList.map((g) => (
-                        <tr key={`wpa-${g.id}`} className="hover:bg-gray-50">
+                        <tr key={`wpa-${g.id}`} className="hover:bg-surface-raised">
                           <td className="py-0.5 pr-2">
                             {g.dateISO ? (
                               <>
                                 <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
                                 {g.time && !useDaysRanking && (
-                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                  <span className="ml-1 text-[11px] text-fg-muted">{g.time}</span>
                                 )}
                               </>
                             ) : (
@@ -1805,7 +1819,7 @@ export default function PlayerStatisticsByPlayerPage() {
                             )}
                           </td>
                           <td className="py-0.5 text-right">{g.preAssists}</td>
-                          <td className="py-0.5 text-right text-gray-600">{g.rating.toFixed(2)}</td>
+                          <td className="py-0.5 text-right text-fg-muted">{g.rating.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1813,14 +1827,14 @@ export default function PlayerStatisticsByPlayerPage() {
                 </div>
 
                 {/* Desarmes */}
-                <div className="border rounded-xl bg-white shadow-sm p-4">
+                <div className="border rounded-xl bg-surface shadow-sm p-4">
                   <div className="mb-2">
                     <span className={rankWorstClass}>
                       {useDaysRanking ? "PIORES 5 DIAS EM DESARMES" : "PIORES 5 JOGOS EM DESARMES"}
                     </span>
                   </div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="text-[11px] text-gray-500">
+                    <thead className="text-[11px] text-fg-muted">
                       <tr>
                         <th className="text-left pb-1 w-[45%]">Data/Hora</th>
                         <th className="text-right pb-1 w-[25%]">Des.</th>
@@ -1829,13 +1843,13 @@ export default function PlayerStatisticsByPlayerPage() {
                     </thead>
                     <tbody>
                       {worstTacklesList.map((g) => (
-                        <tr key={`wt-${g.id}`} className="hover:bg-gray-50">
+                        <tr key={`wt-${g.id}`} className="hover:bg-surface-raised">
                           <td className="py-0.5 pr-2">
                             {g.dateISO ? (
                               <>
                                 <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
                                 {g.time && !useDaysRanking && (
-                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                  <span className="ml-1 text-[11px] text-fg-muted">{g.time}</span>
                                 )}
                               </>
                             ) : (
@@ -1843,7 +1857,7 @@ export default function PlayerStatisticsByPlayerPage() {
                             )}
                           </td>
                           <td className="py-0.5 text-right">{g.tacklesMade}</td>
-                          <td className="py-0.5 text-right text-gray-600">{g.tacklePct.toFixed(1)}%</td>
+                          <td className="py-0.5 text-right text-fg-muted">{g.tacklePct.toFixed(1)}%</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1851,14 +1865,14 @@ export default function PlayerStatisticsByPlayerPage() {
                 </div>
 
                 {/* Passes */}
-                <div className="border rounded-xl bg-white shadow-sm p-4">
+                <div className="border rounded-xl bg-surface shadow-sm p-4">
                   <div className="mb-2">
                     <span className={rankWorstClass}>
                       {useDaysRanking ? "PIORES 5 DIAS EM PASSES" : "PIORES 5 JOGOS EM PASSES"}
                     </span>
                   </div>
                   <table className="w-full text-xs table-fixed">
-                    <thead className="text-[11px] text-gray-500">
+                    <thead className="text-[11px] text-fg-muted">
                       <tr>
                         <th className="text-left pb-1 w-[40%]">Data/Hora</th>
                         <th className="text-right pb-1 w-[30%]">Passes C/T</th>
@@ -1867,13 +1881,13 @@ export default function PlayerStatisticsByPlayerPage() {
                     </thead>
                     <tbody>
                       {worstPassesList.map((g) => (
-                        <tr key={`wp-${g.id}`} className="hover:bg-gray-50">
+                        <tr key={`wp-${g.id}`} className="hover:bg-surface-raised">
                           <td className="py-0.5 pr-2">
                             {g.dateISO ? (
                               <>
                                 <DateBadge dateISO={g.dateISO} colorMap={dateColorMap} />
                                 {g.time && !useDaysRanking && (
-                                  <span className="ml-1 text-[11px] text-gray-500">{g.time}</span>
+                                  <span className="ml-1 text-[11px] text-fg-muted">{g.time}</span>
                                 )}
                               </>
                             ) : (
@@ -1883,7 +1897,7 @@ export default function PlayerStatisticsByPlayerPage() {
                           <td className="py-0.5 text-right">
                             {g.passesMade} / {g.passesAttempted}
                           </td>
-                          <td className="py-0.5 text-right text-gray-600">{g.passPct.toFixed(1)}%</td>
+                          <td className="py-0.5 text-right text-fg-muted">{g.passPct.toFixed(1)}%</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1896,12 +1910,12 @@ export default function PlayerStatisticsByPlayerPage() {
       )}
 
       {loading && <div>Carregando…</div>}
-      {error && <div className="text-red-600">{error}</div>}
-      {!loading && !error && !clubIds.length && <div className="text-gray-600">Nenhum clube selecionado.</div>}
+      {error && <div className="text-negative">{error}</div>}
+      {!loading && !error && !clubIds.length && <div className="text-fg-muted">Nenhum clube selecionado.</div>}
 
       {/* Quando não tem jogador ou ele não jogou no período */}
       {!loading && !error && selectedPlayerId && perDayForPlayer.length === 0 && (
-        <div className="text-gray-600">{selectedPlayerName} não possui partidas no período selecionado.</div>
+        <div className="text-fg-muted">{selectedPlayerName} não possui partidas no período selecionado.</div>
       )}
 
       {/* ===== VISÃO: TODOS OS DIAS (TABELA ÚNICA) ===== */}
@@ -1909,9 +1923,9 @@ export default function PlayerStatisticsByPlayerPage() {
         <section className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">{selectedPlayerName} — resumo por dia</h2>
 
-          <div className="overflow-x-auto rounded-lg border bg-white">
+          <div className="overflow-x-auto rounded-lg border bg-surface">
             <table className="table-auto w-full text-sm">
-              <thead className="bg-gray-50">
+              <thead className="bg-surface-raised">
                 <tr>
                   <th className="px-3 py-2 text-left">Data</th>
                   <th className="px-3 py-2 text-center">Janela</th>
@@ -1934,16 +1948,16 @@ export default function PlayerStatisticsByPlayerPage() {
                   const dayBlock = days.find((b) => b.date.slice(0, 10) === key);
                   const rowBorder = dayBlock
                     ? dayBlock.wins > dayBlock.losses
-                      ? "border-l-4 border-l-green-500"
+                      ? "border-l-4 border-l-positive"
                       : dayBlock.losses > dayBlock.wins
-                      ? "border-l-4 border-l-red-400"
+                      ? "border-l-4 border-l-negative"
                       : dayBlock.draws > 0
-                      ? "border-l-4 border-l-amber-400"
+                      ? "border-l-4 border-l-warning"
                       : ""
                     : "";
 
                   return (
-                    <tr key={d.date} className={`hover:bg-gray-50 ${rowBorder}`}>
+                    <tr key={d.date} className={`hover:bg-surface-raised ${rowBorder}`}>
                       <td className="px-3 py-2 text-left">
                         <DateBadge dateISO={key} colorMap={dateColorMap} />
                       </td>
@@ -1980,12 +1994,13 @@ export default function PlayerStatisticsByPlayerPage() {
           {chartDataForPlayer && (
             <div className="mt-6">
               <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
-                <span className="inline-block w-1 h-5 rounded-full bg-indigo-500" />
+                <span className="inline-block w-1 h-5 rounded-full bg-accent" />
                 Evolução por dia {isComparing && `— ${selectedPlayerNames}`}
               </h3>
               <div className="flex flex-col gap-4">
                 <ChartCard
                   label="Gols"
+                  themeKey={resolvedTheme}
                   color={CHART_COLORS.goals}
                   datasets={chartDataForPlayer.goals}
                   options={chartOptionsDefault}
@@ -1995,6 +2010,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 />
                 <ChartCard
                   label="Assistências"
+                  themeKey={resolvedTheme}
                   color={CHART_COLORS.assists}
                   datasets={chartDataForPlayer.assists}
                   options={chartOptionsDefault}
@@ -2004,6 +2020,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 />
                 <ChartCard
                   label="Pré-Assistências"
+                  themeKey={resolvedTheme}
                   color={CHART_COLORS.preAssists}
                   datasets={chartDataForPlayer.preAssists}
                   options={chartOptionsDefault}
@@ -2013,6 +2030,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 />
                 <ChartCard
                   label="Participações (G+A+PA)"
+                  themeKey={resolvedTheme}
                   color={CHART_COLORS.participations}
                   datasets={chartDataForPlayer.participations}
                   options={chartOptionsDefault}
@@ -2022,6 +2040,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 />
                 <ChartCard
                   label="Precisão de Passe (%)"
+                  themeKey={resolvedTheme}
                   color={CHART_COLORS.passPercent}
                   datasets={chartDataForPlayer.passPercent}
                   options={chartOptionsPercent}
@@ -2031,6 +2050,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 />
                 <ChartCard
                   label="Desarmes por Jogo"
+                  themeKey={resolvedTheme}
                   color={CHART_COLORS.tacklesAvg}
                   datasets={chartDataForPlayer.tacklesAvg}
                   options={chartOptionsDefault}
@@ -2040,6 +2060,7 @@ export default function PlayerStatisticsByPlayerPage() {
                 />
                 <ChartCard
                   label="Nota Média"
+                  themeKey={resolvedTheme}
                   color={CHART_COLORS.rating}
                   datasets={chartDataForPlayer.rating}
                   options={chartOptionsRating}
@@ -2064,20 +2085,20 @@ export default function PlayerStatisticsByPlayerPage() {
                 </h2>
                 <span className={modeBadgeClass}>{modeLabel}</span>
               </div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-fg-muted">
                 Cada linha da tabela representa um jogo disputado pelo jogador no dia selecionado.
               </p>
             </div>
           </div>
 
           {matchesLoading && <div>Carregando jogos do jogador…</div>}
-          {matchesError && <div className="text-red-600">{matchesError}</div>}
+          {matchesError && <div className="text-negative">{matchesError}</div>}
 
           {/* Destaques do dia: melhor jogo */}
           {!matchesLoading && !matchesError && gameHighlights.length > 0 && bestGameOfDay && (
-            <div className="rounded-lg border border-l-4 border-l-amber-400 bg-amber-50/40 p-3 flex flex-col gap-2">
+            <div className="rounded-lg border border-l-4 border-l-gold bg-gold-soft/40 p-3 flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-wide text-gray-500">
+                <span className="text-xs uppercase tracking-wide text-fg-muted">
                   Melhor jogo do dia (part. = gols + assist. + pré-assist.)
                 </span>
                 {bestGameOfDay.time && (
@@ -2086,7 +2107,7 @@ export default function PlayerStatisticsByPlayerPage() {
                   </span>
                 )}
               </div>
-              <div className="flex flex-wrap gap-4 text-xs sm:text-sm text-gray-700 mt-1">
+              <div className="flex flex-wrap gap-4 text-xs sm:text-sm text-fg-secondary mt-1">
                 <span>
                   G/A: <strong>{bestGameOfDay.goals}</strong> / <strong>{bestGameOfDay.assists}</strong>
                 </span>
@@ -2112,7 +2133,7 @@ export default function PlayerStatisticsByPlayerPage() {
           )}
 
           {!matchesLoading && !matchesError && matchesForSelectedDay.length === 0 && (
-            <div className="text-gray-600">Nenhum jogo encontrado para este dia.</div>
+            <div className="text-fg-muted">Nenhum jogo encontrado para este dia.</div>
           )}
 
           {!matchesLoading && !matchesError && matchesForSelectedDay.length > 0 && (

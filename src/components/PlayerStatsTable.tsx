@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { PlayerStats, ClubStats } from "../types/stats.ts";
 import { classifyStat, getStatQualityDetails } from "../utils/statClassifier.ts";
 import { Tooltip } from "./Tooltip.tsx";
-import { PlugZap, Star, RectangleVertical } from "lucide-react";
+import { RatingPill } from "./ui.tsx";
+import { PlugZap, Star } from "lucide-react";
 import { GiGoalKeeper } from "react-icons/gi";
 
 interface PlayerStatsTableProps {
@@ -39,9 +40,9 @@ function useNumberFormats() {
 }
 
 const STICKY_PLAYER_HEADER =
-    "sticky left-0 z-20 border-r border-gray-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]";
+    "sticky left-0 z-20 border-r border-border shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]";
 const STICKY_PLAYER_CELL =
-    "sticky left-0 z-10 border-r border-gray-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]";
+    "sticky left-0 z-10 border-r border-border shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]";
 
 function SortIcon({ active, order }: { active: boolean; order: "asc" | "desc" }) {
     if (!active)
@@ -54,7 +55,22 @@ function SortIcon({ active, order }: { active: boolean; order: "asc" | "desc" })
 }
 
 function Skeleton({ className = "" }: { className?: string }) {
-    return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
+    return <div className={`animate-pulse bg-surface-sunken rounded ${className}`} />;
+}
+
+/** Cartão vermelho com a quantidade de expulsões dentro. */
+function RedCardBadge({ count }: { count: number }) {
+    const label = `${count} cartão${count > 1 ? "ões" : ""} vermelho${count > 1 ? "s" : ""}`;
+    return (
+        <Tooltip content={label}>
+            <span
+                aria-label={label}
+                className="inline-flex items-center justify-center min-w-[1rem] h-[1.15rem] px-0.5 rounded-[2px] bg-red-600 text-white text-[10px] font-bold leading-none tabular-nums"
+            >
+                {count}
+            </span>
+        </Tooltip>
+    );
 }
 
 function CellBar({
@@ -75,13 +91,13 @@ function CellBar({
     const width = clamp((value / (max || 1)) * 100);
     const quality = statType ? classifyStat(statType, value) : null;
 
-    let barColor = positive ? "bg-emerald-200" : "bg-gray-300";
+    let barColor = positive ? "bg-positive/40" : "bg-fg-subtle/40";
     if (quality) {
         const qualityColors: Record<string, string> = {
-            poor: "bg-red-200",
-            decent: "bg-orange-200",
-            good: "bg-green-200",
-            veryGood: "bg-blue-200",
+            poor: "bg-quality-poor/30",
+            decent: "bg-quality-decent/30",
+            good: "bg-quality-good/35",
+            veryGood: "bg-quality-great/35",
         };
         barColor = qualityColors[quality.level];
     }
@@ -89,7 +105,7 @@ function CellBar({
     const label = `${format(value)}${suffix}`;
 
     const cellBarContent = (
-        <div className="relative w-full h-6 rounded-md border border-gray-200 overflow-hidden bg-gray-50">
+        <div className="relative w-full h-6 rounded-md border border-border overflow-hidden bg-surface-sunken">
             <div className={`h-full ${barColor}`} style={{ width: `${width}%` }} />
             <div className="absolute inset-0 grid place-items-center text-xs font-medium whitespace-nowrap tabular-nums">
                 {label}
@@ -135,14 +151,14 @@ function HorizontalRecordBar({
         <Tooltip content={tooltip} wrapperClassName="block">
             <div className="min-w-[72px]">
                 <div className="flex h-3 rounded overflow-hidden gap-px">
-                    {v > 0 && <div className="bg-emerald-400" style={{ width: `${vPct}%` }} />}
-                    {e > 0 && <div className="bg-orange-300" style={{ width: `${ePct}%` }} />}
-                    {d > 0 && <div className="bg-red-400" style={{ width: `${dPct}%` }} />}
+                    {v > 0 && <div className="bg-positive" style={{ width: `${vPct}%` }} />}
+                    {e > 0 && <div className="bg-warning" style={{ width: `${ePct}%` }} />}
+                    {d > 0 && <div className="bg-negative" style={{ width: `${dPct}%` }} />}
                 </div>
-                <div className="flex justify-between text-[10px] mt-0.5 font-medium">
-                    <span className="text-emerald-700">{v}V</span>
-                    <span className="text-orange-500">{e}E</span>
-                    <span className="text-red-600">{d}D</span>
+                <div className="flex justify-between text-[10px] mt-0.5 font-semibold tabular-nums">
+                    <span className="text-positive">{v}V</span>
+                    <span className="text-warning">{e}E</span>
+                    <span className="text-negative">{d}D</span>
                 </div>
             </div>
         </Tooltip>
@@ -169,7 +185,7 @@ export function PlayerStatsTable({
     const [sortKey, setSortKey] = useState<keyof PlayerStats>(initialSortKey);
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialSortOrder);
     const [page, setPage] = useState(1);
-    const { int, p1, p2 } = useNumberFormats();
+    const { int, p1 } = useNumberFormats();
 
     // aplica compactMode: força esconder título e paginação
     const effectiveShowTitle = compactMode ? false : showTitle;
@@ -335,10 +351,10 @@ export function PlayerStatsTable({
         <section>
             {effectiveShowTitle && <h2 className="text-xl font-bold mb-2 text-center">Estatísticas dos Jogadores</h2>}
 
-            <div className="rounded-lg border bg-white shadow overflow-hidden">
+            <div className="rounded-lg border bg-surface shadow overflow-hidden">
                 <div className="scroll-touch-x overflow-x-auto">
                 <table className="table-auto w-full text-sm text-center">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-surface-raised">
                         <tr>
                             {columns.map((c) => {
                                 const headerContent = (
@@ -355,8 +371,8 @@ export function PlayerStatsTable({
                                     <th
                                         key={c.key}
                                         onClick={() => handleSort(c.key as keyof PlayerStats)}
-                                        className={`px-3 py-2 cursor-pointer select-none hover:bg-gray-100 group${
-                                            isActiveSort ? " bg-blue-50" : isProNameCol ? " bg-gray-50" : ""
+                                        className={`px-3 py-2 cursor-pointer select-none hover:bg-surface-sunken group${
+                                            isActiveSort ? " bg-accent/10 text-accent" : isProNameCol ? " bg-surface-raised" : ""
                                         }${isProNameCol ? ` ${STICKY_PLAYER_HEADER}` : ""}`}
                                         aria-sort={
                                             sortKey === (c.key as keyof PlayerStats)
@@ -388,7 +404,7 @@ export function PlayerStatsTable({
 
                         {!loading && pageItems.length === 0 && (
                             <tr>
-                                <td colSpan={columns.length} className="p-4 text-gray-600">
+                                <td colSpan={columns.length} className="p-4 text-fg-muted">
                                     Nenhum jogador encontrado.
                                 </td>
                             </tr>
@@ -407,59 +423,41 @@ export function PlayerStatsTable({
 
                                 const showHighlights = p.matchesPlayed === 1;
 
+                                // Só destacamos a linha inteira quando é uma única partida (a expulsão
+                                // realmente vale para aquele jogo). No agregado, o cartão aparece como
+                                // selo ao lado do nome — sem pintar a linha toda de vermelho.
                                 const rowClass = showHighlights
                                     ? isDisconnected
-                                        ? "bg-red-50 border-l-4 border-red-400"
+                                        ? "bg-negative-soft border-l-4 border-negative"
                                         : isMotm
-                                            ? "bg-amber-50 border-l-4 border-amber-400"
+                                            ? "bg-warning-soft border-l-4 border-warning"
                                             : hasRedCard
-                                                ? "bg-red-50 border-l-4 border-red-500"
+                                                ? "bg-negative-soft border-l-4 border-negative"
                                                 : ""
-                                    : hasRedCard
-                                        ? "bg-red-50"
-                                        : "";
+                                    : "";
 
                                 const Icons = showHighlights ? (
                                     <span className="inline-flex items-center gap-1 mr-2">
                                         {isDisconnected && (
                                             <Tooltip content="Desconectado">
-                                                <PlugZap size={16} className="text-red-600" />
+                                                <PlugZap size={16} className="text-negative" />
                                             </Tooltip>
                                         )}
                                         {isMotm && (
                                             <Tooltip content="Man of the Match">
-                                                <Star size={16} className="text-amber-600" />
+                                                <Star size={16} className="text-gold fill-gold" />
                                             </Tooltip>
                                         )}
                                         {isGoalkeeper && (
                                             <Tooltip content="Goleiro">
-                                                <GiGoalKeeper size={16} className="text-blue-700" />
+                                                <GiGoalKeeper size={16} className="text-accent" />
                                             </Tooltip>
                                         )}
-                                        {hasRedCard && (
-                                            <Tooltip
-                                                content={`${int.format(p.totalRedCards)} Cartão${p.totalRedCards > 1 ? "ões" : ""} Vermelho${
-                                                    p.totalRedCards > 1 ? "s" : ""
-                                                }`}
-                                            >
-                                                <RectangleVertical size={16} className="text-red-700 fill-red-700" />
-                                            </Tooltip>
-                                        )}
-                                    </span>
-                                ) : hasRedCard ? (
-                                    <span className="inline-flex items-center gap-1 mr-2">
-                                        <Tooltip
-                                            content={`${int.format(p.totalRedCards)} Cartão${p.totalRedCards > 1 ? "ões" : ""} Vermelho${
-                                                p.totalRedCards > 1 ? "s" : ""
-                                            }`}
-                                        >
-                                            <RectangleVertical size={16} className="text-red-700 fill-red-700" />
-                                        </Tooltip>
                                     </span>
                                 ) : null;
 
-                                const stripeClass = rowClass ? "" : rowIdx % 2 === 1 ? "bg-gray-50" : "";
-                                const rowBgClass = rowClass || stripeClass || "bg-white";
+                                const stripeClass = rowClass ? "" : rowIdx % 2 === 1 ? "bg-surface-raised" : "";
+                                const rowBgClass = rowClass || stripeClass || "bg-surface";
 
                                 const renderCell = (col: { key: string }) => {
                                     switch (col.key) {
@@ -473,12 +471,17 @@ export function PlayerStatsTable({
                                                     {p.playerEntityId ? (
                                                         <Link
                                                             to={`/player/${p.playerEntityId}`}
-                                                            className="hover:underline hover:text-blue-600 transition-colors"
+                                                            className="hover:underline hover:text-accent transition-colors"
                                                         >
                                                             {p.proName}
                                                         </Link>
                                                     ) : (
                                                         p.proName
+                                                    )}
+                                                    {hasRedCard && (
+                                                        <span className="ml-1.5 inline-flex align-middle">
+                                                            <RedCardBadge count={Number(p.totalRedCards || 0)} />
+                                                        </span>
                                                     )}
                                                 </td>
                                             );
@@ -606,7 +609,11 @@ export function PlayerStatsTable({
                                         case "avgRating":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    {p2.format(Number(p.avgRating || 0))}
+                                                    {Number(p.avgRating) > 0 ? (
+                                                        <RatingPill value={Number(p.avgRating)} />
+                                                    ) : (
+                                                        <span className="text-fg-subtle">—</span>
+                                                    )}
                                                 </td>
                                             );
                                         default:
@@ -615,7 +622,7 @@ export function PlayerStatsTable({
                                 };
 
                                 return (
-                                    <tr key={p.playerId} className={`hover:bg-gray-50 ${rowClass || stripeClass}`}>
+                                    <tr key={p.playerId} className={`hover:bg-surface-raised ${rowClass || stripeClass}`}>
                                         {columns.map((col) => renderCell(col))}
                                     </tr>
                                 );
@@ -627,19 +634,19 @@ export function PlayerStatsTable({
 
             {effectiveShowPagination && (
                 <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-fg-muted">
                         Mostrando {pageItems.length} de {sorted.length} jogadores (pág. {page}/{totalPages})
                     </div>
                     <div className="flex gap-2">
                         <button
-                            className="px-3 py-1 rounded border bg-white disabled:opacity-50"
+                            className="px-3 py-1 rounded border bg-surface disabled:opacity-50"
                             onClick={() => setPage((p) => Math.max(1, p - 1))}
                             disabled={page <= 1}
                         >
                             Anterior
                         </button>
                         <button
-                            className="px-3 py-1 rounded border bg-white disabled:opacity-50"
+                            className="px-3 py-1 rounded border bg-surface disabled:opacity-50"
                             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                             disabled={page >= totalPages}
                         >

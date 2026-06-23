@@ -154,14 +154,14 @@ export default function PlayerStatisticsPage() {
       {/* Cabeçalho */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl sm:text-3xl font-bold">Estatísticas</h1>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold uppercase tracking-wide text-fg">Estatísticas</h1>
           {fetching && (
-            <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" /> Atualizando…
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-accent/10 text-accent border border-accent/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" /> Atualizando…
             </span>
           )}
         </div>
-        <div className="text-sm text-gray-600">
+        <div className="text-sm text-fg-muted">
           {groupClubIds.length > 1 ? (
             <>
               Agrupando clubes: <span className="font-semibold">{groupClubIds.map((id) => selectedClubs.find((c) => c.clubId === id)?.clubName || id).join(", ")}</span>
@@ -178,7 +178,7 @@ export default function PlayerStatisticsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-4">
         <div className="flex gap-2 flex-wrap items-end">
           <div className="flex flex-col">
-            <label htmlFor="matchCount" className="text-sm text-gray-600">
+            <label htmlFor="matchCount" className="text-sm text-fg-muted">
               Últimas partidas
             </label>
             <div className="flex items-center gap-2">
@@ -192,7 +192,7 @@ export default function PlayerStatisticsPage() {
               />
               <button
                 onClick={() => fetchStats(matchCount)}
-                className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                className="px-3 py-2 rounded-lg bg-accent text-accent-fg hover:brightness-110"
               >
                 Atualizar
               </button>
@@ -200,7 +200,7 @@ export default function PlayerStatisticsPage() {
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="search" className="text-sm text-gray-600">
+            <label htmlFor="search" className="text-sm text-fg-muted">
               Buscar jogador
             </label>
             <input
@@ -215,7 +215,7 @@ export default function PlayerStatisticsPage() {
 
           {/* Filtro por jogadores do adversário */}
           <div className="flex flex-col">
-            <label htmlFor="oppPlayers" className="text-sm text-gray-600">
+            <label htmlFor="oppPlayers" className="text-sm text-fg-muted">
               Adversário (jogadores)
             </label>
             <select
@@ -242,7 +242,7 @@ export default function PlayerStatisticsPage() {
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="pageSize" className="text-sm text-gray-600">
+            <label htmlFor="pageSize" className="text-sm text-fg-muted">
               Itens por página
             </label>
             <select

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../services/api.ts";
-import { crestUrl, FALLBACK_LOGO } from "../config/urls.ts";
+import { crestUrl } from "../config/urls.ts";
+import { Crest } from "./ui.tsx";
 
 interface PlayerRow {
   playerId: number;
@@ -272,17 +273,12 @@ export function GoalLinkingSection({
   // Loading state
   if (loading) {
     return (
-      <div className="bg-white shadow-sm rounded-xl p-4 border">
+      <div className="bg-surface shadow-sm rounded-xl p-4 border">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <img
-            src={crestUrl(clubCrestAssetId)}
-            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-            alt={`Escudo ${clubName}`}
-            className="w-6 h-6 rounded-full bg-white border"
-          />
+          <Crest src={crestUrl(clubCrestAssetId)} alt={`Escudo ${clubName}`} size={24} rounded="rounded-full" />
           {clubName} - Assistências
         </h3>
-        <p className="text-sm text-gray-500">Carregando...</p>
+        <p className="text-sm text-fg-muted">Carregando...</p>
       </div>
     );
   }
@@ -290,35 +286,25 @@ export function GoalLinkingSection({
   // No goals case
   if (goalLinks.length === 0) {
     return (
-      <div className="bg-white shadow-sm rounded-xl p-4 border">
+      <div className="bg-surface shadow-sm rounded-xl p-4 border">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <img
-            src={crestUrl(clubCrestAssetId)}
-            onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-            alt={`Escudo ${clubName}`}
-            className="w-6 h-6 rounded-full bg-white border"
-          />
+          <Crest src={crestUrl(clubCrestAssetId)} alt={`Escudo ${clubName}`} size={24} rounded="rounded-full" />
           {clubName} - Vincular Assistências
         </h3>
-        <p className="text-sm text-gray-600">Nenhum gol marcado nesta partida.</p>
+        <p className="text-sm text-fg-muted">Nenhum gol marcado nesta partida.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white shadow-sm rounded-xl p-4 border">
+    <div className="bg-surface shadow-sm rounded-xl p-4 border">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <img
-          src={crestUrl(clubCrestAssetId)}
-          onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-          alt={`Escudo ${clubName}`}
-          className="w-6 h-6 rounded-full bg-white border"
-        />
+        <Crest src={crestUrl(clubCrestAssetId)} alt={`Escudo ${clubName}`} size={24} rounded="rounded-full" />
         {clubName} - {saved ? "Assistências Vinculadas" : "Vincular Assistências"}
       </h3>
 
       {error && (
-        <div className="mb-4 p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded">
+        <div className="mb-4 p-3 text-sm text-negative-fg bg-negative-soft border border-negative/30 rounded">
           {error}
         </div>
       )}
@@ -326,11 +312,11 @@ export function GoalLinkingSection({
       <div className="overflow-x-auto">
         <table className="w-full table-auto text-sm border">
           <thead>
-            <tr className="bg-gray-50">
+            <tr className="bg-surface-raised">
               <th className="p-2 text-left font-medium">Gol</th>
-              <th className="p-2 text-center text-gray-400 w-8"></th>
+              <th className="p-2 text-center text-fg-subtle w-8"></th>
               <th className="p-2 text-left font-medium">Assistência</th>
-              <th className="p-2 text-center text-gray-400 w-8"></th>
+              <th className="p-2 text-center text-fg-subtle w-8"></th>
               <th className="p-2 text-left font-medium">Pré-Assistência</th>
             </tr>
           </thead>
@@ -342,7 +328,7 @@ export function GoalLinkingSection({
               return (
                 <tr key={`${goal.scorerPlayerId}-${goal.goalIndex}`} className="border-t">
                   <td className="p-2 font-medium">{formatScorerName(goal)}</td>
-                  <td className="p-2 text-center text-gray-400">←</td>
+                  <td className="p-2 text-center text-fg-subtle">←</td>
                   <td className="p-2">
                     {saved ? (
                       <span>{getAssistDisplayName(goal, "assist")}</span>
@@ -366,7 +352,7 @@ export function GoalLinkingSection({
                       </select>
                     )}
                   </td>
-                  <td className="p-2 text-center text-gray-400">←</td>
+                  <td className="p-2 text-center text-fg-subtle">←</td>
                   <td className="p-2">
                     {saved ? (
                       <span>{getAssistDisplayName(goal, "preAssist")}</span>
@@ -403,7 +389,7 @@ export function GoalLinkingSection({
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium shadow-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 rounded-lg border border-accent px-4 py-2 text-sm font-medium shadow-sm bg-accent text-accent-fg hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {saving ? "Salvando..." : "Salvar Vínculos"}
           </button>

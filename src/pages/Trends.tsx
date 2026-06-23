@@ -15,6 +15,9 @@ import {
 import { Line, Bar } from "react-chartjs-2";
 import { useClub } from "../hooks/useClub.tsx";
 import { API_ENDPOINTS } from "../config/urls.ts";
+import { useTheme } from "../hooks/useTheme.tsx";
+import { chartTheme, cssVar } from "../utils/themeColors.ts";
+import { RatingPill } from "../components/ui.tsx";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
@@ -90,19 +93,19 @@ const COLORS = {
   slate: { border: "rgba(100,116,139,1)", fill: "rgba(148,163,184,0.15)" },
 };
 
-const pillColor = (r: Result) => (r === "W" ? "bg-green-600" : r === "D" ? "bg-gray-500" : "bg-red-600");
+const pillColor = (r: Result) => (r === "W" ? "bg-positive" : r === "D" ? "bg-warning" : "bg-negative");
 
 function FormPills({ form }: { form: string }) {
-  if (!form) return <span className="text-gray-400">—</span>;
+  if (!form) return <span className="text-fg-subtle">—</span>;
   return (
     <div className="flex flex-wrap gap-1">
       {form.split("").filter((ch) => ch === "W" || ch === "D" || ch === "L").map((ch, i) => {
         const cls =
           ch === "W"
-            ? "bg-green-100 text-green-700 border-green-300"
+            ? "bg-positive-soft text-positive-fg border-positive/40"
             : ch === "D"
-            ? "bg-amber-100 text-amber-700 border-amber-300"
-            : "bg-red-100 text-red-700 border-red-300";
+            ? "bg-warning-soft text-warning-fg border-warning/40"
+            : "bg-negative-soft text-negative-fg border-negative/40";
         return (
           <span
             key={i}
@@ -156,6 +159,7 @@ function colorFromId(num: number) {
 
 export default function TrendsPage() {
   const { club, selectedClubIds, selectedClubs } = useClub();
+  const { resolvedTheme } = useTheme();
 
   // ids efetivos (multi). Se nenhum selecionado, tenta o single legacy.
   const idsToUse = useMemo<number[]>(
@@ -348,9 +352,10 @@ export default function TrendsPage() {
         const base = valuesFor(c.series, "gdiff") as number[];
         const vals = smooth ? movingAvg(base, 5) : base;
         const hex = colorFromId(c.clubId);
+        const negFill = cssVar("--color-negative", 0.45);
         const fillColor =
           chartKind === "bar"
-            ? (ctx: any) => ((ctx.raw ?? 0) >= 0 ? withAlpha(hex, 0.45) : "rgba(244,63,94,0.45)")
+            ? (ctx: any) => ((ctx.raw ?? 0) >= 0 ? withAlpha(hex, 0.45) : negFill)
             : withAlpha(hex, 0.2);
 
         return {
@@ -369,18 +374,25 @@ export default function TrendsPage() {
     }
 
     return { labels: xLabels, datasets: [] };
-  }, [clubsWithData, metric, chartKind, smooth, xLabels, maxLen, pointRadius]);
+  }, [clubsWithData, metric, chartKind, smooth, xLabels, maxLen, pointRadius, resolvedTheme]);
 
   // opções de eixo/tooltip mais limpas
   const baseOptions: any = useMemo(
-    () => ({
+    () => {
+    const t = chartTheme();
+    return {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { display: true, position: "top" },
+        legend: { display: true, position: "top", labels: { color: t.fg } },
         tooltip: {
+          backgroundColor: t.surface,
+          titleColor: t.fg,
+          bodyColor: t.fg,
+          borderColor: t.border,
+          borderWidth: 1,
           callbacks: {
             title: (items: any[]) => {
               if (!items?.length) return "";
@@ -408,21 +420,22 @@ export default function TrendsPage() {
       },
       scales: {
         x: {
-          grid: { display: false },
-          ticks: { autoSkip: true, maxTicksLimit: 8 },
+          grid: { display: false, color: t.grid },
+          ticks: { autoSkip: true, maxTicksLimit: 8, color: t.fgMuted },
         },
         y: {
           beginAtZero: true,
-          grid: { color: "rgba(0,0,0,0.05)" },
-          ticks: { callback: (v: any) => `${v}` },
+          grid: { color: t.grid },
+          ticks: { callback: (v: any) => `${v}`, color: t.fgMuted },
         },
       },
       elements: {
         point: { radius: pointRadius },
         line: { borderJoinStyle: "round", borderCapStyle: "round" },
       },
-    }),
-    [effectiveXMode, singleClub?.series, pointRadius, metric]
+    };
+    },
+    [effectiveXMode, singleClub?.series, pointRadius, metric, resolvedTheme]
   );
 
   const ChartComponent =
@@ -439,23 +452,23 @@ export default function TrendsPage() {
     <div className="p-4 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">Tendências &amp; Streaks — {headerTitle}</h1>
+          <h1 className="font-display font-bold uppercase tracking-wide text-2xl sm:text-3xl text-fg">Tendências &amp; Streaks — {headerTitle}</h1>
           {idsToUse.length > 0 && (
-            <div className="text-xs text-gray-600 mt-1">
+            <div className="text-xs text-fg-muted mt-1">
               Clubes ativos: <span className="font-mono">{idsToUse.join(", ")}</span>
             </div>
           )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-gray-700">Últimos</span>
+          <span className="text-sm text-fg-secondary">Últimos</span>
           <div className="flex items-center gap-1">
             {quickLasts.map((n) => (
               <button
                 key={n}
                 onClick={() => setLast(n)}
                 className={`text-sm px-2.5 py-1 rounded-lg border shadow-sm transition-colors ${
-                  last === n ? "bg-blue-600 text-white border-blue-600" : "bg-white hover:bg-gray-50"
+                  last === n ? "bg-accent text-accent-fg border-accent" : "bg-surface text-fg-secondary hover:bg-surface-raised"
                 }`}
                 aria-pressed={last === n}
               >
@@ -470,10 +483,10 @@ export default function TrendsPage() {
             value={last}
             onChange={(e) => setLast(Math.max(5, parseInt(e.target.value) || 5))}
           />
-          <span className="text-sm text-gray-700">jogos</span>
+          <span className="text-sm text-fg-secondary">jogos</span>
           <button
             onClick={forceReload}
-            className="ml-2 text-sm px-3 py-1 rounded border bg-white hover:bg-gray-50"
+            className="ml-2 text-sm px-3 py-1 rounded border bg-surface hover:bg-surface-raised"
             title="Recarregar"
           >
             Recarregar
@@ -482,24 +495,24 @@ export default function TrendsPage() {
       </div>
 
       {idsToUse.length === 0 && (
-        <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded">
+        <div className="p-3 bg-warning-soft border border-warning/40 text-warning-fg rounded">
           Selecione um clube no menu para ver as tendências.
         </div>
       )}
 
       {idsToUse.length > 0 && loading && (
         <div className="grid gap-3">
-          <div className="animate-pulse bg-white border rounded-xl p-4 h-20" />
-          <div className="animate-pulse bg-white border rounded-xl p-4 h-24" />
-          <div className="animate-pulse bg-white border rounded-xl p-4 h-[340px]" />
-          <div className="animate-pulse bg-white border rounded-xl p-4 h-48" />
+          <div className="animate-pulse bg-surface border rounded-xl p-4 h-20" />
+          <div className="animate-pulse bg-surface border rounded-xl p-4 h-24" />
+          <div className="animate-pulse bg-surface border rounded-xl p-4 h-[340px]" />
+          <div className="animate-pulse bg-surface border rounded-xl p-4 h-48" />
         </div>
       )}
 
       {idsToUse.length > 0 && error && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center justify-between">
+        <div className="p-3 bg-negative-soft border border-negative/40 text-negative-fg rounded flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={forceReload} className="text-sm px-3 py-1 rounded border bg-white hover:bg-gray-50">
+          <button onClick={forceReload} className="text-sm px-3 py-1 rounded border bg-surface hover:bg-surface-raised">
             Tentar novamente
           </button>
         </div>
@@ -512,7 +525,7 @@ export default function TrendsPage() {
             {clubsWithData.map((c) => (
               <div
                 key={c.clubId}
-                className="bg-white border border-l-4 rounded-xl p-4"
+                className="bg-surface border border-l-4 rounded-xl p-4"
                 style={{ borderLeftColor: colorFromId(c.clubId) }}
               >
                 <div className="flex items-center justify-between mb-3">
@@ -520,29 +533,29 @@ export default function TrendsPage() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <div className="text-xs text-gray-500 mb-1">Forma (Últimos 5)</div>
+                    <div className="text-xs text-fg-muted mb-1">Forma (Últimos 5)</div>
                     <FormPills form={c.formLast5} />
                   </div>
                   <div>
-                    <div className="text-xs text-gray-500 mb-1">Forma (Últimos 10)</div>
+                    <div className="text-xs text-fg-muted mb-1">Forma (Últimos 10)</div>
                     <FormPills form={c.formLast10} />
                   </div>
                   <div className="grid grid-cols-3 text-center gap-2">
                     <div>
-                      <div className="text-[11px] text-gray-500">Sem perder</div>
-                      <div className={`text-lg font-bold ${c.currentUnbeaten > 0 ? "text-green-600" : "text-gray-400"}`}>
+                      <div className="text-[11px] text-fg-muted">Sem perder</div>
+                      <div className={`text-lg font-bold ${c.currentUnbeaten > 0 ? "text-positive" : "text-fg-subtle"}`}>
                         {c.currentUnbeaten}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] text-gray-500">Vitórias</div>
-                      <div className={`text-lg font-bold ${c.currentWins > 0 ? "text-green-600" : "text-gray-400"}`}>
+                      <div className="text-[11px] text-fg-muted">Vitórias</div>
+                      <div className={`text-lg font-bold ${c.currentWins > 0 ? "text-positive" : "text-fg-subtle"}`}>
                         {c.currentWins}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] text-gray-500">Clean sheets</div>
-                      <div className={`text-lg font-bold ${c.currentCleanSheets > 0 ? "text-blue-600" : "text-gray-400"}`}>
+                      <div className="text-[11px] text-fg-muted">Clean sheets</div>
+                      <div className={`text-lg font-bold ${c.currentCleanSheets > 0 ? "text-accent" : "text-fg-subtle"}`}>
                         {c.currentCleanSheets}
                       </div>
                     </div>
@@ -553,9 +566,9 @@ export default function TrendsPage() {
           </div>
 
           {/* CONTROLES DO GRÁFICO */}
-          <div className="bg-white border rounded-xl p-4">
-            <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 pb-3">
-              <label className="text-sm text-gray-700">
+          <div className="bg-surface border rounded-xl p-4">
+            <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
+              <label className="text-sm text-fg-secondary">
                 Métrica
                 <select
                   className="ml-2 border rounded px-2 py-1 text-sm"
@@ -571,14 +584,14 @@ export default function TrendsPage() {
               </label>
 
               <div className="flex items-center gap-1.5">
-                <span className="text-sm text-gray-700">Visual</span>
+                <span className="text-sm text-fg-secondary">Visual</span>
                 {(["line", "area", "bar"] as const).map((k) => (
                   <button
                     key={k}
                     type="button"
                     onClick={() => setChartKind(k)}
                     className={`text-xs px-2.5 py-1 rounded-lg border shadow-sm transition-colors ${
-                      chartKind === k ? "bg-gray-800 text-white border-gray-800" : "bg-white hover:bg-gray-50"
+                      chartKind === k ? "bg-accent text-accent-fg border-accent" : "bg-surface text-fg-secondary hover:bg-surface-raised"
                     }`}
                   >
                     {k === "line" ? "Linha" : k === "area" ? "Área" : "Barras"}
@@ -586,7 +599,7 @@ export default function TrendsPage() {
                 ))}
               </div>
 
-              <label className="text-sm text-gray-700">
+              <label className="text-sm text-fg-secondary">
                 Eixo X
                 <select
                   className="ml-2 border rounded px-2 py-1 text-sm"
@@ -603,18 +616,18 @@ export default function TrendsPage() {
 
             {/* GRÁFICO PRINCIPAL */}
             <div className="mt-4 h-[360px]">
-              <ChartComponent data={chartData as any} options={baseOptions} />
+              <ChartComponent key={resolvedTheme} data={chartData as any} options={baseOptions} />
             </div>
 
             {/* FAIXA DE RESULTADOS POR CLUBE */}
             <div className="mt-5">
-              <div className="text-xs text-gray-500 mb-2">Resultados no período</div>
+              <div className="text-xs text-fg-muted mb-2">Resultados no período</div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 {clubsWithData.map((c) => (
                   <div key={c.clubId} className="border rounded-lg p-2">
                     <div className="text-xs font-medium mb-2">{c.clubName}</div>
                     {c.series.length === 0 ? (
-                      <div className="text-sm text-gray-600">Sem partidas.</div>
+                      <div className="text-sm text-fg-muted">Sem partidas.</div>
                     ) : (
                       <div className="flex gap-1 overflow-x-auto no-scrollbar py-1">
                         {c.series.map((s) => (
@@ -635,14 +648,14 @@ export default function TrendsPage() {
           </div>
 
           {/* Top performers (agregado) */}
-          <div className="bg-white border rounded-xl p-4">
+          <div className="bg-surface border rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-lg font-semibold">Top Performers (período)</h2>
-              <span className="text-xs text-gray-500">ordenado por gols ↓</span>
+              <h2 className="font-display font-bold uppercase tracking-wide text-lg text-fg">Top Performers (período)</h2>
+              <span className="text-xs text-fg-muted">ordenado por gols ↓</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full table-auto text-sm text-center border">
-                <thead className="bg-gray-50">
+                <thead className="bg-surface-raised">
                   <tr>
                     <th className="p-2 text-left">Jogador</th>
                     <th className="p-2 text-left">Clube</th>
@@ -689,7 +702,7 @@ export default function TrendsPage() {
                           <td className="p-2">{t.preAssists ?? 0}</td>
                           <td className="p-2 font-medium">{(t.goals ?? 0) + (t.assists ?? 0) + (t.preAssists ?? 0)}</td>
                           <td className="p-2">{t.mom > 0 ? `🏆 ${t.mom}` : t.mom}</td>
-                          <td className="p-2">{Number(t.avgRating).toFixed(2)}</td>
+                          <td className="p-2"><RatingPill value={Number(t.avgRating)} /></td>
                         </tr>
                       );
                     })}

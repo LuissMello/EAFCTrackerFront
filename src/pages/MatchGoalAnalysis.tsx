@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { API_ENDPOINTS, crestUrl, FALLBACK_LOGO } from "../config/urls.ts";
 import { ClubStats } from "../types/stats.ts";
+import { Crest } from "../components/ui.tsx";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -138,7 +139,7 @@ function buildPassFlow(goals: ApiGoal[]): PassFlowEntry[] {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 const Skeleton: React.FC<{ className?: string }> = ({ className = "h-5 w-full" }) => (
-  <div className={`animate-pulse rounded bg-gray-200 ${className}`} />
+  <div className={`animate-pulse rounded bg-surface-sunken ${className}`} />
 );
 
 interface PlayerPillProps { name: string; colorIdx: number; label?: string; icon?: string }
@@ -146,7 +147,7 @@ const PlayerPill: React.FC<PlayerPillProps> = ({ name, colorIdx, label, icon }) 
   const c = getPalette(colorIdx);
   return (
     <div className="flex flex-col items-center gap-0.5 min-w-0">
-      {label && <span className="text-[10px] text-gray-400 uppercase tracking-wide">{label}</span>}
+      {label && <span className="text-[10px] text-fg-subtle uppercase tracking-wide">{label}</span>}
       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${c.bg} ${c.text} ${c.border} whitespace-nowrap max-w-[140px] truncate`}>
         {icon && <span>{icon}</span>}
         {name}
@@ -162,36 +163,36 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, index, colorMap }) => {
   const preIdx = goal.preAssistName ? (colorMap.get(goal.preAssistName) ?? 2) : -1;
 
   return (
-    <div className="bg-white rounded-xl border shadow-sm p-4">
+    <div className="bg-surface rounded-xl border shadow-sm p-4">
       <div className="flex items-center gap-2 mb-3">
-        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-bold text-gray-600">
+        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-surface-sunken text-xs font-bold text-fg-muted">
           {index + 1}
         </span>
-        <span className="text-sm font-semibold text-gray-700">Gol {index + 1}</span>
+        <span className="text-sm font-semibold text-fg-secondary">Gol {index + 1}</span>
       </div>
 
       <div className="flex items-end gap-2 flex-wrap">
         {preIdx >= 0 && goal.preAssistName ? (
           <>
             <PlayerPill name={goal.preAssistName} colorIdx={preIdx} label="Pré-Assist" />
-            <span className="text-gray-400 text-sm pb-4">→</span>
+            <span className="text-fg-subtle text-sm pb-4">→</span>
           </>
         ) : (
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-[10px] text-gray-300 uppercase tracking-wide">Pré-Assist</span>
-            <span className="px-2.5 py-1 rounded-full text-xs border border-dashed border-gray-200 text-gray-300 whitespace-nowrap">—</span>
+            <span className="text-[10px] text-fg-subtle uppercase tracking-wide">Pré-Assist</span>
+            <span className="px-2.5 py-1 rounded-full text-xs border border-dashed border-border text-fg-subtle whitespace-nowrap">—</span>
           </div>
         )}
 
         {assistIdx >= 0 && goal.assistName ? (
           <>
             <PlayerPill name={goal.assistName} colorIdx={assistIdx} label="Assist" />
-            <span className="text-gray-400 text-sm pb-4">→</span>
+            <span className="text-fg-subtle text-sm pb-4">→</span>
           </>
         ) : (
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-[10px] text-gray-300 uppercase tracking-wide">Assist</span>
-            <span className="px-2.5 py-1 rounded-full text-xs border border-dashed border-gray-200 text-gray-300 whitespace-nowrap">—</span>
+            <span className="text-[10px] text-fg-subtle uppercase tracking-wide">Assist</span>
+            <span className="px-2.5 py-1 rounded-full text-xs border border-dashed border-border text-fg-subtle whitespace-nowrap">—</span>
           </div>
         )}
 
@@ -292,10 +293,10 @@ export default function MatchGoalAnalysis() {
   if (error) {
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto">
-        <div className="rounded-xl border p-4 bg-red-50 text-red-800">
+        <div className="rounded-xl border border-negative/40 p-4 bg-negative-soft text-negative-fg">
           <div className="font-semibold">Erro ao carregar análise</div>
           <div className="text-sm mt-1">{error}</div>
-          <Link to={`/match/${matchId}`} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm bg-white hover:bg-gray-50">
+          <Link to={`/match/${matchId}`} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm bg-surface hover:bg-surface-raised">
             ← Voltar para a partida
           </Link>
         </div>
@@ -306,10 +307,10 @@ export default function MatchGoalAnalysis() {
   if (goals.length === 0) {
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-4">
-        <Link to={`/match/${matchId}`} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm bg-white shadow-sm hover:bg-gray-50">
+        <Link to={`/match/${matchId}`} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm bg-surface shadow-sm hover:bg-surface-raised">
           ← Voltar para a partida
         </Link>
-        <div className="bg-white rounded-xl border shadow-sm p-8 text-center text-gray-500">
+        <div className="bg-surface rounded-xl border shadow-sm p-8 text-center text-fg-muted">
           <div className="text-4xl mb-3">⚽</div>
           <div className="font-semibold">Nenhum vínculo de gol registrado</div>
           <div className="text-sm mt-1">Registre as assistências na página da partida para ver a análise aqui.</div>
@@ -327,75 +328,65 @@ export default function MatchGoalAnalysis() {
       <div className="flex items-center gap-2">
         <Link
           to={`/match/${matchId}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-white hover:bg-gray-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-surface hover:bg-surface-raised"
         >
           ← Voltar para a partida
         </Link>
-        <span className="text-gray-400 text-sm">Análise de Gols</span>
+        <span className="text-fg-subtle text-sm">Análise de Gols</span>
       </div>
 
       {/* Match Header */}
-      <div className="bg-white rounded-xl border shadow-sm p-5">
+      <div className="bg-surface rounded-xl border shadow-sm p-5">
         <div className="flex items-center justify-center gap-6">
           {clubA && (
             <div className="flex flex-col items-center gap-1.5 min-w-0">
-              <img
-                src={crestUrl(clubA.clubCrestAssetId)}
-                onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                alt={clubA.clubName}
-                className="w-12 h-12 object-contain rounded-full border bg-white"
-              />
-              <span className="text-sm font-semibold text-gray-800 text-center max-w-[120px] truncate">{clubA.clubName}</span>
+              <Crest src={crestUrl(clubA.clubCrestAssetId)} alt={clubA.clubName} size={48} rounded="rounded-full" className="border" />
+              <span className="text-sm font-semibold text-fg text-center max-w-[120px] truncate">{clubA.clubName}</span>
             </div>
           )}
 
           <div className="flex flex-col items-center">
-            <span className="text-4xl font-black text-gray-800 tabular-nums tracking-tight">
-              {scoreA} <span className="text-gray-300">×</span> {scoreB}
+            <span className="text-4xl font-black text-fg tabular-nums tracking-tight">
+              {scoreA} <span className="text-fg-subtle">×</span> {scoreB}
             </span>
-            <span className="text-xs text-gray-400 mt-1">Partida #{matchId}</span>
+            <span className="text-xs text-fg-subtle mt-1">Partida #{matchId}</span>
           </div>
 
           {clubB && (
             <div className="flex flex-col items-center gap-1.5 min-w-0">
-              <img
-                src={crestUrl(clubB.clubCrestAssetId)}
-                onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                alt={clubB.clubName}
-                className="w-12 h-12 object-contain rounded-full border bg-white"
-              />
-              <span className="text-sm font-semibold text-gray-800 text-center max-w-[120px] truncate">{clubB.clubName}</span>
+              <Crest src={crestUrl(clubB.clubCrestAssetId)} alt={clubB.clubName} size={48} rounded="rounded-full" className="border" />
+              <span className="text-sm font-semibold text-fg text-center max-w-[120px] truncate">{clubB.clubName}</span>
             </div>
           )}
         </div>
 
         {/* Quick stat pills */}
         <div className="flex justify-center gap-3 mt-4 flex-wrap">
-          <span className="bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1 rounded-full border">
+          <span className="bg-surface-sunken text-fg-secondary text-xs font-medium px-3 py-1 rounded-full border">
             {goals.length} gol{goals.length !== 1 ? "s" : ""} registrado{goals.length !== 1 ? "s" : ""}
           </span>
-          <span className="bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1 rounded-full border">
+          <span className="bg-surface-sunken text-fg-secondary text-xs font-medium px-3 py-1 rounded-full border">
             {goals.filter((g) => g.assistName).length} assistência{goals.filter((g) => g.assistName).length !== 1 ? "s" : ""}
           </span>
-          <span className="bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1 rounded-full border">
+          <span className="bg-surface-sunken text-fg-secondary text-xs font-medium px-3 py-1 rounded-full border">
             {goals.filter((g) => g.preAssistName).length} pré-assistência{goals.filter((g) => g.preAssistName).length !== 1 ? "s" : ""}
           </span>
-          <span className="bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1 rounded-full border">
+          <span className="bg-surface-sunken text-fg-secondary text-xs font-medium px-3 py-1 rounded-full border">
             {involvedPlayers.length} jogador{involvedPlayers.length !== 1 ? "es" : ""} envolvido{involvedPlayers.length !== 1 ? "s" : ""}
           </span>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-white rounded-xl border shadow-sm p-1">
+      <div className="flex gap-1 bg-surface rounded-xl border shadow-sm p-1">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               activeTab === tab.id
-                ? "bg-gray-900 text-white shadow-sm"
-                : "text-gray-600 hover:bg-gray-100"
+                ? "bg-accent text-accent-fg shadow-sm"
+                : "text-fg-muted hover:bg-surface-sunken"
             }`}
           >
             {tab.label}
@@ -412,14 +403,9 @@ export default function MatchGoalAnalysis() {
             return (
               <div key={club.clubId}>
                 <div className="flex items-center gap-2 mb-3">
-                  <img
-                    src={crestUrl(club.clubCrestAssetId)}
-                    onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                    alt={club.clubName}
-                    className="w-6 h-6 rounded-full border bg-white object-contain"
-                  />
-                  <h3 className="font-semibold text-gray-800">{club.clubName}</h3>
-                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full border">
+                  <Crest src={crestUrl(club.clubCrestAssetId)} alt={club.clubName} size={24} rounded="rounded-full" className="border" />
+                  <h3 className="font-semibold text-fg">{club.clubName}</h3>
+                  <span className="text-xs bg-surface-sunken text-fg-muted px-2 py-0.5 rounded-full border">
                     {clubGoals.length} gol{clubGoals.length !== 1 ? "s" : ""}
                   </span>
                 </div>
@@ -438,8 +424,8 @@ export default function MatchGoalAnalysis() {
             .map(([clubId, clubGoals]) => (
               <div key={clubId}>
                 <div className="flex items-center gap-2 mb-3">
-                  <h3 className="font-semibold text-gray-800">Clube {clubId}</h3>
-                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full border">
+                  <h3 className="font-semibold text-fg">Clube {clubId}</h3>
+                  <span className="text-xs bg-surface-sunken text-fg-muted px-2 py-0.5 rounded-full border">
                     {clubGoals.length} gol{clubGoals.length !== 1 ? "s" : ""}
                   </span>
                 </div>
@@ -464,58 +450,58 @@ export default function MatchGoalAnalysis() {
               { label: "Pré-Assists",   value: playerStats.filter((p) => p.preAssists > 0).length, icon: "🎯" },
               { label: "Participações", value: goals.length * 1 + goals.filter((g) => g.assistName).length + goals.filter((g) => g.preAssistName).length, icon: "🔢" },
             ].map((stat) => (
-              <div key={stat.label} className="bg-white rounded-xl border shadow-sm p-4 text-center">
+              <div key={stat.label} className="bg-surface rounded-xl border shadow-sm p-4 text-center">
                 <div className="text-2xl mb-1">{stat.icon}</div>
-                <div className="text-2xl font-black text-gray-900">{stat.value}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{stat.label}</div>
+                <div className="text-2xl font-black text-fg">{stat.value}</div>
+                <div className="text-xs text-fg-muted mt-0.5">{stat.label}</div>
               </div>
             ))}
           </div>
 
           {/* Player Contribution Table */}
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b bg-gray-50">
-              <h3 className="font-semibold text-gray-800">Contribuição por Jogador</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Ordenado por total de participações</p>
+          <div className="bg-surface rounded-xl border shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b bg-surface-raised">
+              <h3 className="font-semibold text-fg">Contribuição por Jogador</h3>
+              <p className="text-xs text-fg-muted mt-0.5">Ordenado por total de participações</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-gray-50/50">
-                    <th className="text-left px-4 py-2.5 font-medium text-gray-600">#</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-gray-600">Jogador</th>
-                    <th className="text-center px-3 py-2.5 font-medium text-gray-600">⚽ Gols</th>
-                    <th className="text-center px-3 py-2.5 font-medium text-gray-600">🅰️ Assists</th>
-                    <th className="text-center px-3 py-2.5 font-medium text-gray-600">🎯 Pré-Assist</th>
-                    <th className="text-center px-3 py-2.5 font-medium text-gray-600">Total</th>
+                  <tr className="border-b bg-surface-raised/50">
+                    <th className="text-left px-4 py-2.5 font-medium text-fg-muted">#</th>
+                    <th className="text-left px-4 py-2.5 font-medium text-fg-muted">Jogador</th>
+                    <th className="text-center px-3 py-2.5 font-medium text-fg-muted">⚽ Gols</th>
+                    <th className="text-center px-3 py-2.5 font-medium text-fg-muted">🅰️ Assists</th>
+                    <th className="text-center px-3 py-2.5 font-medium text-fg-muted">🎯 Pré-Assist</th>
+                    <th className="text-center px-3 py-2.5 font-medium text-fg-muted">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {playerStats.map((p, i) => {
                     const c = getPalette(colorMap.get(p.name) ?? i);
                     return (
-                      <tr key={p.name} className="border-b last:border-0 hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-2.5 text-gray-400 text-xs font-medium">{i + 1}</td>
+                      <tr key={p.name} className="border-b last:border-0 hover:bg-surface-raised transition-colors">
+                        <td className="px-4 py-2.5 text-fg-subtle text-xs font-medium">{i + 1}</td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
                             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c.dot}`} />
-                            <span className="font-medium text-gray-800">{p.name}</span>
+                            <span className="font-medium text-fg">{p.name}</span>
                           </div>
                         </td>
                         <td className="text-center px-3 py-2.5">
                           {p.goals > 0
-                            ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-900 text-white text-xs font-bold">{p.goals}</span>
-                            : <span className="text-gray-300">–</span>}
+                            ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent text-accent-fg text-xs font-bold">{p.goals}</span>
+                            : <span className="text-fg-subtle">–</span>}
                         </td>
                         <td className="text-center px-3 py-2.5">
                           {p.assists > 0
-                            ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-800 text-xs font-bold border border-blue-200">{p.assists}</span>
-                            : <span className="text-gray-300">–</span>}
+                            ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-positive-soft text-positive-fg text-xs font-bold border border-positive/40">{p.assists}</span>
+                            : <span className="text-fg-subtle">–</span>}
                         </td>
                         <td className="text-center px-3 py-2.5">
                           {p.preAssists > 0
-                            ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-violet-100 text-violet-800 text-xs font-bold border border-violet-200">{p.preAssists}</span>
-                            : <span className="text-gray-300">–</span>}
+                            ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent/10 text-accent text-xs font-bold border border-accent/30">{p.preAssists}</span>
+                            : <span className="text-fg-subtle">–</span>}
                         </td>
                         <td className="text-center px-3 py-2.5">
                           <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${c.bg} ${c.text} ${c.border}`}>
@@ -537,13 +523,13 @@ export default function MatchGoalAnalysis() {
         <div className="space-y-5">
 
           {/* Duplas */}
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b bg-gray-50">
-              <h3 className="font-semibold text-gray-800">🤝 Top Duplas (Assist → Gol)</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Quantas vezes A assistiu B nesta partida</p>
+          <div className="bg-surface rounded-xl border shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b bg-surface-raised">
+              <h3 className="font-semibold text-fg">🤝 Top Duplas (Assist → Gol)</h3>
+              <p className="text-xs text-fg-muted mt-0.5">Quantas vezes A assistiu B nesta partida</p>
             </div>
             {pairs.length === 0 ? (
-              <div className="px-4 py-6 text-sm text-gray-400 text-center">Nenhuma assistência registrada</div>
+              <div className="px-4 py-6 text-sm text-fg-subtle text-center">Nenhuma assistência registrada</div>
             ) : (
               <div className="divide-y">
                 {pairs.map((p) => {
@@ -552,16 +538,16 @@ export default function MatchGoalAnalysis() {
                   const fromC = getPalette(fromIdx);
                   const toC = getPalette(toIdx);
                   return (
-                    <div key={`${p.from}-${p.to}`} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
+                    <div key={`${p.from}-${p.to}`} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-raised">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${fromC.bg} ${fromC.text} ${fromC.border}`}>
                         {p.from}
                       </span>
-                      <span className="text-gray-400 text-sm">→</span>
+                      <span className="text-fg-subtle text-sm">→</span>
                       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${toC.bg} ${toC.text} ${toC.border}`}>
                         ⚽ {p.to}
                       </span>
                       <div className="flex-1" />
-                      <span className="text-sm font-bold text-gray-700">
+                      <span className="text-sm font-bold text-fg-secondary">
                         {p.count}×
                       </span>
                       <div className="flex gap-0.5">
@@ -577,13 +563,13 @@ export default function MatchGoalAnalysis() {
           </div>
 
           {/* Trios */}
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b bg-gray-50">
-              <h3 className="font-semibold text-gray-800">🔺 Trios (Pré-Assist → Assist → Gol)</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Sequências completas de três jogadores</p>
+          <div className="bg-surface rounded-xl border shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b bg-surface-raised">
+              <h3 className="font-semibold text-fg">🔺 Trios (Pré-Assist → Assist → Gol)</h3>
+              <p className="text-xs text-fg-muted mt-0.5">Sequências completas de três jogadores</p>
             </div>
             {trios.length === 0 ? (
-              <div className="px-4 py-6 text-sm text-gray-400 text-center">Nenhum trio registrado</div>
+              <div className="px-4 py-6 text-sm text-fg-subtle text-center">Nenhum trio registrado</div>
             ) : (
               <div className="divide-y">
                 {trios.map((t) => {
@@ -594,20 +580,20 @@ export default function MatchGoalAnalysis() {
                   const assistC = getPalette(assistIdx);
                   const scorerC = getPalette(scorerIdx);
                   return (
-                    <div key={`${t.pre}-${t.assist}-${t.scorer}`} className="flex items-center gap-2 px-4 py-3 flex-wrap hover:bg-gray-50">
+                    <div key={`${t.pre}-${t.assist}-${t.scorer}`} className="flex items-center gap-2 px-4 py-3 flex-wrap hover:bg-surface-raised">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${preC.bg} ${preC.text} ${preC.border}`}>
                         {t.pre}
                       </span>
-                      <span className="text-gray-400 text-sm">→</span>
+                      <span className="text-fg-subtle text-sm">→</span>
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${assistC.bg} ${assistC.text} ${assistC.border}`}>
                         {t.assist}
                       </span>
-                      <span className="text-gray-400 text-sm">→</span>
+                      <span className="text-fg-subtle text-sm">→</span>
                       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${scorerC.bg} ${scorerC.text} ${scorerC.border}`}>
                         ⚽ {t.scorer}
                       </span>
                       <div className="flex-1" />
-                      <span className="text-sm font-bold text-gray-700">{t.count}×</span>
+                      <span className="text-sm font-bold text-fg-secondary">{t.count}×</span>
                     </div>
                   );
                 })}
@@ -617,10 +603,10 @@ export default function MatchGoalAnalysis() {
 
           {/* Pass Flow */}
           {passFlow.length > 0 && (
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b bg-gray-50">
-                <h3 className="font-semibold text-gray-800">🔗 Fluxo de Passes</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Conexões de pré-assist→assist e assist→gol, ordenadas por frequência</p>
+            <div className="bg-surface rounded-xl border shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b bg-surface-raised">
+                <h3 className="font-semibold text-fg">🔗 Fluxo de Passes</h3>
+                <p className="text-xs text-fg-muted mt-0.5">Conexões de pré-assist→assist e assist→gol, ordenadas por frequência</p>
               </div>
               <div className="divide-y">
                 {passFlow.map((entry, i) => {
@@ -628,16 +614,16 @@ export default function MatchGoalAnalysis() {
                   const toC = getPalette(colorMap.get(entry.to) ?? 1);
                   const pct = Math.round((entry.count / passFlow[0].count) * 100);
                   return (
-                    <div key={`${entry.from}→${entry.to}`} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                    <div key={`${entry.from}→${entry.to}`} className="px-4 py-3 hover:bg-surface-raised transition-colors">
                       <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-xs text-gray-400 w-5 text-right font-medium">{i + 1}</span>
+                        <span className="text-xs text-fg-subtle w-5 text-right font-medium">{i + 1}</span>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${fromC.bg} ${fromC.text} ${fromC.border}`}>{entry.from}</span>
-                        <span className="text-gray-400 text-xs">→</span>
+                        <span className="text-fg-subtle text-xs">→</span>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${toC.bg} ${toC.text} ${toC.border}`}>{entry.to}</span>
                         <div className="flex-1" />
-                        <span className="text-sm font-bold text-gray-700">{entry.count}×</span>
+                        <span className="text-sm font-bold text-fg-secondary">{entry.count}×</span>
                       </div>
-                      <div className="ml-7 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                      <div className="ml-7 h-1.5 rounded-full bg-surface-sunken overflow-hidden">
                         <div className={`h-full rounded-full transition-all ${fromC.dot}`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>

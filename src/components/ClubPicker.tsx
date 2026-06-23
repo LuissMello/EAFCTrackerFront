@@ -92,7 +92,7 @@ export default function ClubPicker() {
             {/* Botão trigger */}
             <button
                 onClick={() => setOpen(o => !o)}
-                className="flex items-center gap-2 bg-white text-blue-600 px-2 py-1 rounded"
+                className="flex items-center gap-2 bg-white/10 hover:bg-white/15 text-slate-200 px-2 py-1 rounded border border-white/10 transition-colors"
                 title={club?.clubName || (club?.clubId ? String(club.clubId) : "Selecionar clube")}
             >
                 {club?.clubId ? (
@@ -101,7 +101,7 @@ export default function ClubPicker() {
                             src={club?.crestAssetId ? crestUrl(club.crestAssetId) : FALLBACK_LOGO}
                             onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_LOGO; }}
                             alt="Escudo"
-                            className="w-6 h-6 rounded-full bg-white border"
+                            className="w-6 h-6 rounded-full bg-surface border"
                         />
                         <span className="font-semibold truncate max-w-[160px]">
                             {club.clubName ?? club.clubId}
@@ -121,7 +121,7 @@ export default function ClubPicker() {
 
             {/* Dropdown — sempre montado para animação */}
             <div
-                className={`absolute right-0 mt-2 w-80 bg-white text-black rounded-xl shadow-lg border z-50 origin-top transition-all duration-150 ${
+                className={`absolute right-0 mt-2 w-80 bg-surface text-fg rounded-xl shadow-lg border z-50 origin-top transition-all duration-150 ${
                     open ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none"
                 }`}
             >
@@ -132,11 +132,11 @@ export default function ClubPicker() {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder="Buscar por nome ou ID…"
-                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 pr-8 text-sm"
+                        className="w-full px-3 py-2 bg-surface-sunken border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent pr-8 text-sm"
                     />
                     {query && (
                         <button
-                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-muted text-lg leading-none"
                             onClick={() => setQuery("")}
                             tabIndex={-1}
                         >
@@ -145,13 +145,13 @@ export default function ClubPicker() {
                     )}
                 </div>
 
-                {loading && <div className="p-3 text-sm text-gray-500">Carregando…</div>}
-                {err && <div className="p-3 text-sm text-red-600">{err}</div>}
+                {loading && <div className="p-3 text-sm text-fg-muted">Carregando…</div>}
+                {err && <div className="p-3 text-sm text-negative">{err}</div>}
 
                 {!loading && !err && (
                     <ul className="max-h-72 overflow-auto">
                         {filtered.length === 0 && (
-                            <li className="p-3 text-sm text-gray-600">Nenhum clube encontrado.</li>
+                            <li className="p-3 text-sm text-fg-muted">Nenhum clube encontrado.</li>
                         )}
                         {filtered.map(c => {
                             const isSelected = club?.clubId === c.clubId;
@@ -160,8 +160,8 @@ export default function ClubPicker() {
                                     key={c.clubId}
                                     className={`px-3 py-2 cursor-pointer flex items-center gap-2 transition-colors border-l-2 ${
                                         isSelected
-                                            ? "bg-blue-50 border-l-blue-500"
-                                            : "border-l-transparent hover:bg-blue-50"
+                                            ? "bg-accent/10 border-l-accent"
+                                            : "border-l-transparent hover:bg-surface-raised"
                                     }`}
                                     onClick={() => selectClub(c)}
                                 >
@@ -169,14 +169,14 @@ export default function ClubPicker() {
                                         src={crestUrl(c.crestAssetId)}
                                         onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_LOGO; }}
                                         alt=""
-                                        className="w-7 h-7 rounded-full border bg-white flex-shrink-0"
+                                        className="w-7 h-7 rounded-full border bg-surface flex-shrink-0"
                                     />
                                     <div className="min-w-0 flex-1">
                                         <div className="font-medium leading-tight truncate text-sm">{c.name}</div>
-                                        <div className="text-xs text-gray-500">ID: {c.clubId}</div>
+                                        <div className="text-xs text-fg-muted">ID: {c.clubId}</div>
                                     </div>
                                     {isSelected && (
-                                        <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <svg className="w-4 h-4 text-accent flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                         </svg>
                                     )}
@@ -188,20 +188,20 @@ export default function ClubPicker() {
 
                 {/* Footer */}
                 <div className="p-2 border-t flex items-center justify-between">
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-fg-subtle">
                         {clubs.length > 0 ? `${clubs.length} clube${clubs.length !== 1 ? "s" : ""}` : ""}
                     </span>
                     <div className="flex items-center gap-2">
                         {club?.clubId && (
                             <button
-                                className="text-sm px-2 py-1 rounded border text-red-600 hover:bg-red-50"
+                                className="text-sm px-2 py-1 rounded border text-negative hover:bg-negative-soft"
                                 onClick={clearClub}
                             >
                                 Limpar
                             </button>
                         )}
                         <button
-                            className="text-sm px-2 py-1 rounded border hover:bg-gray-50"
+                            className="text-sm px-2 py-1 rounded border hover:bg-surface-raised"
                             onClick={() => setOpen(false)}
                         >
                             Fechar

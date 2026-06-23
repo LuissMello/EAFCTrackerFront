@@ -109,12 +109,12 @@ const Pill: React.FC<{ name: string; colorIdx: number; icon?: string }> = ({ nam
   );
 };
 
-const KpiCard: React.FC<{ icon: string; label: string; value: number | string; sub?: string; dark?: boolean }> = ({ icon, label, value, sub, dark }) => (
-  <div className={`rounded-xl border p-4 flex flex-col gap-1 ${dark ? "bg-gray-900 border-gray-700 text-white" : "bg-white border-gray-200"}`}>
+const KpiCard: React.FC<{ icon: string; label: string; value: number | string; sub?: string; featured?: boolean }> = ({ icon, label, value, sub, featured }) => (
+  <div className={`rounded-xl border p-4 flex flex-col gap-1 ${featured ? "bg-accent border-accent text-accent-fg" : "bg-surface border-border"}`}>
     <div className="text-xl">{icon}</div>
-    <div className={`text-3xl font-black tabular-nums ${dark ? "text-white" : "text-gray-900"}`}>{value}</div>
-    <div className={`text-xs font-medium ${dark ? "text-gray-400" : "text-gray-500"}`}>{label}</div>
-    {sub && <div className={`text-[11px] ${dark ? "text-gray-500" : "text-gray-400"}`}>{sub}</div>}
+    <div className={`text-3xl font-black tabular-nums ${featured ? "text-accent-fg" : "text-fg"}`}>{value}</div>
+    <div className={`text-xs font-medium ${featured ? "text-accent-fg/80" : "text-fg-muted"}`}>{label}</div>
+    {sub && <div className={`text-[11px] ${featured ? "text-accent-fg/70" : "text-fg-subtle"}`}>{sub}</div>}
   </div>
 );
 
@@ -126,27 +126,27 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ title, icon, players, valueKe
   const sorted = [...players].filter(p => p[valueKey] > 0).sort((a, b) => b[valueKey] - a[valueKey]);
   const max = sorted[0]?.[valueKey] ?? 1;
   return (
-    <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 min-w-0">
-      <div className="px-4 py-3 border-b bg-gray-50 flex items-center gap-2">
+    <div className="bg-surface rounded-xl border shadow-sm overflow-hidden flex-1 min-w-0">
+      <div className="px-4 py-3 border-b bg-surface-raised flex items-center gap-2">
         <span className="text-base">{icon}</span>
-        <span className="font-semibold text-gray-800 text-sm">{title}</span>
+        <span className="font-semibold text-fg text-sm">{title}</span>
       </div>
       {sorted.length === 0 ? (
-        <div className="px-4 py-6 text-sm text-gray-400 text-center">Sem dados</div>
+        <div className="px-4 py-6 text-sm text-fg-subtle text-center">Sem dados</div>
       ) : (
         <div className="divide-y">
           {sorted.slice(0, 8).map((p, i) => {
             const c = getC(colorMap.get(p.name) ?? i);
             const pct = Math.round((p[valueKey] / max) * 100);
             return (
-              <div key={p.name} className="px-4 py-2.5 hover:bg-gray-50 transition-colors">
+              <div key={p.name} className="px-4 py-2.5 hover:bg-surface-raised transition-colors">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs text-gray-400 w-4 text-right font-medium">{i + 1}</span>
+                  <span className="text-xs text-fg-subtle w-4 text-right font-medium">{i + 1}</span>
                   <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
-                  <span className="text-sm font-medium text-gray-800 flex-1 truncate">{p.name}</span>
+                  <span className="text-sm font-medium text-fg flex-1 truncate">{p.name}</span>
                   <span className={`text-sm font-bold ${c.text}`}>{p[valueKey]}</span>
                 </div>
-                <div className="ml-6 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                <div className="ml-6 h-1.5 rounded-full bg-surface-sunken overflow-hidden">
                   <div className={`h-full rounded-full transition-all ${c.bar}`} style={{ width: `${pct}%` }} />
                 </div>
               </div>
@@ -279,7 +279,7 @@ export default function GoalAnalytics() {
   if (activeClubIds.length === 0) {
     return (
       <div className="p-6 max-w-5xl mx-auto">
-        <div className="bg-white rounded-xl border shadow-sm p-8 text-center text-gray-500">
+        <div className="bg-surface rounded-xl border shadow-sm p-8 text-center text-fg-muted">
           <div className="text-4xl mb-3">⚽</div>
           <div className="font-semibold">Nenhum clube selecionado</div>
           <div className="text-sm mt-1">Selecione um clube no menu superior para ver a análise.</div>
@@ -296,36 +296,36 @@ export default function GoalAnalytics() {
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div>
-          <h1 className="text-xl font-black text-gray-900 tracking-tight">Análise de Gols</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Relações entre gols, assistências e criações de jogadas</p>
+          <h1 className="text-xl font-black text-fg tracking-tight">Análise de Gols</h1>
+          <p className="text-sm text-fg-muted mt-0.5">Relações entre gols, assistências e criações de jogadas</p>
         </div>
       </div>
 
       {/* ── Filters ── */}
-      <div className="bg-white rounded-xl border shadow-sm p-4">
+      <div className="bg-surface rounded-xl border shadow-sm p-4">
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">De</label>
+            <label className="text-xs font-medium text-fg-muted uppercase tracking-wide">De</label>
             <input
               type="date"
               value={from}
               onChange={e => setFrom(e.target.value)}
-              className="border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+              className="border rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Até</label>
+            <label className="text-xs font-medium text-fg-muted uppercase tracking-wide">Até</label>
             <input
               type="date"
               value={to}
               onChange={e => setTo(e.target.value)}
-              className="border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+              className="border rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
           <button
             onClick={fetch}
             disabled={loading}
-            className="px-4 py-2 rounded-lg text-sm font-semibold bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-accent text-accent-fg hover:brightness-110 disabled:opacity-50 transition-colors"
           >
             {loading ? "Carregando…" : "Aplicar"}
           </button>
@@ -337,7 +337,7 @@ export default function GoalAnalytics() {
                   setFrom(toDateStr(new Date(Date.now() - p.days * 86400000)));
                   setTo(toDateStr(new Date()));
                 }}
-                className="px-3 py-2 rounded-lg text-xs font-medium border bg-gray-50 hover:bg-gray-100 text-gray-600 transition-colors"
+                className="px-3 py-2 rounded-lg text-xs font-medium border bg-surface-raised hover:bg-surface-sunken text-fg-muted transition-colors"
               >
                 {p.label}
               </button>
@@ -347,11 +347,11 @@ export default function GoalAnalytics() {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">{error}</div>
+        <div className="bg-negative-soft border border-negative/30 rounded-xl p-4 text-sm text-negative-fg">{error}</div>
       )}
 
       {loading && (
-        <div className="bg-white rounded-xl border shadow-sm p-12 text-center text-gray-400">
+        <div className="bg-surface rounded-xl border shadow-sm p-12 text-center text-fg-subtle">
           <div className="animate-pulse text-4xl mb-3">⚽</div>
           <div className="text-sm">Carregando análise…</div>
         </div>
@@ -361,10 +361,10 @@ export default function GoalAnalytics() {
         <>
           {/* ── KPI Cards ── */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <KpiCard icon="📅" label="Partidas"    value={data.totalMatches} dark />
-            <KpiCard icon="⚽" label="Gols"        value={data.totalGoals}   dark />
+            <KpiCard icon="📅" label="Partidas"    value={data.totalMatches} featured />
+            <KpiCard icon="⚽" label="Gols"        value={data.totalGoals}   featured />
             <KpiCard icon="🔗" label="Vinculados"  value={data.linkedGoals}
-              sub={`${linkedPct}% do total`} dark />
+              sub={`${linkedPct}% do total`} featured />
             <KpiCard icon="🅰️" label="Assistências" value={data.totalAssists} />
             <KpiCard icon="🎯" label="Pré-Assists"  value={data.totalPreAssists} />
             <KpiCard icon="👥" label="Jogadores"    value={data.players.length} />
@@ -381,17 +381,17 @@ export default function GoalAnalytics() {
 
           {/* ── Involvement Ranking ── */}
           {data.players.length > 0 && (
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
+            <div className="bg-surface rounded-xl border shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b bg-surface-raised flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-800">Ranking de Participação</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Ordenado por total de envolvimentos em gols</p>
+                  <h3 className="font-semibold text-fg">Ranking de Participação</h3>
+                  <p className="text-xs text-fg-muted mt-0.5">Ordenado por total de envolvimentos em gols</p>
                 </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-gray-50/50 text-gray-500 text-xs uppercase tracking-wide">
+                    <tr className="border-b bg-surface-raised/50 text-fg-muted text-xs uppercase tracking-wide">
                       <th className="text-left px-4 py-2.5 font-medium w-8">#</th>
                       <th className="text-left px-4 py-2.5 font-medium">Jogador</th>
                       <th className="text-center px-3 py-2.5 font-medium">⚽ Gols</th>
@@ -408,28 +408,28 @@ export default function GoalAnalytics() {
                       const maxTotal = data.players[0]?.total ?? 1;
                       const pct = Math.round((p.total / maxTotal) * 100);
                       return (
-                        <tr key={p.name} className="border-b last:border-0 hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 text-gray-400 text-xs font-medium">{i + 1}</td>
+                        <tr key={p.name} className="border-b last:border-0 hover:bg-surface-raised transition-colors">
+                          <td className="px-4 py-3 text-fg-subtle text-xs font-medium">{i + 1}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <span className={`w-3 h-3 rounded-full shrink-0 ${c.dot}`} />
-                              <span className="font-semibold text-gray-800">{p.name}</span>
+                              <span className="font-semibold text-fg">{p.name}</span>
                             </div>
                           </td>
                           <td className="text-center px-3 py-3">
                             {p.goals > 0
-                              ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-900 text-white text-xs font-bold">{p.goals}</span>
-                              : <span className="text-gray-300 text-xs">—</span>}
+                              ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-accent text-accent-fg text-xs font-bold">{p.goals}</span>
+                              : <span className="text-fg-subtle text-xs">—</span>}
                           </td>
                           <td className="text-center px-3 py-3">
                             {p.assists > 0
                               ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-100 text-blue-800 text-xs font-bold border border-blue-200">{p.assists}</span>
-                              : <span className="text-gray-300 text-xs">—</span>}
+                              : <span className="text-fg-subtle text-xs">—</span>}
                           </td>
                           <td className="text-center px-3 py-3">
                             {p.preAssists > 0
                               ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-violet-100 text-violet-800 text-xs font-bold border border-violet-200">{p.preAssists}</span>
-                              : <span className="text-gray-300 text-xs">—</span>}
+                              : <span className="text-fg-subtle text-xs">—</span>}
                           </td>
                           <td className="text-center px-3 py-3">
                             <span className={`inline-flex items-center justify-center px-3 py-0.5 rounded-full text-xs font-bold border ${c.bg} ${c.text} ${c.border}`}>
@@ -437,7 +437,7 @@ export default function GoalAnalytics() {
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="h-2 rounded-full bg-surface-sunken overflow-hidden">
                               <div className={`h-full rounded-full ${c.bar}`} style={{ width: `${pct}%` }} />
                             </div>
                           </td>
@@ -454,13 +454,13 @@ export default function GoalAnalytics() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
             {/* Duplas */}
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b bg-gray-50">
-                <h3 className="font-semibold text-gray-800">🤝 Duplas (Assist → Gol)</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Combinações mais frequentes no período</p>
+            <div className="bg-surface rounded-xl border shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b bg-surface-raised">
+                <h3 className="font-semibold text-fg">🤝 Duplas (Assist → Gol)</h3>
+                <p className="text-xs text-fg-muted mt-0.5">Combinações mais frequentes no período</p>
               </div>
               {data.pairs.length === 0 ? (
-                <div className="px-4 py-8 text-sm text-gray-400 text-center">Sem assistências vinculadas</div>
+                <div className="px-4 py-8 text-sm text-fg-subtle text-center">Sem assistências vinculadas</div>
               ) : (
                 <div className="divide-y">
                   {data.pairs.map((pair, i) => {
@@ -469,18 +469,18 @@ export default function GoalAnalytics() {
                     const maxPair = data.pairs[0].count;
                     const pct = Math.round((pair.count / maxPair) * 100);
                     return (
-                      <div key={`${pair.from}${pair.to}`} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                      <div key={`${pair.from}${pair.to}`} className="px-4 py-3 hover:bg-surface-raised transition-colors">
                         <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs text-gray-400 w-4 text-right">{i + 1}</span>
+                          <span className="text-xs text-fg-subtle w-4 text-right">{i + 1}</span>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${fromC.bg} ${fromC.text} ${fromC.border}`}>{pair.from}</span>
-                          <span className="text-gray-400 text-xs">→</span>
+                          <span className="text-fg-subtle text-xs">→</span>
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${toC.bg} ${toC.text} ${toC.border}`}>
                             ⚽ {pair.to}
                           </span>
                           <div className="flex-1" />
-                          <span className="text-sm font-bold text-gray-700">{pair.count}×</span>
+                          <span className="text-sm font-bold text-fg-secondary">{pair.count}×</span>
                         </div>
-                        <div className="ml-6 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                        <div className="ml-6 h-1.5 rounded-full bg-surface-sunken overflow-hidden">
                           <div className={`h-full rounded-full ${fromC.bar}`} style={{ width: `${pct}%` }} />
                         </div>
                       </div>
@@ -491,13 +491,13 @@ export default function GoalAnalytics() {
             </div>
 
             {/* Trios */}
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b bg-gray-50">
-                <h3 className="font-semibold text-gray-800">🔺 Trios (Pré → Assist → Gol)</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Sequências completas de três jogadores</p>
+            <div className="bg-surface rounded-xl border shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b bg-surface-raised">
+                <h3 className="font-semibold text-fg">🔺 Trios (Pré → Assist → Gol)</h3>
+                <p className="text-xs text-fg-muted mt-0.5">Sequências completas de três jogadores</p>
               </div>
               {data.trios.length === 0 ? (
-                <div className="px-4 py-8 text-sm text-gray-400 text-center">Sem trios registrados</div>
+                <div className="px-4 py-8 text-sm text-fg-subtle text-center">Sem trios registrados</div>
               ) : (
                 <div className="divide-y">
                   {data.trios.map((trio, i) => {
@@ -507,18 +507,18 @@ export default function GoalAnalytics() {
                     const maxTrio = data.trios[0].count;
                     const pct = Math.round((trio.count / maxTrio) * 100);
                     return (
-                      <div key={`${trio.pre}${trio.assist}${trio.scorer}`} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                      <div key={`${trio.pre}${trio.assist}${trio.scorer}`} className="px-4 py-3 hover:bg-surface-raised transition-colors">
                         <div className="flex items-center gap-1.5 flex-wrap mb-2">
-                          <span className="text-xs text-gray-400 w-4 text-right">{i + 1}</span>
+                          <span className="text-xs text-fg-subtle w-4 text-right">{i + 1}</span>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${preC.bg} ${preC.text} ${preC.border}`}>{trio.pre}</span>
-                          <span className="text-gray-400 text-xs">→</span>
+                          <span className="text-fg-subtle text-xs">→</span>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${asstC.bg} ${asstC.text} ${asstC.border}`}>{trio.assist}</span>
-                          <span className="text-gray-400 text-xs">→</span>
+                          <span className="text-fg-subtle text-xs">→</span>
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${scrC.bg} ${scrC.text} ${scrC.border}`}>⚽ {trio.scorer}</span>
                           <div className="flex-1" />
-                          <span className="text-sm font-bold text-gray-700">{trio.count}×</span>
+                          <span className="text-sm font-bold text-fg-secondary">{trio.count}×</span>
                         </div>
-                        <div className="ml-6 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                        <div className="ml-6 h-1.5 rounded-full bg-surface-sunken overflow-hidden">
                           <div className={`h-full rounded-full ${preC.bar}`} style={{ width: `${pct}%` }} />
                         </div>
                       </div>
@@ -531,10 +531,10 @@ export default function GoalAnalytics() {
 
           {/* ── Pass Flow ── */}
           {passFlow.length > 0 && (
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b bg-gray-50">
-                <h3 className="font-semibold text-gray-800">🔗 Fluxo de Passes</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Conexões de pré-assist→assist e assist→gol, ordenadas por frequência</p>
+            <div className="bg-surface rounded-xl border shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b bg-surface-raised">
+                <h3 className="font-semibold text-fg">🔗 Fluxo de Passes</h3>
+                <p className="text-xs text-fg-muted mt-0.5">Conexões de pré-assist→assist e assist→gol, ordenadas por frequência</p>
               </div>
               <div className="divide-y">
                 {passFlow.map((entry, i) => {
@@ -542,16 +542,16 @@ export default function GoalAnalytics() {
                   const toC = getC(colorMap.get(entry.to) ?? 1);
                   const pct = Math.round((entry.count / passFlow[0].count) * 100);
                   return (
-                    <div key={`${entry.from}→${entry.to}`} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                    <div key={`${entry.from}→${entry.to}`} className="px-4 py-3 hover:bg-surface-raised transition-colors">
                       <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-xs text-gray-400 w-5 text-right font-medium">{i + 1}</span>
+                        <span className="text-xs text-fg-subtle w-5 text-right font-medium">{i + 1}</span>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${fromC.bg} ${fromC.text} ${fromC.border}`}>{entry.from}</span>
-                        <span className="text-gray-400 text-xs">→</span>
+                        <span className="text-fg-subtle text-xs">→</span>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${toC.bg} ${toC.text} ${toC.border}`}>{entry.to}</span>
                         <div className="flex-1" />
-                        <span className="text-sm font-bold text-gray-700">{entry.count}×</span>
+                        <span className="text-sm font-bold text-fg-secondary">{entry.count}×</span>
                       </div>
-                      <div className="ml-7 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                      <div className="ml-7 h-1.5 rounded-full bg-surface-sunken overflow-hidden">
                         <div className={`h-full rounded-full transition-all ${fromC.bar}`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
@@ -564,16 +564,16 @@ export default function GoalAnalytics() {
 
           {/* ── Goal History (collapsible) ── */}
           {data.goalLinks.length > 0 && (
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+            <div className="bg-surface rounded-xl border shadow-sm overflow-hidden">
               <button
                 onClick={() => setHistoryOpen(v => !v)}
-                className="w-full px-4 py-3 border-b bg-gray-50 flex items-center justify-between hover:bg-gray-100 transition-colors"
+                className="w-full px-4 py-3 border-b bg-surface-raised flex items-center justify-between hover:bg-surface-sunken transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-gray-800">📋 Histórico de Gols</h3>
-                  <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{data.goalLinks.length} gols vinculados</span>
+                  <h3 className="font-semibold text-fg">📋 Histórico de Gols</h3>
+                  <span className="text-xs bg-surface-sunken text-fg-muted px-2 py-0.5 rounded-full">{data.goalLinks.length} gols vinculados</span>
                 </div>
-                <span className="text-gray-400 text-sm">{historyOpen ? "▲" : "▼"}</span>
+                <span className="text-fg-subtle text-sm">{historyOpen ? "▲" : "▼"}</span>
               </button>
               {historyOpen && (
                 <div className="divide-y max-h-96 overflow-y-auto">
@@ -582,10 +582,10 @@ export default function GoalAnalytics() {
                     const assistIdx = l.assistName ? (colorMap.get(l.assistName) ?? 1) : -1;
                     const preIdx = l.preAssistName ? (colorMap.get(l.preAssistName) ?? 2) : -1;
                     return (
-                      <div key={i} className="px-4 py-2.5 hover:bg-gray-50 flex items-center gap-3 flex-wrap">
+                      <div key={i} className="px-4 py-2.5 hover:bg-surface-raised flex items-center gap-3 flex-wrap">
                         <Link
                           to={`/match/${l.matchId}/goals`}
-                          className="text-xs text-gray-400 hover:text-gray-700 underline underline-offset-2 whitespace-nowrap transition-colors"
+                          className="text-xs text-fg-subtle hover:text-fg-secondary underline underline-offset-2 whitespace-nowrap transition-colors"
                         >
                           {fmtDate(l.matchTimestamp)}
                         </Link>
@@ -593,13 +593,13 @@ export default function GoalAnalytics() {
                           {preIdx >= 0 && l.preAssistName && (
                             <>
                               <Pill name={l.preAssistName} colorIdx={preIdx} />
-                              <span className="text-gray-300 text-xs">→</span>
+                              <span className="text-fg-subtle text-xs">→</span>
                             </>
                           )}
                           {assistIdx >= 0 && l.assistName && (
                             <>
                               <Pill name={l.assistName} colorIdx={assistIdx} />
-                              <span className="text-gray-300 text-xs">→</span>
+                              <span className="text-fg-subtle text-xs">→</span>
                             </>
                           )}
                           <Pill name={l.scorerName} colorIdx={scorerIdx} icon="⚽" />
@@ -614,7 +614,7 @@ export default function GoalAnalytics() {
 
           {/* Empty state */}
           {data.linkedGoals === 0 && (
-            <div className="bg-white rounded-xl border shadow-sm p-10 text-center text-gray-500">
+            <div className="bg-surface rounded-xl border shadow-sm p-10 text-center text-fg-muted">
               <div className="text-4xl mb-3">🔗</div>
               <div className="font-semibold">Nenhum gol vinculado neste período</div>
               <div className="text-sm mt-1">

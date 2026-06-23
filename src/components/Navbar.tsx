@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import MultiClubPicker from "./MultiClubPicker.tsx";
+import ThemeToggle from "./ThemeToggle.tsx";
 import api from "../services/api.ts";
 
 type LastRunResponse = { lastFetchedAtUtc?: string | null };
@@ -32,11 +33,11 @@ function formatTimeAgo(iso?: string | null): string {
 }
 
 function freshnessDot(iso?: string | null): string {
-    if (!iso) return "bg-red-400";
+    if (!iso) return "bg-negative";
     const diffMin = (Date.now() - new Date(iso).getTime()) / 60000;
-    if (diffMin < 30) return "bg-green-400";
-    if (diffMin < 120) return "bg-amber-400";
-    return "bg-red-400";
+    if (diffMin < 30) return "bg-positive";
+    if (diffMin < 120) return "bg-warning";
+    return "bg-negative";
 }
 
 const NAV_LINKS = [
@@ -106,7 +107,7 @@ export default function Navbar() {
     }, [fetchLastRun]);
 
     const lastRunLabel = loadingLastRun ? "Carregando…" : formatTimeAgo(lastRunUtc);
-    const dotClass = loadingLastRun ? "bg-gray-500" : freshnessDot(lastRunUtc);
+    const dotClass = loadingLastRun ? "bg-slate-500" : freshnessDot(lastRunUtc);
 
     const isActive = (to: string) =>
         to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
@@ -115,12 +116,12 @@ export default function Navbar() {
         <button
             onClick={handleRunFetch}
             disabled={running}
-            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
                 fullWidth ? "flex-1" : ""
             } ${
                 running
-                    ? "bg-white/10 text-gray-300 cursor-not-allowed"
-                    : "bg-white text-black hover:bg-gray-100"
+                    ? "bg-white/10 text-slate-300 cursor-not-allowed"
+                    : "bg-accent text-accent-fg hover:brightness-110"
             }`}
             title="Disparar coleta agora"
         >
@@ -129,21 +130,26 @@ export default function Navbar() {
     );
 
     const lastRunInfo = (small = false) => (
-        <div className={`flex items-center gap-1.5 ${small ? "text-[11px]" : "text-xs"} text-gray-300 whitespace-nowrap`}>
+        <div className={`flex items-center gap-1.5 ${small ? "text-[11px]" : "text-xs"} text-slate-300 whitespace-nowrap`}>
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotClass}`} />
             <span>
-                Última busca: <span className="font-medium text-gray-100">{lastRunLabel}</span>
+                Última busca: <span className="font-semibold text-slate-100">{lastRunLabel}</span>
             </span>
         </div>
     );
 
     return (
-        <nav className="bg-black text-white px-5 py-2.5">
+        <nav className="bg-[#0B1220] text-slate-100 px-5 py-2.5 border-b border-white/10">
             {/* Barra principal */}
             <div className="flex items-center gap-2">
                 {/* Logo */}
-                <span className="font-bold text-sm tracking-tight whitespace-nowrap">EAFC Tracker</span>
-                <span className="hidden sm:block w-px h-4 bg-white/25 flex-shrink-0 mx-1" />
+                <Link to="/" className="flex items-center gap-2 whitespace-nowrap mr-1">
+                    <span className="inline-block w-1.5 h-5 rounded-sm bg-accent flex-shrink-0" />
+                    <span className="font-display font-bold text-lg uppercase tracking-wide leading-none">
+                        EAFC <span className="text-accent">Tracker</span>
+                    </span>
+                </Link>
+                <span className="hidden sm:block w-px h-4 bg-white/15 flex-shrink-0 mx-1" />
 
                 {/* Links — ocultos no mobile */}
                 <div className="hidden sm:flex items-center gap-0.5 flex-wrap">
@@ -153,8 +159,8 @@ export default function Navbar() {
                             to={to}
                             className={`px-2.5 py-1 rounded text-sm font-medium transition-colors whitespace-nowrap ${
                                 isActive(to)
-                                    ? "bg-white/15 text-white border-b-2 border-white"
-                                    : "text-gray-300 hover:text-white hover:bg-white/10"
+                                    ? "bg-white/10 text-white border-b-2 border-accent"
+                                    : "text-slate-300 hover:text-white hover:bg-white/10"
                             }`}
                         >
                             {label}
@@ -162,28 +168,32 @@ export default function Navbar() {
                     ))}
                 </div>
 
-                {/* Hambúrguer (mobile only) */}
-                <button
-                    className="sm:hidden p-1 rounded hover:bg-white/10 transition ml-1"
-                    onClick={() => setMenuOpen((v) => !v)}
-                    aria-label="Menu"
-                >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        {menuOpen
-                            ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            : <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                        }
-                    </svg>
-                </button>
-
                 {/* Controles desktop */}
                 <div className="ml-auto hidden sm:flex items-center gap-3">
-                    <span className="w-px h-4 bg-white/25 flex-shrink-0" />
+                    <ThemeToggle />
+                    <span className="w-px h-4 bg-white/15 flex-shrink-0" />
                     <div className="relative w-80">
                         <MultiClubPicker />
                     </div>
                     {fetchBtn()}
                     {lastRunInfo()}
+                </div>
+
+                {/* Cluster mobile: tema + hambúrguer */}
+                <div className="sm:hidden ml-auto flex items-center gap-1">
+                    <ThemeToggle />
+                    <button
+                        className="p-1 rounded hover:bg-white/10 transition"
+                        onClick={() => setMenuOpen((v) => !v)}
+                        aria-label="Menu"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            {menuOpen
+                                ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                : <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                            }
+                        </svg>
+                    </button>
                 </div>
             </div>
 
@@ -197,8 +207,8 @@ export default function Navbar() {
                             onClick={() => setMenuOpen(false)}
                             className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
                                 isActive(to)
-                                    ? "bg-white/15 text-white"
-                                    : "text-gray-300 hover:text-white hover:bg-white/10"
+                                    ? "bg-white/10 text-white border-l-2 border-accent"
+                                    : "text-slate-300 hover:text-white hover:bg-white/10"
                             }`}
                         >
                             {label}
@@ -218,7 +228,7 @@ export default function Navbar() {
             )}
 
             {error && (
-                <div className="mt-1.5 flex items-center gap-1.5 text-xs bg-red-900/40 rounded px-2 py-1 text-red-200">
+                <div className="mt-1.5 flex items-center gap-1.5 text-xs bg-negative/20 rounded px-2 py-1 text-red-200">
                     ⚠️ {error}
                 </div>
             )}

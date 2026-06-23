@@ -70,26 +70,26 @@ const STAT_THRESHOLDS: Record<string, StatThresholds> = {
 const QUALITY_COLORS: Record<QualityLevel, QualityInfo> = {
   poor: {
     level: "poor",
-    color: "text-red-600",
-    bgColor: "bg-red-100",
+    color: "text-quality-poor",
+    bgColor: "bg-quality-poor/15",
     label: "Ruim",
   },
   decent: {
     level: "decent",
-    color: "text-orange-600",
-    bgColor: "bg-orange-100",
+    color: "text-quality-decent",
+    bgColor: "bg-quality-decent/15",
     label: "Razoável",
   },
   good: {
     level: "good",
-    color: "text-green-600",
-    bgColor: "bg-green-100",
+    color: "text-quality-good",
+    bgColor: "bg-quality-good/15",
     label: "Bom",
   },
   veryGood: {
     level: "veryGood",
-    color: "text-blue-600",
-    bgColor: "bg-blue-100",
+    color: "text-quality-great",
+    bgColor: "bg-quality-great/15",
     label: "Excelente",
   },
 };

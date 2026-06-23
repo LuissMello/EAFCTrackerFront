@@ -1,4 +1,4 @@
-﻿import { HashRouter as Router, Routes, Route } from "react-router-dom";
+import { HashRouter as Router, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home.tsx";
 import MatchDetails from "./pages/MatchDetails.tsx";
 import PlayerStats from "./pages/PlayerStats.tsx";
@@ -16,32 +16,35 @@ import Opponents from "./pages/Opponents.tsx";
 import OverallEvolution from "./pages/OverallEvolution.tsx";
 import Navbar from "./components/Navbar.tsx";
 import { ClubProvider } from "./hooks/useClub.tsx";
+import { ThemeProvider } from "./hooks/useTheme.tsx";
 
 export default function App() {
     return (
-        <Router>
-            <ClubProvider>
-                <div className="min-h-screen bg-gray-100">
-                    <Navbar />
-                    <Routes>
-                        <Route path="/" element={<Home />} />
-                        <Route path="/match/:matchId" element={<MatchDetails />} />
-                        <Route path="/match/:matchId/goals" element={<MatchGoalAnalysis />} />
-                        <Route path="/goal-analytics" element={<GoalAnalytics />} />
-                        <Route path="/statistics/player/:matchId/:playerId" element={<PlayerStats />} />
-                        <Route path="/stats" element={<GlobalStats />} />
-                        <Route path="/calendar" element={<Calendar />} />
-                        <Route path="/trends" element={<Trends />} />
-                        <Route path="/attributes" element={<PlayerAttributes />} />
-                        <Route path="/statisticsbydate" element={<PlayerStatisticsByDatePage />} />
-                        <Route path="/singlestatisticsbydate" element={<SinglePlayerStatisticsByDatePage />} />
-                        <Route path="/records" element={<Records />} />
-                        <Route path="/player/:playerEntityId" element={<PlayerProfile />} />
-                        <Route path="/opponents" element={<Opponents />} />
-                        <Route path="/overall-evolution" element={<OverallEvolution />} />
-                    </Routes>
-                </div>
-            </ClubProvider>
-        </Router>
+        <ThemeProvider>
+            <Router>
+                <ClubProvider>
+                    <div className="min-h-screen bg-bg text-fg">
+                        <Navbar />
+                        <Routes>
+                            <Route path="/" element={<Home />} />
+                            <Route path="/match/:matchId" element={<MatchDetails />} />
+                            <Route path="/match/:matchId/goals" element={<MatchGoalAnalysis />} />
+                            <Route path="/goal-analytics" element={<GoalAnalytics />} />
+                            <Route path="/statistics/player/:matchId/:playerId" element={<PlayerStats />} />
+                            <Route path="/stats" element={<GlobalStats />} />
+                            <Route path="/calendar" element={<Calendar />} />
+                            <Route path="/trends" element={<Trends />} />
+                            <Route path="/attributes" element={<PlayerAttributes />} />
+                            <Route path="/statisticsbydate" element={<PlayerStatisticsByDatePage />} />
+                            <Route path="/singlestatisticsbydate" element={<SinglePlayerStatisticsByDatePage />} />
+                            <Route path="/records" element={<Records />} />
+                            <Route path="/player/:playerEntityId" element={<PlayerProfile />} />
+                            <Route path="/opponents" element={<Opponents />} />
+                            <Route path="/overall-evolution" element={<OverallEvolution />} />
+                        </Routes>
+                    </div>
+                </ClubProvider>
+            </Router>
+        </ThemeProvider>
     );
 }

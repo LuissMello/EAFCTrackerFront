@@ -13,16 +13,17 @@ import {
   getEventValue,
   getUnknownColumns,
 } from '../utils/parseMatchAggregates.ts';
-import { crestUrl, FALLBACK_LOGO } from '../config/urls.ts';
+import { crestUrl } from '../config/urls.ts';
+import { Crest } from './ui.tsx';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Confidence helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CONFIDENCE_BADGE: Record<EventConfidence, { symbol: string; label: string; headerCls: string; dotCls: string }> = {
-  confirmed: { symbol: '✓', label: 'Confirmado',  headerCls: 'text-gray-700',       dotCls: 'text-emerald-500' },
-  probable:  { symbol: '~', label: 'Provável',    headerCls: 'text-gray-600',       dotCls: 'text-yellow-500'  },
-  ambiguous: { symbol: '✗', label: 'Incerto',     headerCls: 'text-gray-400 italic', dotCls: 'text-red-400'    },
+  confirmed: { symbol: '✓', label: 'Confirmado',  headerCls: 'text-fg-secondary',       dotCls: 'text-positive' },
+  probable:  { symbol: '~', label: 'Provável',    headerCls: 'text-fg-muted',       dotCls: 'text-warning'  },
+  ambiguous: { symbol: '✗', label: 'Incerto',     headerCls: 'text-fg-subtle italic', dotCls: 'text-negative'    },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -45,15 +46,15 @@ const ConfidenceFilterBar: React.FC<ConfidenceFilterProps> = ({ value, onChange,
   ];
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mr-0.5">Mostrar:</span>
+      <span className="text-[10px] text-fg-subtle font-medium uppercase tracking-wide mr-0.5">Mostrar:</span>
       {options.map((opt) => (
         <button
           key={opt.key}
           onClick={() => onChange(opt.key)}
           className={`px-2 py-0.5 rounded text-[10px] font-medium transition-all border ${
             value === opt.key
-              ? 'bg-gray-800 text-white border-gray-800'
-              : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-700'
+              ? 'bg-accent text-accent-fg border-accent'
+              : 'bg-surface text-fg-muted border-border hover:border-border-strong hover:text-fg-secondary'
           }`}
         >
           {opt.label}
@@ -91,20 +92,20 @@ const MatchStatsTabs: React.FC<MatchStatsTabsProps> = ({
   const allTabs = [...categories, UNKNOWN_TAB];
 
   return (
-    <div className="flex overflow-x-auto gap-1 p-1 bg-gray-100 rounded-xl">
+    <div className="flex overflow-x-auto gap-1 p-1 bg-surface-sunken rounded-xl">
       {allTabs.map((tab) => (
         <button
           key={tab}
           onClick={() => onChange(tab)}
           className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
             activeTab === tab
-              ? 'bg-white text-gray-900 shadow-sm font-semibold'
-              : 'text-gray-500 hover:text-gray-800 hover:bg-white/60'
+              ? 'bg-surface text-fg shadow-sm font-semibold'
+              : 'text-fg-muted hover:text-fg hover:bg-surface-raised'
           }`}
         >
           {tab}
           {tab === UNKNOWN_TAB && unknownCount > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-gray-300 text-gray-600 text-[9px] font-bold">
+            <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-border text-fg-muted text-[9px] font-bold">
               {unknownCount > 99 ? '99+' : unknownCount}
             </span>
           )}
@@ -134,18 +135,18 @@ const PlayerEventTable: React.FC<PlayerEventTableProps> = ({ club, columns }) =>
 
   if (club.players.length === 0) {
     return (
-      <p className="text-xs text-gray-400 italic py-3 px-2">
+      <p className="text-xs text-fg-subtle italic py-3 px-2">
         Sem dados de jogadores para este clube.
       </p>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-100">
+    <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-xs border-collapse">
         <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="sticky left-0 z-10 bg-gray-50 text-left px-3 py-2 font-semibold text-gray-600 whitespace-nowrap min-w-[110px]">
+          <tr className="bg-surface-raised border-b border-border">
+            <th className="sticky left-0 z-10 bg-surface-raised text-left px-3 py-2 font-semibold text-fg-muted whitespace-nowrap min-w-[110px]">
               Jogador
             </th>
             {columns.map((col) => {
@@ -162,7 +163,7 @@ const PlayerEventTable: React.FC<PlayerEventTableProps> = ({ club, columns }) =>
                     </span>
                     <span className="text-[11px]">{col.label}</span>
                   </div>
-                  <div className="text-[9px] font-normal text-gray-400 mt-0.5">ID {col.id}</div>
+                  <div className="text-[9px] font-normal text-fg-subtle mt-0.5">ID {col.id}</div>
                 </th>
               );
             })}
@@ -172,13 +173,13 @@ const PlayerEventTable: React.FC<PlayerEventTableProps> = ({ club, columns }) =>
           {club.players.map((player, rowIdx) => (
             <tr
               key={player.playerId}
-              className={`border-b border-gray-100 last:border-0 ${
-                rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
-              } hover:bg-blue-50/30 transition-colors`}
+              className={`border-b border-border last:border-0 ${
+                rowIdx % 2 === 0 ? 'bg-surface' : 'bg-surface-raised/40'
+              } hover:bg-surface-raised transition-colors`}
             >
               <td
-                className={`sticky left-0 z-10 px-3 py-2 font-medium text-gray-800 whitespace-nowrap ${
-                  rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
+                className={`sticky left-0 z-10 px-3 py-2 font-medium text-fg whitespace-nowrap ${
+                  rowIdx % 2 === 0 ? 'bg-surface' : 'bg-surface-raised/40'
                 }`}
               >
                 {player.playerName}
@@ -193,16 +194,16 @@ const PlayerEventTable: React.FC<PlayerEventTableProps> = ({ club, columns }) =>
                       <span
                         className={`inline-block min-w-[22px] px-1 py-0.5 rounded font-semibold ${
                           isMax
-                            ? 'bg-emerald-100 text-emerald-700'
+                            ? 'bg-positive-soft text-positive-fg'
                             : isAmbiguous
-                            ? 'text-gray-400'
-                            : 'text-gray-700'
+                            ? 'text-fg-subtle'
+                            : 'text-fg-secondary'
                         }`}
                       >
                         {val}
                       </span>
                     ) : (
-                      <span className="text-gray-200 text-[10px]">–</span>
+                      <span className="text-fg-subtle text-[10px]">–</span>
                     )}
                   </td>
                 );
@@ -227,13 +228,8 @@ interface ClubSectionProps {
 const ClubSection: React.FC<ClubSectionProps> = ({ club, columns }) => (
   <div className="flex flex-col gap-2">
     <div className="flex items-center gap-2">
-      <img
-        src={crestUrl(club.crestAssetId)}
-        onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-        alt={club.clubName}
-        className="w-6 h-6 object-contain"
-      />
-      <span className="text-sm font-semibold text-gray-700 truncate">{club.clubName}</span>
+      <Crest src={crestUrl(club.crestAssetId)} alt={club.clubName} size={24} />
+      <span className="text-sm font-semibold text-fg-secondary truncate">{club.clubName}</span>
     </div>
     <PlayerEventTable club={club} columns={columns} />
   </div>
@@ -288,11 +284,11 @@ export const MatchEaPostGameStats: React.FC<MatchEaPostGameStatsProps> = ({
   // ── Skeleton ────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="bg-white shadow-sm rounded-xl border overflow-hidden">
-        <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 px-4 py-3 h-14 animate-pulse" />
+      <div className="bg-surface shadow-sm rounded-xl border overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-4 py-3 h-14 animate-pulse" />
         <div className="p-4 space-y-3">
-          <div className="h-9 rounded-xl bg-gray-100 animate-pulse" />
-          <div className="h-40 rounded-lg bg-gray-50 animate-pulse" />
+          <div className="h-9 rounded-xl bg-surface-sunken animate-pulse" />
+          <div className="h-40 rounded-lg bg-surface-raised animate-pulse" />
         </div>
       </div>
     );
@@ -301,8 +297,8 @@ export const MatchEaPostGameStats: React.FC<MatchEaPostGameStatsProps> = ({
   // ── Erro ────────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="bg-white shadow-sm rounded-xl border p-4">
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</p>
+      <div className="bg-surface shadow-sm rounded-xl border p-4">
+        <p className="text-sm text-negative-fg bg-negative-soft border border-negative/30 rounded p-2">{error}</p>
       </div>
     );
   }
@@ -310,24 +306,19 @@ export const MatchEaPostGameStats: React.FC<MatchEaPostGameStatsProps> = ({
   if (!data || clubs.length === 0) return null;
 
   return (
-    <div className="bg-white shadow-sm rounded-xl border overflow-hidden">
+    <div className="bg-surface shadow-sm rounded-xl border overflow-hidden">
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 px-4 py-3">
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 flex-wrap">
             {clubs.map((club) => (
               <div key={club.clubId} className="flex items-center gap-1.5">
-                <img
-                  src={crestUrl(club.crestAssetId)}
-                  onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
-                  alt={club.clubName}
-                  className="w-6 h-6 object-contain"
-                />
+                <Crest src={crestUrl(club.crestAssetId)} alt={club.clubName} size={24} />
                 <span className="text-white text-sm font-semibold">{club.clubName}</span>
               </div>
             ))}
           </div>
-          <span className="text-gray-400 text-[10px] uppercase tracking-widest font-medium whitespace-nowrap">
+          <span className="text-fg-subtle text-[10px] uppercase tracking-widest font-medium whitespace-nowrap">
             Eventos — Por jogador
           </span>
         </div>
@@ -345,25 +336,25 @@ export const MatchEaPostGameStats: React.FC<MatchEaPostGameStatsProps> = ({
 
       {/* ── Filtro de confiança (oculto na aba Desconhecidos) ─────────────── */}
       {resolvedTab !== UNKNOWN_TAB && (
-        <div className="px-3 pt-1.5 pb-2 flex items-center justify-between gap-2 flex-wrap border-b border-gray-100">
+        <div className="px-3 pt-1.5 pb-2 flex items-center justify-between gap-2 flex-wrap border-b border-border">
           <ConfidenceFilterBar
             value={confFilter}
             onChange={setConfFilter}
             counts={confidenceCounts}
           />
           {/* Legenda inline */}
-          <div className="flex items-center gap-3 text-[10px] text-gray-400">
-            <span><span className="text-emerald-500 font-bold">✓</span> confirmado</span>
-            <span><span className="text-yellow-500 font-bold">~</span> provável</span>
-            <span><span className="text-red-400 font-bold">✗</span> incerto</span>
+          <div className="flex items-center gap-3 text-[10px] text-fg-subtle">
+            <span><span className="text-positive font-bold">✓</span> confirmado</span>
+            <span><span className="text-warning font-bold">~</span> provável</span>
+            <span><span className="text-negative font-bold">✗</span> incerto</span>
           </div>
         </div>
       )}
 
       {/* ── Aviso: aba Desconhecidos ──────────────────────────────────────── */}
       {resolvedTab === UNKNOWN_TAB && activeColumns.length > 0 && (
-        <div className="px-4 py-2 bg-amber-50 border-b border-amber-100">
-          <p className="text-[11px] text-amber-700">
+        <div className="px-4 py-2 bg-warning-soft border-b border-warning/30">
+          <p className="text-[11px] text-warning-fg">
             <span className="font-semibold">IDs sem mapeamento</span> — eventos presentes nesta partida
             que ainda não foram identificados. Valores mais altos e recorrentes ajudam no mapeamento.
           </p>
@@ -372,11 +363,11 @@ export const MatchEaPostGameStats: React.FC<MatchEaPostGameStatsProps> = ({
 
       {/* ── Tabelas ─────────────────────────────────────────────────────── */}
       {resolvedTab === UNKNOWN_TAB && activeColumns.length === 0 ? (
-        <div className="px-4 py-8 text-center text-sm text-gray-400">
+        <div className="px-4 py-8 text-center text-sm text-fg-subtle">
           Todos os eventos desta partida estão mapeados. ✓
         </div>
       ) : activeColumns.length === 0 ? (
-        <div className="px-4 py-6 text-center text-xs text-gray-400 italic">
+        <div className="px-4 py-6 text-center text-xs text-fg-subtle italic">
           Nenhum evento com o nível de confiança selecionado nesta categoria.
         </div>
       ) : (

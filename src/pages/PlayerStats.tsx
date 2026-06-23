@@ -186,7 +186,7 @@ const GROUPS: Array<{ name: string; keys: (keyof PlayerMatchStats)[]; onlyGK?: b
  * UI Atômicos
  **********************************/
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
-  <div className={`bg-white rounded-2xl shadow-sm border p-4 ${className}`}>{children}</div>
+  <div className={`bg-surface rounded-2xl shadow-sm border p-4 ${className}`}>{children}</div>
 );
 
 function StatTile({
@@ -205,9 +205,9 @@ function StatTile({
   const quality = statType && rawValue !== undefined ? classifyStat(statType, rawValue) : null;
 
   const tileContent = (
-    <div className="rounded-2xl border bg-white p-3 shadow-sm hover:shadow transition-shadow">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-gray-900">
+    <div className="rounded-2xl border bg-surface p-3 shadow-sm hover:shadow transition-shadow">
+      <div className="text-xs text-fg-muted">{label}</div>
+      <div className="mt-1 text-lg font-semibold text-fg">
         {quality ? <StatWithQuality value={value} quality={quality} statType={statType} rawValue={rawValue} /> : value}
       </div>
     </div>
@@ -218,32 +218,32 @@ function StatTile({
 
 function ProgressBar({ value, label }: { value: number; label: string }) {
   const pct = clamp01to100(value);
-  const color = pct < 40 ? "bg-rose-500" : pct < 70 ? "bg-amber-400" : "bg-emerald-500";
+  const color = pct < 40 ? "bg-quality-poor" : pct < 70 ? "bg-quality-decent" : "bg-quality-great";
   return (
     <div className="mb-3" aria-label={`${label}: ${Math.round(pct)}`}>
-      <label className="block text-[11px] sm:text-xs font-semibold text-gray-700 mb-1 tracking-wide">{label}</label>
+      <label className="block text-[11px] sm:text-xs font-semibold text-fg-secondary mb-1 tracking-wide">{label}</label>
       <div className="relative flex items-center">
-        <div className="w-full bg-gray-200/70 rounded-full h-2.5 overflow-hidden">
+        <div className="w-full bg-surface-sunken/70 rounded-full h-2.5 overflow-hidden">
           <div className={`h-2.5 rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
         </div>
-        <span className="ml-2 text-xs sm:text-sm font-semibold text-gray-700 w-10 text-right">{Math.round(pct)}</span>
+        <span className="ml-2 text-xs sm:text-sm font-semibold text-fg-secondary w-10 text-right">{Math.round(pct)}</span>
       </div>
     </div>
   );
 }
 
 function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
+  return <div className={`animate-pulse bg-surface-sunken rounded ${className}`} />;
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="mx-auto my-8 max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
-      <div className="text-red-600 font-semibold">Erro ao carregar</div>
-      <p className="mt-2 text-sm text-gray-600">{message}</p>
+    <div className="mx-auto my-8 max-w-xl rounded-2xl border bg-surface p-6 text-center shadow-sm">
+      <div className="text-negative font-semibold">Erro ao carregar</div>
+      <p className="mt-2 text-sm text-fg-muted">{message}</p>
       <button
         onClick={onRetry}
-        className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
+        className="mt-4 rounded-xl bg-accent px-4 py-2 text-accent-fg hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-accent/30"
       >
         Tentar novamente
       </button>
@@ -610,11 +610,11 @@ export default function PlayerStatsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-blue-800 flex items-center gap-2">
+          <h1 className="text-2xl sm:text-3xl font-display font-bold uppercase tracking-wide text-fg flex items-center gap-2">
             {player.playerName}
             {player.mom && (
               <Tooltip content="Melhor em Campo">
-                <span className="ml-1 rounded-full bg-yellow-400/90 px-2 py-0.5 text-xs font-semibold text-yellow-900">
+                <span className="ml-1 rounded-full bg-gold-soft px-2 py-0.5 text-xs font-semibold text-gold-fg">
                   MOM
                 </span>
               </Tooltip>
@@ -622,10 +622,10 @@ export default function PlayerStatsPage() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          <a href={shareUrl} className="text-sm text-blue-700 hover:underline">
+          <a href={shareUrl} className="text-sm text-accent hover:underline">
             Compartilhar
           </a>
-          <Link to={`/match/${matchId}`} className="text-blue-700 hover:underline text-sm">
+          <Link to={`/match/${matchId}`} className="text-accent hover:underline text-sm">
             ← Voltar para a partida
           </Link>
         </div>
@@ -634,7 +634,7 @@ export default function PlayerStatsPage() {
       {/* RESUMO DA PARTIDA */}
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-gray-800">Resumo da Partida</h2>
+          <h2 className="text-lg font-semibold text-fg">Resumo da Partida</h2>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           <StatTile label="Gols" value={fmtNum(player.goals)} />
@@ -671,19 +671,19 @@ export default function PlayerStatsPage() {
         {groupAverages.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
             <Card>
-              <h3 className="text-base font-semibold text-gray-800 mb-3">Médias por Grupo</h3>
+              <h3 className="text-base font-semibold text-fg mb-3">Médias por Grupo</h3>
               <RadarSVG data={groupAverages} />
             </Card>
             <Card>
-              <h3 className="text-base font-semibold text-gray-800 mb-3">Pontos fortes</h3>
+              <h3 className="text-base font-semibold text-fg mb-3">Pontos fortes</h3>
               <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                 {Object.entries(player.statistics ?? {})
                   .sort((a, b) => Number(b[1]) - Number(a[1]))
                   .slice(0, 6)
                   .map(([k, v]) => (
                     <li key={k} className="flex items-center justify-between rounded-xl border p-2">
-                      <span className="text-gray-700">{ATTR_LABELS[k as keyof PlayerMatchStats] ?? k}</span>
-                      <span className="font-semibold text-gray-900">{Math.round(Number(v || 0))}</span>
+                      <span className="text-fg-secondary">{ATTR_LABELS[k as keyof PlayerMatchStats] ?? k}</span>
+                      <span className="font-semibold text-fg">{Math.round(Number(v || 0))}</span>
                     </li>
                   ))}
               </ul>
@@ -697,7 +697,7 @@ export default function PlayerStatsPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Desempenho vs Time (últimas N partidas)</h2>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-700">N:</span>
+            <span className="text-sm text-fg-secondary">N:</span>
             <select
               value={nMatchesPerf}
               onChange={(e) => setNMatchesPerf(Number(e.target.value))}
@@ -719,7 +719,7 @@ export default function PlayerStatsPage() {
             </select>
             <button
               onClick={() => setPerfCollapsed((v) => !v)}
-              className="rounded-lg border px-3 py-1.5 text-sm shadow-sm hover:bg-gray-50"
+              className="rounded-lg border px-3 py-1.5 text-sm shadow-sm hover:bg-surface-raised"
             >
               {perfCollapsed ? "Maximizar" : "Minimizar"}
             </button>
@@ -779,7 +779,7 @@ export default function PlayerStatsPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full table-auto text-sm border">
                       <thead>
-                        <tr className="bg-gray-50">
+                        <tr className="bg-surface-raised">
                           <th className="p-2 text-left">Jogador</th>
                           <th className="p-2 text-right">Nota</th>
                           <th className="p-2 text-right">Gols</th>
@@ -791,7 +791,7 @@ export default function PlayerStatsPage() {
                         {perfComparison.sorted.map((r) => {
                           const isMe = String(r.playerId) === String(player.playerId);
                           return (
-                            <tr key={r.playerId} className={`border-t ${isMe ? "bg-blue-50" : ""}`}>
+                            <tr key={r.playerId} className={`border-t ${isMe ? "bg-accent/10" : ""}`}>
                               <td className="p-2 text-left">
                                 {r.playerName}
                                 {isMe && " (Você)"}
@@ -809,7 +809,7 @@ export default function PlayerStatsPage() {
                 </Card>
               </div>
             ) : (
-              <div className="text-sm text-gray-600 mt-3">Sem dados suficientes para comparação.</div>
+              <div className="text-sm text-fg-muted mt-3">Sem dados suficientes para comparação.</div>
             )}
           </>
         )}
@@ -820,7 +820,7 @@ export default function PlayerStatsPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Atributos – comparação (último jogo)</h2>
           <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-700">Comparar com:</label>
+            <label className="text-sm text-fg-secondary">Comparar com:</label>
             <select
               value={String(attrCompareTarget)}
               onChange={(e) => {
@@ -841,7 +841,7 @@ export default function PlayerStatsPage() {
             </select>
             <button
               onClick={() => setAttrCollapsed((v) => !v)}
-              className="rounded-lg border px-3 py-1.5 text-sm shadow-sm hover:bg-gray-50"
+              className="rounded-lg border px-3 py-1.5 text-sm shadow-sm hover:bg-surface-raised"
             >
               {attrCollapsed ? "Maximizar" : "Minimizar"}
             </button>
@@ -855,7 +855,7 @@ export default function PlayerStatsPage() {
                 {/* Cards de comparação – TODOS os atributos */}
                 <Card>
                   <h3 className="text-base font-semibold mb-3">
-                    Você vs <span className="text-gray-700">{attrComparison.label}</span>
+                    Você vs <span className="text-fg-secondary">{attrComparison.label}</span>
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {(Object.keys(ATTR_LABELS) as (keyof PlayerMatchStats)[]).map((key) => {
@@ -867,27 +867,27 @@ export default function PlayerStatsPage() {
                       return (
                         <div key={String(key)} className="rounded-xl border p-3">
                           <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium text-gray-800">{label}</span>
+                            <span className="font-medium text-fg">{label}</span>
                             <span
                               className={`text-xs px-2 py-0.5 rounded-full ${
-                                better ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-700"
+                                better ? "bg-positive-soft text-positive-fg" : "bg-surface-sunken text-fg-secondary"
                               }`}
                             >
                               {better ? "Acima" : "Na média/abaixo"}
                             </span>
                           </div>
                           <div className="mt-2">
-                            <div className="text-[11px] text-gray-500">Você: {Math.round(mine)}</div>
-                            <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
-                              <div className="h-2 bg-blue-600" style={{ width: `${mine}%` }} />
+                            <div className="text-[11px] text-fg-muted">Você: {Math.round(mine)}</div>
+                            <div className="w-full bg-surface-sunken rounded h-2 overflow-hidden">
+                              <div className="h-2 bg-accent" style={{ width: `${mine}%` }} />
                             </div>
                           </div>
                           <div className="mt-2">
-                            <div className="text-[11px] text-gray-500">
+                            <div className="text-[11px] text-fg-muted">
                               {attrComparison.label}: {Math.round(peer)}
                             </div>
-                            <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
-                              <div className="h-2 bg-slate-500" style={{ width: `${peer}%` }} />
+                            <div className="w-full bg-surface-sunken rounded h-2 overflow-hidden">
+                              <div className="h-2 bg-fg-muted" style={{ width: `${peer}%` }} />
                             </div>
                           </div>
                         </div>
@@ -907,7 +907,7 @@ export default function PlayerStatsPage() {
                 </Card>
               </div>
             ) : (
-              <div className="text-sm text-gray-600 mt-3">Sem dados suficientes para comparação.</div>
+              <div className="text-sm text-fg-muted mt-3">Sem dados suficientes para comparação.</div>
             )}
           </>
         )}
@@ -916,8 +916,8 @@ export default function PlayerStatsPage() {
       {/* ATRIBUTOS TÉCNICOS (lista completa do jogador) */}
       {player.statistics && (
         <Card className="mt-6">
-          <h2 className="text-lg font-semibold mb-3 text-gray-800">Atributos Técnicos (partida)</h2>
-          <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-sm text-gray-700">
+          <h2 className="text-lg font-semibold mb-3 text-fg">Atributos Técnicos (partida)</h2>
+          <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-sm text-fg-secondary">
             {(Object.keys(ATTR_LABELS) as (keyof PlayerMatchStats)[]).map((key) => (
               <li key={String(key)} className="col-span-1">
                 <ProgressBar value={Number((player.statistics as any)[key]) || 0} label={ATTR_LABELS[key]} />
@@ -952,10 +952,10 @@ function StatCompare({
   return (
     <div className="rounded-xl border p-3">
       <div className="flex items-center justify-between text-sm">
-        <span className="font-medium text-gray-800">{label}</span>
+        <span className="font-medium text-fg">{label}</span>
         <span
           className={`text-xs px-2 py-0.5 rounded-full ${
-            isBetter ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-700"
+            isBetter ? "bg-positive-soft text-positive-fg" : "bg-surface-sunken text-fg-secondary"
           }`}
         >
           {isBetter ? "↑" : "→"}
@@ -963,11 +963,11 @@ function StatCompare({
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
         <div>
-          <div className="text-[11px] text-gray-500">Você</div>
+          <div className="text-[11px] text-fg-muted">Você</div>
           <div className="font-semibold">{pct ? fmtPct(m) : fixed2 ? m.toFixed(2) : fmtNum(m)}</div>
         </div>
         <div>
-          <div className="text-[11px] text-gray-500">Time (média)</div>
+          <div className="text-[11px] text-fg-muted">Time (média)</div>
           <div className="font-semibold">{pct ? fmtPct(t) : fixed2 ? t.toFixed(2) : fmtNum(t)}</div>
         </div>
       </div>
@@ -997,13 +997,13 @@ function RadarSVG({ data }: { data: { group: string; value: number }[] }) {
           return `${i === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
         })
         .join(" ") + " Z";
-    return <path key={ring} d={d} fill="none" stroke="#e5e7eb" strokeWidth={1} />;
+    return <path key={ring} d={d} fill="none" className="stroke-border" strokeWidth={1} />;
   });
 
   const spokes = data.map((_, i) => {
     const a = angleFor(i);
     const { x, y } = toXY(radius, a);
-    return <line key={i} x1={center} y1={center} x2={x} y2={y} stroke="#e5e7eb" strokeWidth={1} />;
+    return <line key={i} x1={center} y1={center} x2={x} y2={y} className="stroke-border" strokeWidth={1} />;
   });
 
   const polygon =
@@ -1021,7 +1021,7 @@ function RadarSVG({ data }: { data: { group: string; value: number }[] }) {
       <svg viewBox={`0 0 ${size} ${size}`} className="w-full max-w-sm">
         <g>{webLines}</g>
         <g>{spokes}</g>
-        <path d={polygon} fill="#3b82f6" fillOpacity={0.25} stroke="#3b82f6" strokeWidth={2} />
+        <path d={polygon} className="fill-accent stroke-accent" fillOpacity={0.25} strokeWidth={2} />
         {data.map((d, i) => {
           const a = angleFor(i);
           const { x, y } = toXY(radius + 16, a);
@@ -1032,7 +1032,7 @@ function RadarSVG({ data }: { data: { group: string; value: number }[] }) {
               y={y}
               textAnchor="middle"
               dominantBaseline="middle"
-              className="fill-gray-600 text-[10px]"
+              className="fill-fg-muted text-[10px]"
             >
               {d.group}
             </text>
