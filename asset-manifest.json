@@ -1,7 +1,7 @@
 {
   "files": {
     "main.css": "/EAFCTrackerFront/static/css/main.3222797b.css",
-    "main.js": "/EAFCTrackerFront/static/js/main.c57a5cb2.js",
+    "main.js": "/EAFCTrackerFront/static/js/main.651d674c.js",
     "static/js/67.68c4fe54.chunk.js": "/EAFCTrackerFront/static/js/67.68c4fe54.chunk.js",
     "static/js/936.4e16b58c.chunk.js": "/EAFCTrackerFront/static/js/936.4e16b58c.chunk.js",
     "static/js/265.e7cbe350.chunk.js": "/EAFCTrackerFront/static/js/265.e7cbe350.chunk.js",
@@ -20,7 +20,7 @@
     "static/js/58.addcac90.chunk.js": "/EAFCTrackerFront/static/js/58.addcac90.chunk.js",
     "index.html": "/EAFCTrackerFront/index.html",
     "main.3222797b.css.map": "/EAFCTrackerFront/static/css/main.3222797b.css.map",
-    "main.c57a5cb2.js.map": "/EAFCTrackerFront/static/js/main.c57a5cb2.js.map",
+    "main.651d674c.js.map": "/EAFCTrackerFront/static/js/main.651d674c.js.map",
     "67.68c4fe54.chunk.js.map": "/EAFCTrackerFront/static/js/67.68c4fe54.chunk.js.map",
     "936.4e16b58c.chunk.js.map": "/EAFCTrackerFront/static/js/936.4e16b58c.chunk.js.map",
     "265.e7cbe350.chunk.js.map": "/EAFCTrackerFront/static/js/265.e7cbe350.chunk.js.map",
@@ -40,6 +40,6 @@
   },
   "entrypoints": [
     "static/css/main.3222797b.css",
-    "static/js/main.c57a5cb2.js"
+    "static/js/main.651d674c.js"
   ]
 }
