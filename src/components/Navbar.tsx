@@ -64,13 +64,12 @@ const NAV_LINKS = [
     { to: "/overall-evolution", label: "Evolução" },
 ];
 
-// Rotas que antes eram "órfãs" (sem link na navegação)
-// "Admin" só aparece com sessão de administrador (a rota /admin continua acessível e pede login)
-const MORE_LINKS: { to: string; label: string; adminOnly?: boolean }[] = [
+// Rotas secundárias. Admin permanece visível; a própria página exige login.
+const MORE_LINKS: { to: string; label: string }[] = [
     { to: "/records", label: "Recordes" },
     { to: "/opponents", label: "Adversários" },
     { to: "/attributes", label: "Atributos" },
-    { to: "/admin", label: "Admin", adminOnly: true },
+    { to: "/admin", label: "Admin" },
 ];
 
 /** Ativo quando o caminho é exatamente `to` ou está dentro dele (`to/...`). */
@@ -144,7 +143,7 @@ function useDismissable(
 
 export default function Navbar() {
     const location = useLocation();
-    const { isAdmin, hasSession, expiresAtUtc, logout, openLogin } = useAuth();
+    const { isAdmin, hasSession, expiresAtUtc, logout } = useAuth();
     const { triggerRefresh } = useRefresh();
     const { live, liveBusy, liveError, toggleLive, liveLabel, liveTitle } = useLiveMode();
 
@@ -262,7 +261,7 @@ export default function Navbar() {
     const dotClass = loadingLastRun ? "bg-slate-500" : error && !lastRunUtc ? "bg-warning" : freshnessDot(lastRunUtc);
 
     const isActive = (to: string) => isPathActive(location.pathname, to);
-    const moreLinks = React.useMemo(() => MORE_LINKS.filter((l) => !l.adminOnly || isAdmin), [isAdmin]);
+    const moreLinks = MORE_LINKS;
     const moreActive = moreLinks.some((l) => isActive(l.to));
 
     const expiryText = React.useMemo(() => {
@@ -342,15 +341,15 @@ export default function Navbar() {
     );
 
     const loginBtn = (fullWidth = false) => (
-        <button
-            type="button"
-            onClick={() => { setMenuOpen(false); openLogin(); }}
+        <Link
+            to="/admin"
+            onClick={() => setMenuOpen(false)}
             className={`${ctrlBase} ${fullWidth ? "w-full" : ""} border border-white/25 text-slate-100 hover:bg-white/10`}
-            title="Entrar como administrador"
+            title="Abrir página de administração e entrar"
         >
             <LockIcon />
-            Entrar
-        </button>
+            Admin
+        </Link>
     );
 
     return (
