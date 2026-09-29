@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useMemo, useState } from "react";
 import api from "../services/api.ts";
 import {
   Chart as ChartJS,
@@ -14,10 +14,14 @@ import {
 } from "chart.js";
 import { Line, Bar } from "react-chartjs-2";
 import { useClub } from "../hooks/useClub.tsx";
+import { useClubIds } from "../hooks/useClubIds.ts";
+import { useAbortableFetch } from "../hooks/useAbortableFetch.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { useTheme } from "../hooks/useTheme.tsx";
 import { chartTheme, cssVar } from "../utils/themeColors.ts";
 import { RatingPill } from "../components/ui.tsx";
+import { fmtDateBRShort } from "../utils/date.ts";
+import { withAlpha, colorFromId, movingAvg } from "../utils/chart.ts";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
@@ -77,22 +81,6 @@ interface TopItemDto {
 // Helpers
 // =========================
 
-const BR_DATE = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "2-digit",
-});
-const formatDate = (iso: string) => BR_DATE.format(new Date(iso));
-
-const COLORS = {
-  blue: { border: "rgba(37,99,235,1)", fill: "rgba(59,130,246,0.15)" },
-  emerald: { border: "rgba(16,185,129,1)", fill: "rgba(52,211,153,0.15)" },
-  amber: { border: "rgba(245,158,11,1)", fill: "rgba(251,191,36,0.15)" },
-  indigo: { border: "rgba(79,70,229,1)", fill: "rgba(129,140,248,0.15)" },
-  rose: { border: "rgba(244,63,94,1)", fill: "rgba(251,113,133,0.12)" },
-  slate: { border: "rgba(100,116,139,1)", fill: "rgba(148,163,184,0.15)" },
-};
-
 const pillColor = (r: Result) => (r === "W" ? "bg-positive" : r === "D" ? "bg-warning" : "bg-negative");
 
 function FormPills({ form }: { form: string }) {
@@ -119,57 +107,18 @@ function FormPills({ form }: { form: string }) {
   );
 }
 
-// média móvel simples
-function movingAvg(arr: number[], win = 5) {
-  if (!arr || arr.length === 0) return [];
-  const out: number[] = [];
-  let sum = 0;
-  for (let i = 0; i < arr.length; i++) {
-    sum += arr[i] ?? 0;
-    if (i >= win) sum -= arr[i - win] ?? 0;
-    out.push(i >= win - 1 ? sum / win : arr[i]);
-  }
-  return out;
-}
-
-// cor → rgba com alpha
-function withAlpha(hex: string, alpha: number) {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-// hash → cor estável
-function colorFromId(num: number) {
-  let x = Math.imul(num ^ 0x9e3779b9, 0x85ebca6b);
-  x ^= x >>> 13;
-  x = Math.imul(x, 0xc2b2ae35);
-  x ^= x >>> 16;
-  const r = (x & 0xff).toString(16).padStart(2, "0");
-  const g = ((x >>> 8) & 0xff).toString(16).padStart(2, "0");
-  const b = ((x >>> 16) & 0xff).toString(16).padStart(2, "0");
-  return `#${r}${g}${b}`.toUpperCase();
-}
-
 // =========================
 // Component
 // =========================
 
 export default function TrendsPage() {
-  const { club, selectedClubIds, selectedClubs } = useClub();
+  const { club, selectedClubs } = useClub();
   const { resolvedTheme } = useTheme();
 
   // ids efetivos (multi). Se nenhum selecionado, tenta o single legacy.
-  const idsToUse = useMemo<number[]>(
-    () => (selectedClubIds?.length ? selectedClubIds : club?.clubId ? [club.clubId] : []),
-    [selectedClubIds, club?.clubId]
-  );
+  const idsToUse = useClubIds();
 
   const [last, setLast] = useState(20);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState<number>(0);
 
   // mapas por clube
@@ -185,54 +134,32 @@ export default function TrendsPage() {
   type XMode = "index" | "date";
   const [xMode, setXMode] = useState<XMode>("index"); // se multi, força "index" abaixo
 
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
   // -------- Fetch (multi) --------
-  useEffect(() => {
-    if (!idsToUse.length) return;
-    const controller = new AbortController();
+  const { loading, error } = useAbortableFetch(
+    async (signal) => {
+      const trendPromises = idsToUse.map((id) =>
+        api.get<ClubTrendsDto>(API_ENDPOINTS.TRENDS_CLUB(id, last), { signal })
+      );
+      const topsPromises = idsToUse.map((id) =>
+        api.get<TopItemDto[]>(API_ENDPOINTS.TRENDS_TOP_SCORERS(id, 10, last), { signal })
+      );
 
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
+      const [trendResArr, topsResArr] = await Promise.all([Promise.all(trendPromises), Promise.all(topsPromises)]);
 
-        const trendPromises = idsToUse.map((id) =>
-          api.get<ClubTrendsDto>(API_ENDPOINTS.TRENDS_CLUB(id, last), { signal: (controller as any).signal })
-        );
-        const topsPromises = idsToUse.map((id) =>
-          api.get<TopItemDto[]>(API_ENDPOINTS.TRENDS_TOP_SCORERS(id, 10), { signal: (controller as any).signal })
-        );
+      if (signal.aborted) return;
 
-        const [trendResArr, topsResArr] = await Promise.all([Promise.all(trendPromises), Promise.all(topsPromises)]);
+      const tMap: Record<number, ClubTrendsDto> = {};
+      const pMap: Record<number, TopItemDto[]> = {};
 
-        if (!mountedRef.current) return;
+      trendResArr.forEach((r) => (tMap[r.data.clubId] = r.data));
+      topsResArr.forEach((r, idx) => (pMap[idsToUse[idx]] = r.data));
 
-        const tMap: Record<number, ClubTrendsDto> = {};
-        const pMap: Record<number, TopItemDto[]> = {};
-
-        trendResArr.forEach((r) => (tMap[r.data.clubId] = r.data));
-        topsResArr.forEach((r, idx) => (pMap[idsToUse[idx]] = r.data));
-
-        setTrendsByClub(tMap);
-        setTopsByClub(pMap);
-      } catch (e: any) {
-        if (!mountedRef.current) return;
-        if (e?.name === "CanceledError" || e?.name === "AbortError") return;
-        setError(e?.message ?? "Erro ao carregar tendências");
-      } finally {
-        if (mountedRef.current) setLoading(false);
-      }
-    })();
-
-    return () => controller.abort();
-  }, [idsToUse.join(","), last, reloadNonce]); // join para mudar quando a lista mudar
+      setTrendsByClub(tMap);
+      setTopsByClub(pMap);
+    },
+    [idsToUse.join(","), last, reloadNonce], // join para mudar quando a lista mudar
+    { enabled: idsToUse.length > 0, errorMessage: "Erro ao carregar tendências" }
+  );
 
   // -------- Derived (multi) --------
   const clubsWithData = useMemo(
@@ -260,7 +187,7 @@ export default function TrendsPage() {
 
   const xDateLabels = useMemo(() => {
     if (!singleClub) return xIndexLabels; // fallback em multi
-    return singleClub.series.map((p) => formatDate(p.timestamp));
+    return singleClub.series.map((p) => fmtDateBRShort(p.timestamp));
   }, [singleClub, xIndexLabels]);
 
   const xLabels = effectiveXMode === "index" ? xIndexLabels : xDateLabels;
@@ -405,7 +332,7 @@ export default function TrendsPage() {
               // single-club + por data
               const s = singleClub?.series?.[i];
               if (!s) return items?.[0]?.label ?? "";
-              const date = formatDate(s.timestamp);
+              const date = fmtDateBRShort(s.timestamp);
               const vs = s.opponentName ? ` vs ${s.opponentName}` : "";
               const placar = ` • ${s.goalsFor}-${s.goalsAgainst}`;
               return `${date}${vs}${placar}`;
@@ -633,7 +560,7 @@ export default function TrendsPage() {
                         {c.series.map((s) => (
                           <span
                             key={`${c.clubId}-${s.matchId}`}
-                            title={`${formatDate(s.timestamp)} • vs ${s.opponentName} • ${s.goalsFor}-${s.goalsAgainst}`}
+                            title={`${fmtDateBRShort(s.timestamp)} • vs ${s.opponentName} • ${s.goalsFor}-${s.goalsAgainst}`}
                             className={`inline-flex items-center justify-center w-8 h-8 rounded text-white flex-shrink-0 ${pillColor(s.result as Result)}`}
                           >
                             <span className="text-[9px] font-bold leading-none">{s.goalsFor}-{s.goalsAgainst}</span>

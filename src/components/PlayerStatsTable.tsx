@@ -6,6 +6,8 @@ import { Tooltip } from "./Tooltip.tsx";
 import { RatingPill } from "./ui.tsx";
 import { PlugZap, Star } from "lucide-react";
 import { GiGoalKeeper } from "react-icons/gi";
+import { useNumberFormats } from "../hooks/useNumberFormats.ts";
+import { pct } from "../utils/number.ts";
 
 interface PlayerStatsTableProps {
     players: PlayerStats[];
@@ -26,18 +28,7 @@ interface PlayerStatsTableProps {
     compactMode?: boolean;
 }
 
-const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);
 const clamp = (v: number, min = 0, max = 100) => Math.max(min, Math.min(max, v));
-
-function useNumberFormats() {
-    const int = useMemo(() => new Intl.NumberFormat("pt-BR"), []);
-    const p1 = useMemo(() => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }), []);
-    const p2 = useMemo(
-        () => new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        []
-    );
-    return { int, p1, p2 };
-}
 
 const STICKY_PLAYER_HEADER =
     "sticky left-0 z-20 border-r border-border shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]";
@@ -297,13 +288,11 @@ export function PlayerStatsTable({
         }
     }
 
-    const clubGoalsAgainst = Number(clubStats?.totalGoalsConceded || 0);
-
     // Check if any player has goalkeeper stats
     const hasGoalkeeperStats = useMemo(() => {
         return filtered.some((p) => {
             const saves = Number(p.totalSaves || 0);
-            const isGk = ((p as any).position?.toUpperCase?.() === "GK");
+            const isGk = p.hasGoalkeeperAppearance || ((p as any).position?.toUpperCase?.() === "GK");
             return saves > 0 || isGk;
         });
     }, [filtered]);
@@ -371,7 +360,14 @@ export function PlayerStatsTable({
                                     <th
                                         key={c.key}
                                         onClick={() => handleSort(c.key as keyof PlayerStats)}
-                                        className={`px-3 py-2 cursor-pointer select-none hover:bg-surface-sunken group${
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter" || e.key === " ") {
+                                                e.preventDefault();
+                                                handleSort(c.key as keyof PlayerStats);
+                                            }
+                                        }}
+                                        tabIndex={0}
+                                        className={`px-3 py-2 cursor-pointer select-none hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent group${
                                             isActiveSort ? " bg-accent/10 text-accent" : isProNameCol ? " bg-surface-raised" : ""
                                         }${isProNameCol ? ` ${STICKY_PLAYER_HEADER}` : ""}`}
                                         aria-sort={
@@ -413,12 +409,12 @@ export function PlayerStatsTable({
                         {!loading &&
                             pageItems.map((p, rowIdx) => {
                                 const saves = Number(p.totalSaves || 0);
-                                const conceded = clubGoalsAgainst;
-                                const savePct = pct(saves, saves + conceded);
+                                const conceded = Number(p.totalGoalsConceded || 0);
+                                const savePct = saves + conceded > 0 ? pct(saves, saves + conceded) : null;
 
                                 const isDisconnected = Boolean((p as any).disconnected);
                                 const isMotm = Number(p.totalMom || 0) > 0;
-                                const isGoalkeeper = ((p as any).position?.toUpperCase?.() === "GK") || saves > 0;
+                                const isGoalkeeper = p.hasGoalkeeperAppearance || ((p as any).position?.toUpperCase?.() === "GK") || saves > 0;
                                 const hasRedCard = Number(p.totalRedCards || 0) > 0;
 
                                 const showHighlights = p.matchesPlayed === 1;
@@ -547,16 +543,18 @@ export function PlayerStatsTable({
                                         case "totalSaves":
                                             return (
                                                 <td key={col.key} className="px-3 py-2">
-                                                    {int.format(saves)} / {int.format(conceded)}
+                                                    {int.format(saves)} defesas / {int.format(conceded)} gols sofridos
                                                     <div className="mt-1">
-                                                        <CellBar
-                                                            value={savePct}
-                                                            max={100}
-                                                            suffix="%"
-                                                            positive
-                                                            format={(v) => p1.format(v)}
-                                                            statType="savePercentage"
-                                                        />
+                                                        {savePct === null ? <span className="text-fg-subtle">Taxa: —</span> : (
+                                                            <CellBar
+                                                                value={savePct}
+                                                                max={100}
+                                                                suffix="%"
+                                                                positive
+                                                                format={(v) => p1.format(v)}
+                                                                statType="savePercentage"
+                                                            />
+                                                        )}
                                                     </div>
                                                 </td>
                                             );

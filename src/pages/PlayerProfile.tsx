@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import api from "../services/api.ts";
+import api, { isCanceled } from "../services/api.ts";
+import { useRefresh } from "../hooks/useRefresh.tsx";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { RatingPill, ResultPill, Outcome } from "../components/ui.tsx";
+import { fmtDateBR } from "../utils/date.ts";
 
 interface PlayerMatchHistoryDto {
     matchId: number;
@@ -50,9 +52,6 @@ interface PlayerProfileDto {
     history: PlayerMatchHistoryDto[];
 }
 
-function fmtDate(iso: string) {
-    return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
 
 function fmtTime(seconds: number) {
     const m = Math.floor(seconds / 60);
@@ -104,6 +103,7 @@ function DistBar({ label, count, max, color }: { label: string; count: number; m
 }
 
 export default function PlayerProfile() {
+    const { refreshKey } = useRefresh();
     const { playerEntityId } = useParams<{ playerEntityId: string }>();
     const navigate = useNavigate();
     const [data, setData] = useState<PlayerProfileDto | null>(null);
@@ -111,27 +111,33 @@ export default function PlayerProfile() {
     const [error, setError] = useState<string | null>(null);
     const [distOpen, setDistOpen] = useState(false);
 
-    const load = useCallback(async () => {
+    useEffect(() => {
         if (!playerEntityId) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const { data: resp } = await api.get<PlayerProfileDto>(
-                API_ENDPOINTS.PLAYER_PROFILE(Number(playerEntityId))
-            );
-            setData(resp);
-        } catch (e: any) {
-            if (e?.response?.status === 404) {
-                setError("Jogador não encontrado.");
-            } else {
-                setError(e?.message ?? "Erro ao carregar perfil");
+        const controller = new AbortController();
+        const { signal } = controller;
+        (async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const { data: resp } = await api.get<PlayerProfileDto>(
+                    API_ENDPOINTS.PLAYER_PROFILE(Number(playerEntityId)),
+                    { signal }
+                );
+                if (signal.aborted) return;
+                setData(resp);
+            } catch (e: any) {
+                if (signal.aborted || isCanceled(e)) return;
+                if (e?.response?.status === 404) {
+                    setError("Jogador não encontrado.");
+                } else {
+                    setError(e?.message ?? "Erro ao carregar perfil");
+                }
+            } finally {
+                if (!signal.aborted) setLoading(false);
             }
-        } finally {
-            setLoading(false);
-        }
-    }, [playerEntityId]);
-
-    useEffect(() => { load(); }, [load]);
+        })();
+        return () => controller.abort();
+    }, [playerEntityId, refreshKey]);
 
     const positionEntries = data
         ? Object.entries(data.positions).sort((a, b) => b[1] - a[1])
@@ -321,20 +327,20 @@ export default function PlayerProfile() {
                             <table className="w-full text-sm">
                                 <thead className="sticky top-0 bg-surface-raised/90 backdrop-blur-sm z-10">
                                     <tr className="border-b text-fg-muted text-xs uppercase tracking-wide">
-                                        <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">Data</th>
-                                        <th className="text-left px-4 py-2.5 font-medium whitespace-nowrap">Adversário</th>
-                                        <th className="text-center px-3 py-2.5 font-medium">Res.</th>
-                                        <th className="text-center px-3 py-2.5 font-medium">G/A/P</th>
-                                        <th className="text-center px-3 py-2.5 font-medium">Nota</th>
-                                        <th className="text-center px-3 py-2.5 font-medium">Pos</th>
-                                        <th className="text-center px-3 py-2.5 font-medium whitespace-nowrap">Tempo</th>
-                                        <th className="px-4 py-2.5 font-medium" />
+                                        <th scope="col" className="text-left px-4 py-2.5 font-medium whitespace-nowrap">Data</th>
+                                        <th scope="col" className="text-left px-4 py-2.5 font-medium whitespace-nowrap">Adversário</th>
+                                        <th scope="col" className="text-center px-3 py-2.5 font-medium">Res.</th>
+                                        <th scope="col" className="text-center px-3 py-2.5 font-medium">G/A/P</th>
+                                        <th scope="col" className="text-center px-3 py-2.5 font-medium">Nota</th>
+                                        <th scope="col" className="text-center px-3 py-2.5 font-medium">Pos</th>
+                                        <th scope="col" className="text-center px-3 py-2.5 font-medium whitespace-nowrap">Tempo</th>
+                                        <th scope="col" className="px-4 py-2.5 font-medium" />
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {data.history.map((h, i) => (
                                         <tr key={i} className="border-b last:border-0 hover:bg-surface-raised transition-colors">
-                                            <td className="px-4 py-3 text-fg-muted text-xs whitespace-nowrap">{fmtDate(h.timestamp)}</td>
+                                            <td className="px-4 py-3 text-fg-muted text-xs whitespace-nowrap">{fmtDateBR(h.timestamp)}</td>
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center gap-1.5">
                                                     <span className="text-fg-secondary truncate max-w-[120px]">{h.opponentName ?? "—"}</span>

@@ -1,6 +1,7 @@
 import React from "react";
 import api from "../services/api.ts";
-import { crestUrl, divisionCrestUrl, reputationTierUrl, FALLBACK_LOGO } from "../config/urls.ts";
+import { toNum } from "../utils/number.ts";
+import { crestUrl, divisionCrestUrl, reputationTierUrl, FALLBACK_LOGO, onImgError } from "../config/urls.ts";
 import { Crest } from "./ui.tsx";
 
 export type PlayoffAchievementDto = {
@@ -51,12 +52,6 @@ type Props = {
     className?: string;
 };
 
-/** ===== Helpers locais ===== */
-const toNum = (s?: string | null) => {
-    if (s === null || s === undefined) return 0;
-    const n = Number(s);
-    return Number.isFinite(n) ? n : 0;
-};
 const asNonNegativeIntString = (s?: string | null) => {
     const n = Number(String(s ?? "").trim());
     return Number.isFinite(n) && n >= 0 ? String(Math.trunc(n)) : null;
@@ -265,7 +260,7 @@ const OverallSummaryCard: React.FC<Props> = ({
                                         src={currDivUrl}
                                         alt={`Divisão ${o?.currentDivision ?? ""}`}
                                         className="w-10 h-10 object-contain"
-                                        onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                                        onError={onImgError}
                                     />
                                 </>
                             ) : (
@@ -285,7 +280,7 @@ const OverallSummaryCard: React.FC<Props> = ({
                                     src={bestDivUrl}
                                     alt={`Divisão ${o?.bestDivision ?? ""}`}
                                     className="w-8 h-8 object-contain"
-                                    onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                                    onError={onImgError}
                                 />
                             )}
                         </div>
@@ -394,7 +389,7 @@ const OverallSummaryCard: React.FC<Props> = ({
                                         >
                                             <img
                                                 src={crest}
-                                                onError={(e) => (e.currentTarget.src = FALLBACK_LOGO)}
+                                                onError={onImgError}
                                                 alt={`Divisão ${p.bestDivision ?? ""}`}
                                                 className="w-9 h-9 object-contain"
                                             />

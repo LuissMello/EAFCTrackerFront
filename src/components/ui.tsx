@@ -1,5 +1,5 @@
 import React from "react";
-import { FALLBACK_LOGO } from "../config/urls.ts";
+import { FALLBACK_LOGO, onImgError } from "../config/urls.ts";
 
 /* ============================================================================
    "Broadcast" UI primitives — shared building blocks for the revamp.
@@ -29,11 +29,17 @@ export function SectionHeader({
     title,
     right,
     className = "",
+    titleId,
+    as: Heading = "h2",
 }: {
     eyebrow?: React.ReactNode;
     title: React.ReactNode;
     right?: React.ReactNode;
     className?: string;
+    /** id do título (para aria-labelledby) */
+    titleId?: string;
+    /** Nível do título (padrão h2) */
+    as?: "h1" | "h2" | "h3";
 }) {
     return (
         <div className={`flex items-end justify-between gap-3 ${className}`}>
@@ -45,9 +51,9 @@ export function SectionHeader({
                             {eyebrow}
                         </div>
                     )}
-                    <h2 className="font-display font-bold text-xl sm:text-2xl uppercase tracking-wide leading-none text-fg truncate">
+                    <Heading id={titleId} className="font-display font-bold text-xl sm:text-2xl uppercase tracking-wide leading-none text-fg truncate">
                         {title}
-                    </h2>
+                    </Heading>
                 </div>
             </div>
             {right && <div className="flex-shrink-0">{right}</div>}
@@ -79,9 +85,7 @@ export function Crest({
                 alt={alt}
                 loading="lazy"
                 className="w-full h-full object-contain p-0.5"
-                onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = FALLBACK_LOGO;
-                }}
+                onError={onImgError}
             />
         </span>
     );

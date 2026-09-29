@@ -19,6 +19,7 @@ export interface PlayerStats {
   totalCleanSheets: number;
   totalRedCards: number;
   totalSaves: number;
+  hasGoalkeeperAppearance?: boolean;
   totalMom: number;
   avgRating: number;
   passAccuracyPercent: number;

@@ -1,88 +1,88 @@
 // src/components/MultiClubPicker.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import api from "../services/api.ts";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useClub } from "../hooks/useClub.tsx";
-import { API_ENDPOINTS, crestUrl, FALLBACK_LOGO } from "../config/urls.ts";
-
-type ClubListItem = {
-    clubId: number;
-    name: string;
-    crestAssetId?: string | null;
-};
+import type { ClubListItem } from "../hooks/useClub.tsx";
+import { crestUrl, onImgError } from "../config/urls.ts";
+import { gameVersionLabel } from "../hooks/useGameVersions.tsx";
+import { GameVersionBadge } from "./GameVersionBadge.tsx";
 
 export default function MultiClubPicker() {
-    const { selectedClubs, setSelectedClubs } = useClub();
+    const { selectedClubs, setSelectedClubs, allClubs, clubsLoading, clubsError, reloadClubs } = useClub();
+    const clubs = allClubs;
 
     const [open, setOpen] = useState(false);
-    const [clubs, setClubs] = useState<ClubListItem[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [err, setErr] = useState<string | null>(null);
     const [query, setQuery] = useState("");
+    /** Filtro de versão do jogo (26 = FC26); null = todas */
+    const [versionFilter, setVersionFilter] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
+    const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+    const panelId = useId();
 
-    // fecha ao clicar fora
+    const close = useCallback((returnFocus = false) => {
+        setOpen(false);
+        if (returnFocus) triggerRef.current?.focus();
+    }, []);
+
+    // fecha ao clicar fora (só enquanto aberto)
     useEffect(() => {
+        if (!open) return;
         function onDocClick(e: MouseEvent) {
             if (!containerRef.current) return;
             if (!containerRef.current.contains(e.target as Node)) setOpen(false);
         }
         document.addEventListener("mousedown", onDocClick);
         return () => document.removeEventListener("mousedown", onDocClick);
-    }, []);
+    }, [open]);
 
-    // fecha com Escape
+    // fecha com Escape (só enquanto aberto)
     useEffect(() => {
+        if (!open) return;
         function onKeyDown(e: KeyboardEvent) {
-            if (e.key === "Escape") setOpen(false);
+            if (e.key === "Escape") close(true);
         }
         document.addEventListener("keydown", onKeyDown);
         return () => document.removeEventListener("keydown", onKeyDown);
-    }, []);
+    }, [open, close]);
 
     // autofocus na busca ao abrir
     useEffect(() => {
         if (open) {
-            setTimeout(() => searchRef.current?.focus(), 50);
-        } else {
-            setQuery("");
+            const t = setTimeout(() => searchRef.current?.focus(), 50);
+            return () => clearTimeout(t);
         }
+        setQuery("");
     }, [open]);
-
-    // carrega lista de clubes
-    useEffect(() => {
-        let cancel = false;
-        (async () => {
-            try {
-                setLoading(true);
-                setErr(null);
-                const { data } = await api.get<ClubListItem[]>(API_ENDPOINTS.CLUBS);
-                if (!cancel) setClubs(data ?? []);
-            } catch (e: any) {
-                if (!cancel) setErr(e?.message ?? "Erro ao carregar clubes");
-            } finally {
-                if (!cancel) setLoading(false);
-            }
-        })();
-        return () => { cancel = true; };
-    }, []);
 
     const selectedIds = useMemo(
         () => new Set(selectedClubs.map((c) => c.clubId)),
         [selectedClubs]
     );
 
+    // Versões presentes entre os clubes, mais nova primeiro
+    const versionsPresent = useMemo(() => {
+        const set = new Set<number>();
+        clubs.forEach((c) => {
+            if (typeof c.gameVersion === "number") set.add(c.gameVersion);
+        });
+        return Array.from(set).sort((a, b) => b - a);
+    }, [clubs]);
+    // Se a versão filtrada deixou de existir (clube removido/alterado), volta para "Todas"
+    const activeVersion = versionFilter !== null && versionsPresent.includes(versionFilter) ? versionFilter : null;
+
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
+        const byVersion = activeVersion === null ? clubs : clubs.filter((c) => c.gameVersion === activeVersion);
         const base = q
-            ? clubs.filter(c => c.name.toLowerCase().includes(q) || String(c.clubId).includes(q))
-            : clubs;
+            ? byVersion.filter(c => (c.name ?? "").toLowerCase().includes(q) || String(c.clubId).includes(q))
+            : byVersion;
         // selecionados aparecem no topo
         return [
             ...base.filter(c => selectedIds.has(c.clubId)),
             ...base.filter(c => !selectedIds.has(c.clubId)),
         ];
-    }, [clubs, query, selectedIds]);
+    }, [clubs, query, selectedIds, activeVersion]);
 
     function toggleClub(c: ClubListItem) {
         if (selectedIds.has(c.clubId)) {
@@ -99,12 +99,55 @@ export default function MultiClubPicker() {
         setSelectedClubs([]);
     }
 
+    function focusOption(i: number) {
+        const max = filtered.length - 1;
+        if (max < 0) return;
+        const idx = Math.max(0, Math.min(max, i));
+        optionRefs.current[idx]?.focus();
+    }
+
+    function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            focusOption(0);
+        }
+    }
+
+    function onOptionKeyDown(e: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+        switch (e.key) {
+            case "ArrowDown":
+                e.preventDefault();
+                focusOption(index + 1);
+                break;
+            case "ArrowUp":
+                e.preventDefault();
+                if (index === 0) searchRef.current?.focus();
+                else focusOption(index - 1);
+                break;
+            case "Home":
+                e.preventDefault();
+                focusOption(0);
+                break;
+            case "End":
+                e.preventDefault();
+                focusOption(filtered.length - 1);
+                break;
+            default:
+                break;
+        }
+    }
+
     return (
         <div className="relative" ref={containerRef}>
             {/* Botão trigger */}
             <button
+                ref={triggerRef}
+                type="button"
                 onClick={() => setOpen((o) => !o)}
-                className="flex items-center gap-2 bg-white/10 hover:bg-white/15 text-slate-200 px-2 py-1 rounded border border-white/10 transition-colors"
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                aria-controls={panelId}
+                className="flex items-center gap-2 bg-white/10 hover:bg-white/15 text-slate-200 px-2 py-1 rounded border border-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 title={
                     selectedClubs.length > 0
                         ? selectedClubs.map((c) => c.clubName ?? c.clubId).join(", ")
@@ -118,7 +161,7 @@ export default function MultiClubPicker() {
                                 <img
                                     key={c.clubId}
                                     src={crestUrl(c.crestAssetId)}
-                                    onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_LOGO)}
+                                    onError={onImgError}
                                     alt=""
                                     className="w-6 h-6 rounded-full border bg-surface"
                                 />
@@ -136,16 +179,19 @@ export default function MultiClubPicker() {
                 <svg
                     width="16" height="16" viewBox="0 0 20 20" fill="none"
                     stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"
+                    aria-hidden="true"
                     className={`flex-shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
                 >
                     <path d="M5.5 7.5l4.5 4.5 4.5-4.5" />
                 </svg>
             </button>
 
-            {/* Dropdown — sempre montado para animação */}
+            {/* Dropdown — sempre montado para animação; "invisible" remove do foco/leitores quando fechado */}
             <div
-                className={`absolute right-0 mt-2 w-96 bg-surface text-fg rounded-xl shadow-lg border z-50 origin-top transition-all duration-150 ${
-                    open ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none"
+                id={panelId}
+                aria-hidden={!open}
+                className={`absolute left-0 mt-2 w-full sm:w-96 max-w-[24rem] bg-surface text-fg rounded-xl shadow-raised border z-50 origin-top transition-all duration-150 ${
+                    open ? "opacity-100 scale-100 pointer-events-auto visible" : "opacity-0 scale-95 pointer-events-none invisible"
                 }`}
             >
                 {/* Busca */}
@@ -154,63 +200,113 @@ export default function MultiClubPicker() {
                         ref={searchRef}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={onSearchKeyDown}
                         placeholder="Buscar por nome ou ID…"
-                        className="w-full px-3 py-2 bg-surface-sunken border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent pr-8 text-sm"
+                        aria-label="Buscar clube por nome ou ID"
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent pr-8 text-sm bg-surface-sunken"
                     />
                     {query && (
                         <button
+                            type="button"
+                            aria-label="Limpar busca"
                             className="absolute right-4 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-muted text-lg leading-none"
-                            onClick={() => setQuery("")}
-                            tabIndex={-1}
+                            onClick={() => { setQuery(""); searchRef.current?.focus(); }}
                         >
                             ×
                         </button>
                     )}
                 </div>
 
-                {loading && <div className="p-3 text-sm text-fg-muted">Carregando…</div>}
-                {err && <div className="p-3 text-sm text-negative">{err}</div>}
+                {versionsPresent.length > 0 && (
+                    <div role="group" aria-label="Filtrar por versão do jogo" className="px-2 py-1.5 border-b flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs text-fg-muted mr-0.5">Versão:</span>
+                        {[null, ...versionsPresent].map((v) => (
+                            <button
+                                key={v ?? "all"}
+                                type="button"
+                                aria-pressed={activeVersion === v}
+                                onClick={() => setVersionFilter(v)}
+                                className={`px-2 py-0.5 rounded-full border text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                                    activeVersion === v
+                                        ? "bg-accent border-accent text-accent-fg"
+                                        : "bg-surface text-fg-muted hover:bg-surface-raised"
+                                }`}
+                            >
+                                {v === null ? "Todas" : gameVersionLabel(v)}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
-                {!loading && !err && (
+                {clubsLoading && <div className="p-3 text-sm text-fg-muted">Carregando…</div>}
+                {clubsError && (
+                    <div className="p-3 text-sm text-negative flex items-center justify-between gap-2">
+                        <span>{clubsError}</span>
+                        <button
+                            type="button"
+                            className="text-sm px-2 py-1 rounded border hover:bg-negative-soft"
+                            onClick={reloadClubs}
+                        >
+                            Tentar novamente
+                        </button>
+                    </div>
+                )}
+
+                {!clubsLoading && !clubsError && (
                     <>
-                        <ul className="max-h-80 overflow-auto">
+                        <ul
+                            role="listbox"
+                            aria-multiselectable="true"
+                            aria-label="Clubes"
+                            className="max-h-80 overflow-auto"
+                        >
                             {filtered.length === 0 && (
-                                <li className="p-3 text-sm text-fg-muted">Nenhum clube encontrado.</li>
+                                <li role="presentation" className="p-3 text-sm text-fg-muted">Nenhum clube encontrado.</li>
                             )}
-                            {filtered.map((c) => {
+                            {filtered.map((c, idx) => {
                                 const checked = selectedIds.has(c.clubId);
                                 return (
-                                    <li
-                                        key={c.clubId}
-                                        className={`px-3 py-2 cursor-pointer flex items-center gap-2 transition-colors border-l-2 ${
-                                            checked
-                                                ? "bg-accent/10 border-l-accent"
-                                                : "border-l-transparent hover:bg-surface-raised"
-                                        }`}
-                                        onClick={() => toggleClub(c)}
-                                    >
-                                        {/* Checkbox customizado */}
-                                        <span
-                                            className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
-                                                checked ? "bg-accent border-accent" : "bg-surface border-border-strong"
+                                    <li key={c.clubId} role="presentation">
+                                        <button
+                                            type="button"
+                                            role="option"
+                                            aria-selected={checked}
+                                            ref={(el) => { optionRefs.current[idx] = el; }}
+                                            onKeyDown={(e) => onOptionKeyDown(e, idx)}
+                                            onClick={() => toggleClub(c)}
+                                            className={`w-full text-left px-3 py-2 cursor-pointer flex items-center gap-2 transition-colors border-l-2 focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
+                                                checked
+                                                    ? "bg-accent/10 border-l-accent"
+                                                    : "border-l-transparent hover:bg-surface-raised"
                                             }`}
                                         >
-                                            {checked && (
-                                                <svg className="w-2.5 h-2.5 text-accent-fg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                </svg>
-                                            )}
-                                        </span>
-                                        <img
-                                            src={crestUrl(c.crestAssetId)}
-                                            onError={(e) => ((e.currentTarget as HTMLImageElement).src = FALLBACK_LOGO)}
-                                            alt=""
-                                            className="w-7 h-7 rounded-full border bg-surface flex-shrink-0"
-                                        />
-                                        <div className="min-w-0 flex-1">
-                                            <div className="font-medium leading-tight truncate text-sm text-fg">{c.name}</div>
-                                            <div className="text-xs text-fg-muted">ID: {c.clubId}</div>
-                                        </div>
+                                            {/* Checkbox customizado */}
+                                            <span
+                                                aria-hidden="true"
+                                                className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                                                    checked ? "bg-accent border-accent" : "bg-surface border-border-strong"
+                                                }`}
+                                            >
+                                                {checked && (
+                                                    <svg className="w-2.5 h-2.5 text-accent-fg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                )}
+                                            </span>
+                                            <img
+                                                src={crestUrl(c.crestAssetId)}
+                                                onError={onImgError}
+                                                alt=""
+                                                className="w-7 h-7 rounded-full border bg-surface flex-shrink-0"
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                                <div className="font-medium leading-tight truncate text-sm text-fg">{c.name}</div>
+                                                <div className="text-xs text-fg-muted flex items-center gap-1.5">
+                                                    <span>ID: {c.clubId}</span>
+                                                    <GameVersionBadge version={c.gameVersion} />
+                                                </div>
+                                            </div>
+                                        </button>
                                     </li>
                                 );
                             })}
@@ -226,15 +322,17 @@ export default function MultiClubPicker() {
                             <div className="flex items-center gap-2">
                                 {selectedClubs.length > 0 && (
                                     <button
-                                        className="text-sm px-2 py-1 rounded border text-negative hover:bg-negative-soft"
+                                        type="button"
+                                        className="text-sm px-2 py-1 rounded border text-negative hover:bg-negative-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-negative"
                                         onClick={clearAll}
                                     >
                                         Limpar
                                     </button>
                                 )}
                                 <button
-                                    className="text-sm px-2 py-1 rounded border hover:bg-surface-raised"
-                                    onClick={() => setOpen(false)}
+                                    type="button"
+                                    className="text-sm px-2 py-1 rounded border hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                    onClick={() => close(true)}
                                 >
                                     Fechar
                                 </button>

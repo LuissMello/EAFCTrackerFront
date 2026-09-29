@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import api from "../services/api.ts";
+import api, { isCanceled } from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
+import { useRefresh } from "../hooks/useRefresh.tsx";
 import OverallSummaryCard, { ClubOverallRow, PlayoffAchievementDto } from "../components/OverallSummaryCard.tsx";
 import { TeamStatsSection } from "../components/TeamStatsSection.tsx";
 import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
@@ -159,7 +160,7 @@ export default function MatchDetails() {
   const [overallBusy, setOverallBusy] = useState(false);
   const [overallErr, setOverallErr] = useState<string | null>(null);
 
-  const [sortKey, setSortKey] = useState<keyof PlayerRow>("totalGoals");
+  const [sortKey, setSortKey] = useState<keyof PlayerStats>("totalGoals");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [showOverallPanel, setShowOverallPanel] = useState<boolean>(false);
 
@@ -169,48 +170,56 @@ export default function MatchDetails() {
   const [eventAggregatesError, setEventAggregatesError] = useState<string | null>(null);
 
   // ====== Buscar estatísticas da partida ======
-  const fetchData = useCallback(async () => {
-    if (!matchId) return;
-    let cancel = false;
-    try {
-      setLoading(true);
-      setError(null);
-      const { data } = await api.get<FullMatchStatisticsDto>(`/api/Matches/${matchId}/statistics`);
-      if (!cancel) setStats(data);
-    } catch (err: any) {
-      if (!cancel) setError(err?.message ?? "Erro ao buscar estatísticas");
-    } finally {
-      if (!cancel) setLoading(false);
-    }
-    return () => {
-      cancel = true;
-    };
-  }, [matchId]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const reloadStats = useCallback(() => setReloadKey((k) => k + 1), []);
+  // "Atualizar"/modo ao vivo do cabeçalho
+  const { refreshKey } = useRefresh();
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (!matchId) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const { data } = await api.get<FullMatchStatisticsDto>(API_ENDPOINTS.MATCH_STATISTICS(matchId), { signal });
+        if (signal.aborted) return;
+        setStats(data);
+      } catch (err: any) {
+        if (signal.aborted || isCanceled(err)) return;
+        setError(err?.message ?? "Erro ao buscar estatísticas");
+      } finally {
+        if (!signal.aborted) setLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [matchId, reloadKey, refreshKey]);
 
   // ====== Buscar event-aggregates ======
   useEffect(() => {
     if (!matchId) return;
-    let cancelled = false;
+    const controller = new AbortController();
+    const { signal } = controller;
     (async () => {
       try {
         setEventAggregatesLoading(true);
         setEventAggregatesError(null);
         const { data } = await api.get<MatchEventAggregatesResponseDto>(
-          API_ENDPOINTS.MATCH_EVENT_AGGREGATES(matchId)
+          API_ENDPOINTS.MATCH_EVENT_AGGREGATES(matchId),
+          { signal }
         );
-        if (!cancelled) setEventAggregates(data ?? null);
-      } catch {
-        if (!cancelled) setEventAggregatesError("Não foi possível carregar os dados de pós-jogo.");
+        if (signal.aborted) return;
+        setEventAggregates(data ?? null);
+      } catch (e) {
+        if (signal.aborted || isCanceled(e)) return;
+        setEventAggregatesError("Não foi possível carregar os dados de pós-jogo.");
       } finally {
-        if (!cancelled) setEventAggregatesLoading(false);
+        if (!signal.aborted) setEventAggregatesLoading(false);
       }
     })();
-    return () => { cancelled = true; };
-  }, [matchId]);
+    return () => controller.abort();
+  }, [matchId, reloadKey, refreshKey]);
 
   const players = stats?.players ?? [];
   const clubs = stats?.clubs ?? [];
@@ -258,15 +267,21 @@ export default function MatchDetails() {
   }, [matchId, orderedClubs.map((c) => c.clubId).join(",")]);
 
   // ====== Fetch-once de Overalls/Playoffs (somente ao abrir o painel) ======
-  const fetchOverallIfNeeded = useCallback(async () => {
-    if (!showOverallPanel) return;
+  const fetchOverallIfNeeded = useCallback(async (signal?: AbortSignal) => {
+    if (!showOverallPanel) {
+      setOverallBusy(false);
+      return;
+    }
 
     const targets = orderedClubs
       .slice(0, 2)
       .filter(Boolean)
       .filter((c) => !fetchedOverall.has(c.clubId));
 
-    if (targets.length === 0) return;
+    if (targets.length === 0) {
+      setOverallBusy(false);
+      return;
+    }
 
     try {
       setOverallBusy(true);
@@ -276,8 +291,8 @@ export default function MatchDetails() {
         targets.map(async (c) => {
           // Fetch both endpoints in parallel for each club
           const [overallRes, playoffsRes] = await Promise.all([
-            api.get<ClubOverallRow>(`/api/Clubs/${c.clubId}/matches/${matchId}/overall`),
-            api.get<{ clubId: number; achievements: PlayoffAchievementDto[] }[]>(`/api/Clubs/${c.clubId}/playoffs`),
+            api.get<ClubOverallRow>(`/api/Clubs/${c.clubId}/matches/${matchId}/overall`, { signal }),
+            api.get<{ clubId: number; achievements: PlayoffAchievementDto[] }[]>(API_ENDPOINTS.CLUB_PLAYOFFS(c.clubId), { signal }),
           ]);
 
           const overall = overallRes.data ?? null;
@@ -287,6 +302,8 @@ export default function MatchDetails() {
           return { clubId: c.clubId, overall, playoffs };
         })
       );
+
+      if (signal?.aborted) return;
 
       setOverallCache((prev) => {
         const next = new Map(prev);
@@ -310,14 +327,17 @@ export default function MatchDetails() {
         return next;
       });
     } catch (e: any) {
+      if (signal?.aborted || isCanceled(e)) return;
       setOverallErr(e?.message ?? "Erro ao buscar histórico do clube.");
     } finally {
-      setOverallBusy(false);
+      if (!signal?.aborted) setOverallBusy(false);
     }
-  }, [showOverallPanel, orderedClubs, fetchedOverall]);
+  }, [showOverallPanel, orderedClubs, fetchedOverall, matchId]);
 
   useEffect(() => {
-    fetchOverallIfNeeded();
+    const controller = new AbortController();
+    fetchOverallIfNeeded(controller.signal);
+    return () => controller.abort();
   }, [fetchOverallIfNeeded]);
 
   // Auxiliares do placar
@@ -400,7 +420,7 @@ export default function MatchDetails() {
           <div className="font-semibold">Ocorreu um erro</div>
           <div className="text-sm mt-1">{error}</div>
           <div className="mt-3">
-            <Button onClick={fetchData}>Tentar novamente</Button>
+            <Button onClick={reloadStats}>Tentar novamente</Button>
           </div>
         </div>
       </div>
@@ -689,7 +709,8 @@ export default function MatchDetails() {
             </h3>
 
             <PlayerStatsTable
-              players={clubPlayers}
+              // API rows carry a subset of PlayerStats; the table treats the extra fields as optional
+              players={clubPlayers as PlayerStats[]}
               loading={false}
               error={null}
               clubStats={
@@ -699,7 +720,7 @@ export default function MatchDetails() {
               }
               minMatches={0}
               searchTerm=""
-              initialSortKey={sortKey as keyof PlayerStats}
+              initialSortKey={sortKey}
               initialSortOrder={sortOrder}
               pageSize={50}
               showPagination={false}

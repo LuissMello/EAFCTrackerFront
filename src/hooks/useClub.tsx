@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
     createContext,
     useContext,
     useEffect,
@@ -8,7 +8,7 @@
     useRef,
 } from "react";
 import { useSearchParams } from "react-router-dom";
-import api from "../services/api.ts";
+import api, { isCanceled } from "../services/api.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
 
 // ===== Tipos =====
@@ -16,6 +16,15 @@ export type ClubState = {
     clubId: number;
     clubName?: string | null;
     crestAssetId?: string | null;
+};
+
+/** Item da lista global de clubes (/api/clubs) */
+export type ClubListItem = {
+    clubId: number;
+    name: string;
+    crestAssetId?: string | null;
+    /** Versão do jogo do clube (ex.: 26 = FC26); null quando desconhecida */
+    gameVersion?: number | null;
 };
 
 type ClubContextType = {
@@ -35,6 +44,12 @@ type ClubContextType = {
     clubId: number | null;
     clubName: string | null;
     crestAssetId: string | null;
+
+    /** Lista global de clubes (carregada uma única vez no provider) */
+    allClubs: ClubListItem[];
+    clubsLoading: boolean;
+    clubsError: string | null;
+    reloadClubs: () => void;
 };
 
 const ClubContext = createContext<ClubContextType | undefined>(undefined);
@@ -47,152 +62,197 @@ function parseCsvIds(csv: string | null): number[] {
         .filter((n) => Number.isFinite(n) && n > 0);
 }
 
+function readStorage(key: string): string | null {
+    try {
+        return window.localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+}
+
+function writeStorage(key: string, value: string | null) {
+    try {
+        if (value === null) window.localStorage.removeItem(key);
+        else window.localStorage.setItem(key, value);
+    } catch {
+        /* storage indisponível */
+    }
+}
+
+function readStoredClubs(): ClubState[] {
+    const multi = readStorage("clubs");
+    if (multi) {
+        try {
+            const arr = JSON.parse(multi);
+            if (Array.isArray(arr)) return arr.filter((x: any) => typeof x?.clubId === "number");
+        } catch { /* ignore */ }
+    }
+    const single = readStorage("club");
+    if (single) {
+        try {
+            const c = JSON.parse(single);
+            if (c && typeof c.clubId === "number") return [c];
+        } catch { /* ignore */ }
+    }
+    return [];
+}
+
+/**
+ * Hidratação síncrona (executada uma única vez, no primeiro render):
+ * URL (clubIds > clubId) tem prioridade; senão localStorage. Nomes/escudos que faltarem
+ * são completados depois, quando a lista global de clubes chegar.
+ */
+function computeInitialSelection(params: URLSearchParams): ClubState[] {
+    let ids = parseCsvIds(params.get("clubIds"));
+    if (ids.length === 0) {
+        const n = parseInt(params.get("clubId") ?? "", 10);
+        if (Number.isFinite(n) && n > 0) ids = [n];
+    }
+
+    const stored = readStoredClubs();
+    if (ids.length === 0) return stored;
+
+    return ids.map(
+        (id) => stored.find((c) => c.clubId === id) ?? { clubId: id, clubName: null, crestAssetId: null }
+    );
+}
+
 export function ClubProvider({ children }: { children: React.ReactNode }) {
     const [searchParams, setSearchParams] = useSearchParams();
-    const [selectedClubs, setSelectedClubsState] = useState<ClubState[]>([]);
-    const [isInitialized, setIsInitialized] = useState(false);
 
-    // Guard para rodar a hidratação apenas uma vez (sem precisar desabilitar ESLint)
-    const hydratedRef = useRef(false);
+    // Refs para o "dono único" da escrita na URL ler sempre o valor mais recente sem re-disparar efeitos
+    const searchParamsRef = useRef(searchParams);
+    searchParamsRef.current = searchParams;
+    const setSearchParamsRef = useRef(setSearchParams);
+    setSearchParamsRef.current = setSearchParams;
+    const lastSearchStringRef = useRef(searchParams.toString());
+    const pendingSelectionUrlRef = useRef<string | null>(null);
 
-    // 1) Inicializa a partir da URL (clubIds primeiro; senão, clubId) ou localStorage
+    const [selectedClubs, setSelectedClubsState] = useState<ClubState[]>(() =>
+        computeInitialSelection(searchParams)
+    );
+
+    // ===== Lista global de clubes (uma única requisição para toda a app) =====
+    const [allClubs, setAllClubs] = useState<ClubListItem[]>([]);
+    const [clubsLoading, setClubsLoading] = useState(true);
+    const [clubsError, setClubsError] = useState<string | null>(null);
+    const [clubsReloadKey, setClubsReloadKey] = useState(0);
+    const knownClubIdsRef = useRef<number[]>([]);
+
     useEffect(() => {
-        if (hydratedRef.current) return;
-        hydratedRef.current = true;
+        const controller = new AbortController();
+        (async () => {
+            try {
+                setClubsLoading(true);
+                setClubsError(null);
+                const { data } = await api.get<ClubListItem[]>(API_ENDPOINTS.CLUBS, { signal: controller.signal });
+                if (controller.signal.aborted) return;
+                const next = Array.isArray(data) ? data : [];
 
-        let cancelled = false;
-
-        async function hydrateFromUrlOrStorage() {
-            // 1a) URL: clubIds (CSV) tem prioridade
-            const urlCsv = searchParams.get("clubIds");
-            let ids = parseCsvIds(urlCsv);
-
-            // 1b) Senão, tenta clubId (único) para retrocompatibilidade
-            if (ids.length === 0) {
-                const urlSingle = searchParams.get("clubId");
-                const n = urlSingle ? parseInt(urlSingle, 10) : NaN;
-                if (Number.isFinite(n) && n > 0) ids = [n];
-            }
-
-            // 1c) Se ainda vazio, tenta localStorage (novo "clubs" ou antigo "club")
-            if (ids.length === 0) {
-                const storedMulti = localStorage.getItem("clubs");
-                if (storedMulti) {
-                    try {
-                        const arr = JSON.parse(storedMulti);
-                        if (Array.isArray(arr) && arr.every((x: any) => typeof x?.clubId === "number")) {
-                            if (!cancelled) setSelectedClubsState(arr);
-                            setIsInitialized(true);
-                            return;
-                        }
-                    } catch { /* ignore */ }
+                // Clube que estava na lista e sumiu (removido do tracking no admin) sai também da seleção.
+                // Ids que nunca estiveram na lista (ex.: link compartilhado) são preservados.
+                const nextIds = new Set(next.map((c) => c.clubId));
+                const removedIds = knownClubIdsRef.current.filter((id) => !nextIds.has(id));
+                knownClubIdsRef.current = next.map((c) => c.clubId);
+                if (removedIds.length > 0) {
+                    setSelectedClubsState((prev) => {
+                        const kept = prev.filter((c) => !removedIds.includes(c.clubId));
+                        return kept.length === prev.length ? prev : kept;
+                    });
                 }
-                const storedSingle = localStorage.getItem("club");
-                if (storedSingle) {
-                    try {
-                        const c = JSON.parse(storedSingle);
-                        if (c && typeof c.clubId === "number") {
-                            if (!cancelled) setSelectedClubsState([c]);
-                            setIsInitialized(true);
-                            return;
-                        }
-                    } catch { /* ignore */ }
+
+                setAllClubs(next);
+            } catch (e: any) {
+                if (controller.signal.aborted || isCanceled(e)) return;
+                setClubsError(e?.message ?? "Erro ao carregar clubes");
+            } finally {
+                if (!controller.signal.aborted) setClubsLoading(false);
+            }
+        })();
+        return () => controller.abort();
+    }, [clubsReloadKey]);
+
+    const reloadClubs = useCallback(() => setClubsReloadKey((k) => k + 1), []);
+
+    // Completa nome/escudo dos clubes selecionados que vieram só com o ID (ex.: link compartilhado)
+    useEffect(() => {
+        if (allClubs.length === 0) return;
+        setSelectedClubsState((prev) => {
+            if (!prev.some((c) => !c.clubName)) return prev;
+            let changed = false;
+            const next = prev.map((c) => {
+                if (c.clubName) return c;
+                const found = allClubs.find((x) => x.clubId === c.clubId);
+                if (!found) return c;
+                changed = true;
+                return { clubId: c.clubId, clubName: found.name ?? null, crestAssetId: found.crestAssetId ?? null };
+            });
+            return changed ? next : prev;
+        });
+    }, [allClubs]);
+
+    // ===== Sincronização com localStorage e URL (único dono das chaves clubIds/clubId) =====
+    const searchString = searchParams.toString();
+    useEffect(() => {
+        const urlChanged = searchString !== lastSearchStringRef.current;
+        lastSearchStringRef.current = searchString;
+        const selectionChangedLocally = pendingSelectionUrlRef.current === searchString;
+        pendingSelectionUrlRef.current = null;
+
+        // Um link explícito (inclusive voltar/avançar) escolhe o clube. Navegação sem
+        // clube continua herdando a seleção atual, como nas rotas internas da app.
+        if (urlChanged && !selectionChangedLocally) {
+            const current = searchParamsRef.current;
+            if (current.has("clubIds") || current.has("clubId")) {
+                const ids = parseCsvIds(current.get("clubIds"));
+                if (ids.length === 0 && current.has("clubId")) {
+                    const id = Number(current.get("clubId"));
+                    if (Number.isInteger(id) && id > 0) ids.push(id);
                 }
-                // Nada definido
-                setIsInitialized(true);
-                return;
-            }
-
-            // 1d) Tentar hidratar nome/crest a partir do localStorage (multi) e, se faltar, buscar no backend
-            let known: ClubState[] = [];
-            const cache = localStorage.getItem("clubs");
-            if (cache) {
-                try {
-                    const arr = JSON.parse(cache);
-                    if (Array.isArray(arr)) {
-                        known = arr.filter((c: any) => ids.includes(c?.clubId));
-                    }
-                } catch { /* ignore */ }
-            }
-
-            const missingIds = ids.filter((id) => !known.some((c) => c.clubId === id));
-            let fetched: ClubState[] = [];
-            if (missingIds.length > 0) {
-                try {
-                    const { data } = await api.get<
-                        { clubId: number; name: string; crestAssetId?: string | null }[]
-                    >(API_ENDPOINTS.CLUBS);
-                    if (Array.isArray(data)) {
-                        fetched = data
-                            .filter((d) => missingIds.includes(d.clubId))
-                            .map((d) => ({
-                                clubId: d.clubId,
-                                clubName: d.name ?? null,
-                                crestAssetId: d.crestAssetId ?? null,
-                            }));
-                    }
-                } catch {
-                    // fallback: pelo menos garantir os IDs
-                    fetched = missingIds.map((id) => ({
-                        clubId: id,
-                        clubName: null,
-                        crestAssetId: null,
+                if (ids.join(",") !== selectedClubs.map((c) => c.clubId).join(",")) {
+                    setSelectedClubsState(ids.map((id) => {
+                        const previous = selectedClubs.find((c) => c.clubId === id);
+                        if (previous) return previous;
+                        const known = allClubs.find((c) => c.clubId === id);
+                        return { clubId: id, clubName: known?.name ?? null, crestAssetId: known?.crestAssetId ?? null };
                     }));
+                    return;
                 }
             }
-
-            // Manter a ordem dos ids da URL
-            const ordered = ids
-                .map(
-                    (id) =>
-                        known.find((c) => c.clubId === id) ??
-                        fetched.find((c) => c.clubId === id)
-                )
-                .filter((x): x is ClubState => !!x);
-
-            if (!cancelled) setSelectedClubsState(ordered);
-            setIsInitialized(true);
         }
 
-        hydrateFromUrlOrStorage();
-        return () => {
-            cancelled = true;
-        };
-    }, [searchParams]);
-
-    // 2) Sempre que a seleção mudar (após init), sincroniza com URL e localStorage
-    useEffect(() => {
-        if (!isInitialized) return;
-
-        // Atualiza localStorage
         if (selectedClubs.length > 0) {
-            localStorage.setItem("clubs", JSON.stringify(selectedClubs));
+            writeStorage("clubs", JSON.stringify(selectedClubs));
             // Mantém também o antigo "club" com o primeiro, para compat.
-            localStorage.setItem("club", JSON.stringify(selectedClubs[0]));
+            writeStorage("club", JSON.stringify(selectedClubs[0]));
         } else {
-            localStorage.removeItem("clubs");
-            localStorage.removeItem("club");
+            writeStorage("clubs", null);
+            writeStorage("club", null);
         }
 
-        // Atualiza URL preservando os demais parâmetros
-        const next = new URLSearchParams(searchParams);
+        // Só toca nas chaves clubIds/clubId; demais parâmetros (page, size, filtros…) ficam intactos
+        const current = searchParamsRef.current;
+        const next = new URLSearchParams(current);
         if (selectedClubs.length > 0) {
-            const csv = selectedClubs.map((c) => c.clubId).join(",");
-            next.set("clubIds", csv);
-            next.delete("clubId"); // remove o antigo param
+            next.set("clubIds", selectedClubs.map((c) => c.clubId).join(","));
+            next.delete("clubId");
         } else {
             next.delete("clubIds");
             next.delete("clubId");
         }
-        setSearchParams(next, { replace: true });
-    }, [selectedClubs, isInitialized, searchParams, setSearchParams]);
+        if (next.toString() !== current.toString()) {
+            setSearchParamsRef.current(next, { replace: true });
+        }
+    }, [selectedClubs, searchString, allClubs]);
 
-    // 3) Setters públicos
+    // ===== Setters públicos =====
     const setSelectedClubs = useCallback((arr: ClubState[]) => {
+        pendingSelectionUrlRef.current = searchParamsRef.current.toString();
         setSelectedClubsState(Array.isArray(arr) ? arr.filter(Boolean) : []);
     }, []);
 
     const setClub = useCallback((c: ClubState | null) => {
+        pendingSelectionUrlRef.current = searchParamsRef.current.toString();
         setSelectedClubsState(c ? [c] : []);
     }, []);
 
@@ -203,17 +263,25 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
         [selectedClubs]
     );
 
-    const value: ClubContextType = {
-        club,
-        setClub,
-        selectedClubs,
-        setSelectedClubs,
-        selectedClubIds,
+    const value = useMemo<ClubContextType>(
+        () => ({
+            club,
+            setClub,
+            selectedClubs,
+            setSelectedClubs,
+            selectedClubIds,
 
-        clubId: club?.clubId ?? null,
-        clubName: club?.clubName ?? null,
-        crestAssetId: club?.crestAssetId ?? null,
-    };
+            clubId: club?.clubId ?? null,
+            clubName: club?.clubName ?? null,
+            crestAssetId: club?.crestAssetId ?? null,
+
+            allClubs,
+            clubsLoading,
+            clubsError,
+            reloadClubs,
+        }),
+        [club, setClub, selectedClubs, setSelectedClubs, selectedClubIds, allClubs, clubsLoading, clubsError, reloadClubs]
+    );
 
     return <ClubContext.Provider value={value}>{children}</ClubContext.Provider>;
 }

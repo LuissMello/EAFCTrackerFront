@@ -1,7 +1,9 @@
 ﻿// src/components/PlayerSingleStatsTable.tsx
-import React, { useMemo } from "react";
 import type { PlayerStats } from "../types/stats.ts";
 import { RatingPill } from "./ui.tsx";
+import { fmtHM } from "../utils/date.ts";
+import { useNumberFormats } from "../hooks/useNumberFormats.ts";
+import { pct } from "../utils/number.ts";
 
 interface PlayerSingleStatsTableProps {
     players: PlayerStats[];
@@ -11,33 +13,12 @@ interface PlayerSingleStatsTableProps {
     compactMode?: boolean;
 }
 
-function useNumberFormats() {
-    const int = useMemo(() => new Intl.NumberFormat("pt-BR"), []);
-    const p1 = useMemo(
-        () => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }),
-        []
-    );
-    const p2 = useMemo(
-        () => new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        []
-    );
-    return { int, p1, p2 };
-}
-
-const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);
-
 function getMatchDate(player: any): Date | null {
     const raw = player?.date ?? player?.Date;
     if (!raw) return null;
     const d = new Date(raw);
     if (Number.isNaN(d.getTime())) return null;
     return d;
-}
-
-function fmtHM(d: Date) {
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mm = String(d.getMinutes()).padStart(2, "0");
-    return `${hh}:${mm}`;
 }
 
 export function PlayerSingleStatsTable({
@@ -72,19 +53,19 @@ export function PlayerSingleStatsTable({
             <table className="table-auto w-full text-sm">
                 <thead className="bg-surface-raised">
                     <tr>
-                        <th className="px-3 py-2 text-left">Horário</th>
-                        <th className="px-3 py-2 text-right">Partic.</th>
-                        <th className="px-3 py-2 text-right">Gols</th>
-                        <th className="px-3 py-2 text-right">Assist.</th>
-                        <th className="px-3 py-2 text-right">Pré-Assist.</th>
-                        <th className="px-3 py-2 text-right">Chutes</th>
-                        <th className="px-3 py-2 text-right">Passes (C/T)</th>
-                        <th className="px-3 py-2 text-right">% Passes</th>
-                        <th className="px-3 py-2 text-right">Desarmes (C/T)</th>
-                        <th className="px-3 py-2 text-right">% Desarmes</th>
-                        <th className="px-3 py-2 text-right">Defesas</th>
-                        <th className="px-3 py-2 text-right">Nota</th>
-                        <th className="px-3 py-2 text-right">Min.</th>
+                        <th scope="col" className="px-3 py-2 text-left">Horário</th>
+                        <th scope="col" className="px-3 py-2 text-right">Partic.</th>
+                        <th scope="col" className="px-3 py-2 text-right">Gols</th>
+                        <th scope="col" className="px-3 py-2 text-right">Assist.</th>
+                        <th scope="col" className="px-3 py-2 text-right">Pré-Assist.</th>
+                        <th scope="col" className="px-3 py-2 text-right">Chutes</th>
+                        <th scope="col" className="px-3 py-2 text-right">Passes (C/T)</th>
+                        <th scope="col" className="px-3 py-2 text-right">% Passes</th>
+                        <th scope="col" className="px-3 py-2 text-right">Desarmes (C/T)</th>
+                        <th scope="col" className="px-3 py-2 text-right">% Desarmes</th>
+                        <th scope="col" className="px-3 py-2 text-right">Defesas</th>
+                        <th scope="col" className="px-3 py-2 text-right">Nota</th>
+                        <th scope="col" className="px-3 py-2 text-right">Min.</th>
                     </tr>
                 </thead>
                 <tbody>

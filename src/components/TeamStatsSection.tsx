@@ -1,22 +1,15 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { ClubStats } from "../types/stats.ts";
 import { classifyStat, QualityInfo } from "../utils/statClassifier.ts";
 import { StatQualityIndicator } from "./StatQualityIndicator.tsx";
+import { useNumberFormats } from "../hooks/useNumberFormats.ts";
+import { pct } from "../utils/number.ts";
 
 interface TeamStatsSectionProps {
   clubStats: ClubStats | null;
   loading: boolean;
   error: string | null;
   hiddenStats?: string[];
-}
-
-const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);
-
-function useNumberFormats() {
-  const int = useMemo(() => new Intl.NumberFormat("pt-BR"), []);
-  const p1 = useMemo(() => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }), []);
-  const p2 = useMemo(() => new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), []);
-  return { int, p1, p2 };
 }
 
 function Skeleton({ className = "" }: { className?: string }) {

@@ -1,55 +1,29 @@
 // src/pages/PlayerStats.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import api from "../services/api.ts";
+import api, { isCanceled } from "../services/api.ts";
+import { useRefresh } from "../hooks/useRefresh.tsx";
 import { classifyStat, calculateShotToGoalConversion } from "../utils/statClassifier.ts";
 import { StatWithQuality } from "../components/StatQualityIndicator.tsx";
 import { Tooltip } from "../components/Tooltip.tsx";
+import { clamp01to100 } from "../utils/number.ts";
+import { mapAttr, pick } from "../utils/playerAttributes.ts";
+import type { PlayerMatchStats } from "../types/playerAttributes.ts";
+import { ATTR_LABELS, GROUPS } from "../utils/playerAttributes.ts";
+import { fmtNum, fmtPct } from "../utils/number.ts";
+import { Card, ProgressBar, ErrorState } from "../components/AttributeUi.tsx";
+import { Skeleton } from "../components/ui.tsx";
+import { StatTile } from "../components/playerStats/StatTile.tsx";
+import { StatCompare } from "../components/playerStats/StatCompare.tsx";
+import { RadarSVG } from "../components/playerStats/RadarSVG.tsx";
 
 /**********************************
  * Tipos (front)
  **********************************/
-interface RouteParams {
+type RouteParams = {
   matchId?: string;
   playerId?: string;
 }
-
-type PlayerMatchStats = {
-  aceleracao: number;
-  pique: number;
-  finalizacao: number;
-  falta: number;
-  cabeceio: number;
-  forcaDoChute: number;
-  chuteLonge: number;
-  voleio: number;
-  penalti: number;
-  visao: number;
-  cruzamento: number;
-  lancamento: number;
-  passeCurto: number;
-  curva: number;
-  agilidade: number;
-  equilibrio: number;
-  posAtaqueInutil: number;
-  controleBola: number;
-  conducao: number;
-  interceptacaos: number;
-  nocaoDefensiva: number;
-  divididaEmPe: number;
-  carrinho: number;
-  impulsao: number;
-  folego: number;
-  forca: number;
-  reacao: number;
-  combatividade: number;
-  frieza: number;
-  elasticidadeGL: number;
-  manejoGL: number;
-  chuteGL: number;
-  reflexosGL: number;
-  posGL: number;
-};
 
 type MatchPlayerStats = {
   id: number;
@@ -117,183 +91,6 @@ type ClubAttrSnapshot = {
 /**********************************
  * Helpers
  **********************************/
-function clamp01to100(x: number) {
-  if (!Number.isFinite(x)) return 0;
-  return Math.max(0, Math.min(100, x));
-}
-const fmtPct = (n: number | undefined | null) => (Number.isFinite(Number(n)) ? `${Number(n).toFixed(1)}%` : "0.0%");
-const fmtNum = (n: number | undefined | null) => (Number.isFinite(Number(n)) ? String(Number(n)) : "0");
-
-/** tenta ler tanto camelCase quanto PascalCase */
-function pick<T = any>(obj: any, camel: string, pascal: string): T {
-  if (!obj) return undefined as any;
-  if (camel in obj) return obj[camel];
-  if (pascal in obj) return obj[pascal];
-  return undefined as any;
-}
-
-const ATTR_LABELS: Record<keyof PlayerMatchStats, string> = {
-  aceleracao: "ACELERAÇÃO",
-  pique: "PIQUE",
-  finalizacao: "FINALIZAÇÃO",
-  falta: "FALTA",
-  cabeceio: "CABECEIO",
-  forcaDoChute: "FORÇA DO CHUTE",
-  chuteLonge: "CHUTE LONGE",
-  voleio: "VOLEIO",
-  penalti: "PÊNALTI",
-  visao: "VISÃO",
-  cruzamento: "CRUZAMENTO",
-  lancamento: "LANÇAMENTO",
-  passeCurto: "PASSE CURTO",
-  curva: "CURVA",
-  agilidade: "AGILIDADE",
-  equilibrio: "EQUILÍBRIO",
-  posAtaqueInutil: "POSIÇÃO ATAQUE",
-  controleBola: "CONTROLE DE BOLA",
-  conducao: "CONDUÇÃO",
-  interceptacaos: "INTERCEPTAÇÕES",
-  nocaoDefensiva: "NOÇÃO DEFENSIVA",
-  divididaEmPe: "DIVIDIDA EM PÉ",
-  carrinho: "CARRINHO",
-  impulsao: "IMPULSÃO",
-  folego: "FÔLEGO",
-  forca: "FORÇA",
-  reacao: "REAÇÃO",
-  combatividade: "COMBATIVIDADE",
-  frieza: "FRIEZA",
-  elasticidadeGL: "ELASTICIDADE (GL)",
-  manejoGL: "MANEJO (GL)",
-  chuteGL: "CHUTE (GL)",
-  reflexosGL: "REFLEXOS (GL)",
-  posGL: "POSICIONAMENTO (GL)",
-};
-
-const GROUPS: Array<{ name: string; keys: (keyof PlayerMatchStats)[]; onlyGK?: boolean }> = [
-  { name: "Ritmo", keys: ["aceleracao", "pique"] },
-  {
-    name: "Finalização",
-    keys: ["finalizacao", "cabeceio", "forcaDoChute", "chuteLonge", "voleio", "penalti", "frieza"],
-  },
-  { name: "Passe", keys: ["visao", "cruzamento", "lancamento", "passeCurto", "curva"] },
-  { name: "Drible", keys: ["agilidade", "equilibrio", "posAtaqueInutil", "controleBola", "conducao", "reacao"] },
-  { name: "Defesa", keys: ["interceptacaos", "nocaoDefensiva", "divididaEmPe", "carrinho", "combatividade"] },
-  { name: "Físico", keys: ["impulsao", "folego", "forca"] },
-  { name: "Goleiro", keys: ["elasticidadeGL", "manejoGL", "chuteGL", "reflexosGL", "posGL"], onlyGK: true },
-];
-
-/**********************************
- * UI Atômicos
- **********************************/
-const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
-  <div className={`bg-surface rounded-2xl shadow-sm border p-4 ${className}`}>{children}</div>
-);
-
-function StatTile({
-  label,
-  value,
-  hint,
-  statType,
-  rawValue,
-}: {
-  label: string;
-  value: React.ReactNode;
-  hint?: string;
-  statType?: string;
-  rawValue?: number;
-}) {
-  const quality = statType && rawValue !== undefined ? classifyStat(statType, rawValue) : null;
-
-  const tileContent = (
-    <div className="rounded-2xl border bg-surface p-3 shadow-sm hover:shadow transition-shadow">
-      <div className="text-xs text-fg-muted">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-fg">
-        {quality ? <StatWithQuality value={value} quality={quality} statType={statType} rawValue={rawValue} /> : value}
-      </div>
-    </div>
-  );
-
-  return hint ? <Tooltip content={hint}>{tileContent}</Tooltip> : tileContent;
-}
-
-function ProgressBar({ value, label }: { value: number; label: string }) {
-  const pct = clamp01to100(value);
-  const color = pct < 40 ? "bg-quality-poor" : pct < 70 ? "bg-quality-decent" : "bg-quality-great";
-  return (
-    <div className="mb-3" aria-label={`${label}: ${Math.round(pct)}`}>
-      <label className="block text-[11px] sm:text-xs font-semibold text-fg-secondary mb-1 tracking-wide">{label}</label>
-      <div className="relative flex items-center">
-        <div className="w-full bg-surface-sunken/70 rounded-full h-2.5 overflow-hidden">
-          <div className={`h-2.5 rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
-        </div>
-        <span className="ml-2 text-xs sm:text-sm font-semibold text-fg-secondary w-10 text-right">{Math.round(pct)}</span>
-      </div>
-    </div>
-  );
-}
-
-function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse bg-surface-sunken rounded ${className}`} />;
-}
-
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="mx-auto my-8 max-w-xl rounded-2xl border bg-surface p-6 text-center shadow-sm">
-      <div className="text-negative font-semibold">Erro ao carregar</div>
-      <p className="mt-2 text-sm text-fg-muted">{message}</p>
-      <button
-        onClick={onRetry}
-        className="mt-4 rounded-xl bg-accent px-4 py-2 text-accent-fg hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-accent/30"
-      >
-        Tentar novamente
-      </button>
-    </div>
-  );
-}
-
-/**********************************
- * Mapeadores resilientes (camel/Pascal)
- **********************************/
-function mapAttr(be?: any | null): PlayerMatchStats | null {
-  if (!be) return null;
-  return {
-    aceleracao: pick<number>(be, "aceleracao", "Aceleracao"),
-    pique: pick(be, "pique", "Pique"),
-    finalizacao: pick(be, "finalizacao", "Finalizacao"),
-    falta: pick(be, "falta", "Falta"),
-    cabeceio: pick(be, "cabeceio", "Cabeceio"),
-    forcaDoChute: pick(be, "forcaDoChute", "ForcaDoChute"),
-    chuteLonge: pick(be, "chuteLonge", "ChuteLonge"),
-    voleio: pick(be, "voleio", "Voleio"),
-    penalti: pick(be, "penalti", "Penalti"),
-    visao: pick(be, "visao", "Visao"),
-    cruzamento: pick(be, "cruzamento", "Cruzamento"),
-    lancamento: pick(be, "lancamento", "Lancamento"),
-    passeCurto: pick(be, "passeCurto", "PasseCurto"),
-    curva: pick(be, "curva", "Curva"),
-    agilidade: pick(be, "agilidade", "Agilidade"),
-    equilibrio: pick(be, "equilibrio", "Equilibrio"),
-    posAtaqueInutil: pick(be, "posAtaqueInutil", "PosAtaqueInutil"),
-    controleBola: pick(be, "controleBola", "ControleBola"),
-    conducao: pick(be, "conducao", "Conducao"),
-    interceptacaos: pick(be, "interceptacaos", "Interceptacaos"),
-    nocaoDefensiva: pick(be, "nocaoDefensiva", "NocaoDefensiva"),
-    divididaEmPe: pick(be, "divididaEmPe", "DivididaEmPe"),
-    carrinho: pick(be, "carrinho", "Carrinho"),
-    impulsao: pick(be, "impulsao", "Impulsao"),
-    folego: pick(be, "folego", "Folego"),
-    forca: pick(be, "forca", "Forca"),
-    reacao: pick(be, "reacao", "Reacao"),
-    combatividade: pick(be, "combatividade", "Combatividade"),
-    frieza: pick(be, "frieza", "Frieza"),
-    elasticidadeGL: pick(be, "elasticidadeGL", "ElasticidadeGL"),
-    manejoGL: pick(be, "manejoGL", "ManejoGL"),
-    chuteGL: pick(be, "chuteGL", "ChuteGL"),
-    reflexosGL: pick(be, "reflexosGL", "ReflexosGL"),
-    posGL: pick(be, "posGL", "PosGL"),
-  };
-}
-
 function mapPlayer(be: any): MatchPlayerStats {
   const statistics = pick<any>(be, "statistics", "Statistics");
   return {
@@ -333,6 +130,7 @@ function mapPlayer(be: any): MatchPlayerStats {
  * Página
  **********************************/
 export default function PlayerStatsPage() {
+  const { refreshKey } = useRefresh();
   const { matchId, playerId } = useParams<RouteParams>();
 
   // estado principal do jogador na partida
@@ -362,6 +160,10 @@ export default function PlayerStatsPage() {
   useEffect(() => {
     if (!matchId || !playerId) return;
     const controller = new AbortController();
+    const { signal } = controller;
+
+    // ao trocar de partida/jogador o clube anterior deixa de valer
+    setClubId(null);
 
     (async () => {
       try {
@@ -370,12 +172,14 @@ export default function PlayerStatsPage() {
 
         // jogador naquela partida
         const { data } = await api.get(`/api/matches/${matchId}/players/${playerId}/statistics`, {
-          signal: controller.signal,
+          signal,
         });
+        if (signal.aborted) return;
         setPlayer(mapPlayer(data));
 
         // descobrir clubId a partir do match (olhando players)
-        const { data: matchData } = await api.get(`/api/matches/${matchId}`, { signal: controller.signal });
+        const { data: matchData } = await api.get(`/api/matches/${matchId}`, { signal });
+        if (signal.aborted) return;
         const playersAny: any[] = matchData?.players ?? matchData?.Players ?? [];
         const found = playersAny.find((x: any) => String(pick(x, "id", "Id")) === String(playerId));
         if (found) {
@@ -383,16 +187,15 @@ export default function PlayerStatsPage() {
           setClubId(Number(cid));
         }
       } catch (err: any) {
-        if (err?.name !== "CanceledError" && err?.message !== "canceled") {
-          setError(err?.message ?? "Erro ao carregar dados do jogador");
-        }
+        if (signal.aborted || isCanceled(err)) return;
+        setError(err?.message ?? "Erro ao carregar dados do jogador");
       } finally {
-        setLoading(false);
+        if (!signal.aborted) setLoading(false);
       }
     })();
 
     return () => controller.abort();
-  }, [matchId, playerId]);
+  }, [matchId, playerId, refreshKey]);
 
   /***************
    * Fetch: agregados (últimas N) quando já temos clubId
@@ -400,13 +203,15 @@ export default function PlayerStatsPage() {
   useEffect(() => {
     if (!clubId) return;
     const controller = new AbortController();
+    const { signal } = controller;
 
     (async () => {
       try {
         // desempenho (players aggregate) — N partidas
         const { data: agg } = await api.get(`/api/clubs/${clubId}/players/aggregate?count=${nMatchesPerf}`, {
-          signal: controller.signal,
+          signal,
         });
+        if (signal.aborted) return;
         const arr: any[] = Array.isArray(agg) ? agg : [];
         const rows = arr.map((r) => ({
           playerId: Number(pick(r, "playerId", "PlayerId")),
@@ -430,13 +235,15 @@ export default function PlayerStatsPage() {
           winPercent: Number(pick(r, "winPercent", "WinPercent") ?? 0),
         })) as ClubAggregateRow[];
         setTeamRows(rows);
-      } catch {
+      } catch (e) {
+        // requisição cancelada/substituída não deve limpar os dados atuais
+        if (signal.aborted || isCanceled(e)) return;
         setTeamRows([]);
       }
     })();
 
     return () => controller.abort();
-  }, [clubId, nMatchesPerf]);
+  }, [clubId, nMatchesPerf, refreshKey]);
 
   /***************
    * Fetch: atributos do ÚLTIMO jogo do clube (count=1)
@@ -444,12 +251,14 @@ export default function PlayerStatsPage() {
   useEffect(() => {
     if (!clubId) return;
     const controller = new AbortController();
+    const { signal } = controller;
 
     (async () => {
       try {
         const { data } = await api.get(`/api/clubs/${clubId}/players/attributes?count=1`, {
-          signal: controller.signal,
+          signal,
         });
+        if (signal.aborted) return;
         const arr: any[] = Array.isArray(data) ? data : [];
         setTeamAttrs(
           arr.map((row: any) => ({
@@ -465,14 +274,15 @@ export default function PlayerStatsPage() {
           const exists = arr.some((r: any) => String(pick(r, "playerId", "PlayerId")) === String(prev));
           return exists ? prev : "avg";
         });
-      } catch {
+      } catch (e) {
+        if (signal.aborted || isCanceled(e)) return;
         setTeamAttrs([]);
         setAttrCompareTarget("avg");
       }
     })();
 
     return () => controller.abort();
-  }, [clubId]);
+  }, [clubId, refreshKey]);
 
   const isGK = useMemo(() => {
     const pos = (player?.position || "").toLowerCase();
@@ -926,119 +736,6 @@ export default function PlayerStatsPage() {
           </ul>
         </Card>
       )}
-    </div>
-  );
-}
-
-/**********************************
- * Subcomponentes auxiliares
- **********************************/
-function StatCompare({
-  label,
-  me,
-  team,
-  pct = false,
-  fixed2 = false,
-}: {
-  label: string;
-  me: number;
-  team: number;
-  pct?: boolean;
-  fixed2?: boolean;
-}) {
-  const m = Number(me || 0);
-  const t = Number(team || 0);
-  const isBetter = m >= t;
-  return (
-    <div className="rounded-xl border p-3">
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium text-fg">{label}</span>
-        <span
-          className={`text-xs px-2 py-0.5 rounded-full ${
-            isBetter ? "bg-positive-soft text-positive-fg" : "bg-surface-sunken text-fg-secondary"
-          }`}
-        >
-          {isBetter ? "↑" : "→"}
-        </span>
-      </div>
-      <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-        <div>
-          <div className="text-[11px] text-fg-muted">Você</div>
-          <div className="font-semibold">{pct ? fmtPct(m) : fixed2 ? m.toFixed(2) : fmtNum(m)}</div>
-        </div>
-        <div>
-          <div className="text-[11px] text-fg-muted">Time (média)</div>
-          <div className="font-semibold">{pct ? fmtPct(t) : fixed2 ? t.toFixed(2) : fmtNum(t)}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**********************************
- * Radar em SVG (sem libs)
- **********************************/
-function RadarSVG({ data }: { data: { group: string; value: number }[] }) {
-  const size = 260;
-  const center = size / 2;
-  const radius = 100;
-  const points = Math.max(3, data.length);
-
-  const angleFor = (i: number) => (Math.PI * 2 * i) / points - Math.PI / 2;
-  const toXY = (r: number, angle: number) => ({ x: center + r * Math.cos(angle), y: center + r * Math.sin(angle) });
-
-  const webLines = Array.from({ length: 5 }).map((_, ring) => {
-    const r = radius * ((ring + 1) / 5);
-    const d =
-      data
-        .map((_, i) => {
-          const a = angleFor(i);
-          const { x, y } = toXY(r, a);
-          return `${i === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
-        })
-        .join(" ") + " Z";
-    return <path key={ring} d={d} fill="none" className="stroke-border" strokeWidth={1} />;
-  });
-
-  const spokes = data.map((_, i) => {
-    const a = angleFor(i);
-    const { x, y } = toXY(radius, a);
-    return <line key={i} x1={center} y1={center} x2={x} y2={y} className="stroke-border" strokeWidth={1} />;
-  });
-
-  const polygon =
-    data
-      .map((d, i) => {
-        const a = angleFor(i);
-        const r = (clamp01to100(d.value) / 100) * radius;
-        const { x, y } = toXY(r, a);
-        return `${i === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
-      })
-      .join(" ") + " Z";
-
-  return (
-    <div className="w-full flex items-center justify-center">
-      <svg viewBox={`0 0 ${size} ${size}`} className="w-full max-w-sm">
-        <g>{webLines}</g>
-        <g>{spokes}</g>
-        <path d={polygon} className="fill-accent stroke-accent" fillOpacity={0.25} strokeWidth={2} />
-        {data.map((d, i) => {
-          const a = angleFor(i);
-          const { x, y } = toXY(radius + 16, a);
-          return (
-            <text
-              key={i}
-              x={x}
-              y={y}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              className="fill-fg-muted text-[10px]"
-            >
-              {d.group}
-            </text>
-          );
-        })}
-      </svg>
     </div>
   );
 }

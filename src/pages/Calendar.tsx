@@ -1,8 +1,10 @@
-﻿import React, { useEffect, useMemo, useRef, useState, useId, KeyboardEvent } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState, useId, KeyboardEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import api from "../services/api.ts";
+import api, { isCanceled } from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
-import { API_ENDPOINTS, crestUrl } from "../config/urls.ts";
+import { useRefresh } from "../hooks/useRefresh.tsx";
+import { API_ENDPOINTS, crestUrl, onImgError } from "../config/urls.ts";
+import { parseTimestamp, toYmd } from "../utils/date.ts";
 
 // ===== Tipos =====
 export interface CalendarDaySummaryDto {
@@ -67,7 +69,6 @@ const ptDay = new Intl.DateTimeFormat("pt-BR", { day: "2-digit" });
 const ptTime = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-const toYmd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const fromYmd = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
 function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function addMonths(d: Date, months: number) { return new Date(d.getFullYear(), d.getMonth() + months, 1); }
@@ -90,7 +91,7 @@ function Crest({ id, alt }: { id?: string | null; alt: string }) {
     const url = crestUrl(id);
     if (!url) return <div className="w-6 h-6 rounded-full bg-surface-sunken" aria-hidden />;
     return (
-        <img src={url} alt={alt} className="w-6 h-6 rounded-full bg-surface-sunken object-contain" loading="lazy" decoding="async" />
+        <img src={url} alt={alt} onError={onImgError} className="w-6 h-6 rounded-full bg-surface-sunken object-contain" loading="lazy" decoding="async" />
     );
 }
 function Skeleton({ className = "" }: { className?: string }) { return <div className={`animate-pulse bg-surface-sunken rounded ${className}`} />; }
@@ -110,9 +111,11 @@ export default function CalendarPage() {
         [urlClubIds]
     );
     const singleClubId = club?.clubId ?? null;
-    const selectedClubIds = parsedClubIds.length ? parsedClubIds : (singleClubId ? [singleClubId] : []);
+    const clubKey = parsedClubIds.length
+        ? parsedClubIds.join(",")
+        : (singleClubId ? String(singleClubId) : null); // usado como dependência estável
+    const selectedClubIds = useMemo(() => (clubKey ? clubKey.split(",").map(Number) : []), [clubKey]);
     const hasAnyClub = selectedClubIds.length > 0;
-    const clubKey = hasAnyClub ? selectedClubIds.join(",") : null; // usado como dependência estável
 
     const clubName = club?.clubName ?? "";
     const headerLabel = hasAnyClub
@@ -142,6 +145,23 @@ export default function CalendarPage() {
     const monthCacheRef = useRef<Record<string, CalendarMonthDto>>({});
     const dayCacheRef = useRef<Record<string, CalendarDayDetailsDto>>({});
 
+    // "Atualizar"/"Tentar novamente": invalida os caches de mês e dia e recarrega
+    const [reloadKey, setReloadKey] = useState(0);
+    const refreshCalendar = useCallback(() => {
+        monthCacheRef.current = {};
+        dayCacheRef.current = {};
+        setReloadKey((k) => k + 1);
+    }, []);
+
+    // "Atualizar"/modo ao vivo do cabeçalho: mesmo efeito do botão local (limpa caches e recarrega)
+    const { refreshKey: globalRefreshKey } = useRefresh();
+    const seenGlobalRefreshRef = useRef(globalRefreshKey);
+    useEffect(() => {
+        if (seenGlobalRefreshRef.current === globalRefreshKey) return;
+        seenGlobalRefreshRef.current = globalRefreshKey;
+        refreshCalendar();
+    }, [globalRefreshKey, refreshCalendar]);
+
     const pageRef = useRef<HTMLDivElement | null>(null);
     const headerRef = useRef<HTMLDivElement | null>(null);
     const legendRef = useRef<HTMLDivElement | null>(null);
@@ -149,7 +169,6 @@ export default function CalendarPage() {
 
     const year = referenceMonth.getFullYear();
     const month1to12 = referenceMonth.getMonth() + 1;
-    const monthKey = `${year}-${pad(month1to12)}`;
 
     const todayYmd = toYmd(new Date());
 
@@ -252,69 +271,81 @@ export default function CalendarPage() {
 
     // ===== Buscar mês (com cache) + prefetch =====
     useEffect(() => {
-        if (!hasAnyClub || !clubKey) return;
-        let disposed = false;
+        if (!clubKey) return;
+        const controller = new AbortController();
+        const { signal } = controller;
+        const ids = clubKey.split(",").map(Number);
 
         async function fetchMonth(y: number, m: number, write = true) {
             const k = `${y}-${pad(m)}|${clubKey}`;
-            if (monthCacheRef.current[k]) { if (!disposed && write) setMonthData(monthCacheRef.current[k]); return; }
+            const cached = monthCacheRef.current[k];
+            if (cached) {
+                if (!signal.aborted && write) { setMonthData(cached); setLoadingMonth(false); }
+                return;
+            }
             if (write) { setLoadingMonth(true); setErrorMonth(null); setMonthData(null); }
             try {
                 const params: any = { year: y, month: m };
-                if (selectedClubIds.length > 1) params.clubIds = clubKey;
-                else params.clubId = selectedClubIds[0];
+                if (ids.length > 1) params.clubIds = clubKey;
+                else params.clubId = ids[0];
 
                 const { data } = await api.get<CalendarMonthDto>(
                     API_ENDPOINTS.CALENDAR,
-                    { params }
+                    { params, signal }
                 );
+                if (signal.aborted) return;
                 monthCacheRef.current[k] = data;
-                if (!disposed && write) setMonthData(data);
+                if (write) setMonthData(data);
             } catch (err: any) {
-                if (!disposed && write) setErrorMonth(err?.message ?? "Erro ao carregar calendário");
+                if (signal.aborted || isCanceled(err)) return;
+                if (write) setErrorMonth(err?.message ?? "Erro ao carregar calendário");
             } finally {
-                if (!disposed && write) setLoadingMonth(false);
+                if (!signal.aborted && write) setLoadingMonth(false);
             }
         }
 
         fetchMonth(year, month1to12, true);
-        const prev = addMonths(referenceMonth, -1); fetchMonth(prev.getFullYear(), prev.getMonth() + 1, false);
-        const next = addMonths(referenceMonth, 1); fetchMonth(next.getFullYear(), next.getMonth() + 1, false);
+        const prev = new Date(year, month1to12 - 2, 1); fetchMonth(prev.getFullYear(), prev.getMonth() + 1, false);
+        const next = new Date(year, month1to12, 1); fetchMonth(next.getFullYear(), next.getMonth() + 1, false);
 
-        return () => { disposed = true; };
-    }, [hasAnyClub, clubKey, selectedClubIds, year, month1to12, referenceMonth]);
+        return () => controller.abort();
+    }, [clubKey, year, month1to12, reloadKey]);
 
     // ===== Buscar dia (com cache) =====
     useEffect(() => {
-        if (!selectedDate || !hasAnyClub || !clubKey) return;
-        let disposed = false;
+        if (!selectedDate || !clubKey) return;
+        const controller = new AbortController();
+        const { signal } = controller;
+        const ids = clubKey.split(",").map(Number);
 
         async function run() {
             const cacheKey = `${selectedDate}|${clubKey}`;
             const cached = dayCacheRef.current[cacheKey];
-            if (cached) { if (!disposed) setDayData(cached); return; }
+            if (cached) { if (!signal.aborted) { setDayData(cached); setLoadingDay(false); } return; }
 
             setLoadingDay(true); setErrorDay(null); setDayData(null);
             try {
                 const params: any = { date: selectedDate };
-                if (selectedClubIds.length > 1) params.clubIds = clubKey;
-                else params.clubId = selectedClubIds[0];
+                if (ids.length > 1) params.clubIds = clubKey;
+                else params.clubId = ids[0];
 
                 const { data } = await api.get<CalendarDayDetailsDto>(
                     API_ENDPOINTS.CALENDAR_DAY,
-                    { params }
+                    { params, signal }
                 );
+                if (signal.aborted) return;
                 dayCacheRef.current[cacheKey] = data;
-                if (!disposed) setDayData(data);
+                setDayData(data);
             } catch (err: any) {
-                if (!disposed) setErrorDay(err?.message ?? "Erro ao carregar o dia");
+                if (signal.aborted || isCanceled(err)) return;
+                setErrorDay(err?.message ?? "Erro ao carregar o dia");
             } finally {
-                if (!disposed) setLoadingDay(false);
+                if (!signal.aborted) setLoadingDay(false);
             }
         }
         run();
-        return () => { disposed = true; };
-    }, [selectedDate, hasAnyClub, clubKey, selectedClubIds]);
+        return () => controller.abort();
+    }, [selectedDate, clubKey, reloadKey]);
 
     // Navegação por teclado
     function handleKeyNav(e: KeyboardEvent<HTMLDivElement>) {
@@ -375,6 +406,7 @@ export default function CalendarPage() {
                 <div className="flex items-center gap-2">
                     <button onClick={() => { if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, -1)); else { const newStart = addDays(referenceWeekStart, -7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); } }} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised" aria-label={viewMode === "monthly" ? "Mês anterior" : "Semana anterior"}>◀</button>
                     <button onClick={() => { const today = new Date(); setReferenceMonth(startOfMonth(today)); setReferenceWeekStart(getWeekStart(today)); }} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised">Hoje</button>
+                    <button type="button" onClick={refreshCalendar} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised" title="Recarregar dados (ignora o cache)">Atualizar</button>
                     <button onClick={() => { if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, 1)); else { const newStart = addDays(referenceWeekStart, 7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); } }} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised" aria-label={viewMode === "monthly" ? "Próximo mês" : "Próxima semana"}>▶</button>
 
                     <h1 className="text-2xl font-display font-bold uppercase tracking-wide text-fg ml-2">{viewMode === "monthly" ? `${ptMonth.format(referenceMonth)} de ${referenceMonth.getFullYear()}` : `Semana: ${weekTitle}`}</h1>
@@ -481,7 +513,7 @@ export default function CalendarPage() {
             {errorMonth && (
                 <div className="mt-4 p-3 bg-negative-soft text-negative-fg rounded border border-negative/30 flex items-center justify-between">
                     <span>{errorMonth}</span>
-                    <button className="px-2 py-1 text-sm rounded border" onClick={() => { delete monthCacheRef.current[monthKey]; setReferenceMonth(new Date(referenceMonth)); }}>
+                    <button type="button" className="btn btn-secondary px-2 py-1" onClick={refreshCalendar}>
                         Tentar novamente
                     </button>
                 </div>
@@ -518,7 +550,7 @@ export default function CalendarPage() {
                         {errorDay && (
                             <div className="p-3 bg-negative-soft text-negative-fg rounded border border-negative/30 flex items-center justify-between">
                                 <span>{errorDay}</span>
-                                <button className="px-2 py-1 text-sm rounded border" onClick={() => { if (!selectedDate) return; const cacheKey = `${selectedDate}|${clubKey}`; delete dayCacheRef.current[cacheKey]; setDayData(null); setSelectedDate(selectedDate); }}>
+                                <button type="button" className="btn btn-secondary px-2 py-1" onClick={refreshCalendar}>
                                     Tentar novamente
                                 </button>
                             </div>
@@ -529,7 +561,8 @@ export default function CalendarPage() {
                         {!loadingDay && dayData && dayData.matches.length > 0 && (
                             <div className="space-y-3">
                                 {dayData.matches.map((m) => {
-                                    const kickoff = m.timestamp ? ptTime.format(new Date(m.timestamp)) : "";
+                                    const kickoffDate = parseTimestamp(m.timestamp);
+                                    const kickoff = kickoffDate ? ptTime.format(kickoffDate) : "";
                                     const aWon = m.clubAGoals > m.clubBGoals;
                                     const bWon = m.clubBGoals > m.clubAGoals;
                                     const resultBorder =

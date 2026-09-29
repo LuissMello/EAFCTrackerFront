@@ -1,9 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { useClub } from "../hooks/useClub.tsx";
 import { Card, SectionHeader, RatingPill } from "../components/ui.tsx";
+import { fmtDateBR } from "../utils/date.ts";
+import { useClubIds } from "../hooks/useClubIds.ts";
+import { useAbortableFetch } from "../hooks/useAbortableFetch.ts";
 
 interface RecordMatchDto {
     matchId: number;
@@ -52,9 +55,6 @@ interface ClubRecordsDto {
     hatTricks: HatTrickDto[];
 }
 
-function fmtDate(iso: string) {
-    return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
 
 const KpiCard: React.FC<{ label: string; value: number | string; sub?: string }> = ({ label, value, sub }) => (
     <Card className="p-4 flex flex-col gap-1">
@@ -83,7 +83,7 @@ const MatchRecordCard: React.FC<{ title: string; match: RecordMatchDto | null }>
                         {match.goalsFor} — {match.goalsAgainst}
                     </Link>
                     <div className="text-sm text-fg-muted">vs {match.opponentName ?? "Adversário"}</div>
-                    <div className="text-xs text-fg-subtle">{fmtDate(match.timestamp)}</div>
+                    <div className="text-xs text-fg-subtle">{fmtDateBR(match.timestamp)}</div>
                 </div>
             ) : (
                 <div className="text-sm text-fg-subtle">Sem dados</div>
@@ -107,7 +107,7 @@ const PlayerRecordCard: React.FC<{ title: string; record: RecordPlayerMatchDto |
                     )}
                     <div className="text-sm font-semibold text-fg-secondary">{record.playerName}</div>
                     <Link to={`/match/${record.matchId}`} className="text-xs text-fg-subtle hover:text-accent underline underline-offset-2">
-                        {fmtDate(record.timestamp)}
+                        {fmtDateBR(record.timestamp)}
                     </Link>
                 </div>
             ) : (
@@ -122,32 +122,22 @@ const SkeletonBlock: React.FC<{ h?: string }> = ({ h = "h-20" }) => (
 );
 
 export default function Records() {
-    const { club, selectedClubIds } = useClub();
+    const activeClubIds = useClubIds();
 
-    const activeClubIds = useMemo(() => {
-        return selectedClubIds.length > 0 ? selectedClubIds : (club?.clubId ? [club.clubId] : []);
-    }, [selectedClubIds, club]);
+    const [loaded, setLoaded] = useState<{ key: string; data: ClubRecordsDto } | null>(null);
+    const clubIdsKey = activeClubIds.join(",");
+    const data = loaded?.key === clubIdsKey ? loaded.data : null;
 
-    const [data, setData] = useState<ClubRecordsDto | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const load = useCallback(async () => {
-        if (activeClubIds.length === 0) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const clubIdsStr = activeClubIds.join(",");
-            const { data: resp } = await api.get<ClubRecordsDto>(API_ENDPOINTS.CLUB_RECORDS(clubIdsStr));
-            setData(resp);
-        } catch (e: any) {
-            setError(e?.message ?? "Erro ao carregar recordes");
-        } finally {
-            setLoading(false);
-        }
-    }, [activeClubIds]);
-
-    useEffect(() => { load(); }, [load]);
+    const { loading, error } = useAbortableFetch(
+        async (signal) => {
+            const clubIdsStr = clubIdsKey;
+            const { data: resp } = await api.get<ClubRecordsDto>(API_ENDPOINTS.CLUB_RECORDS(clubIdsStr), { signal });
+            if (signal.aborted) return;
+            setLoaded({ key: clubIdsStr, data: resp });
+        },
+        [clubIdsKey],
+        { enabled: activeClubIds.length > 0, errorMessage: "Erro ao carregar recordes" }
+    );
 
     if (activeClubIds.length === 0) {
         return (
@@ -255,7 +245,7 @@ export default function Records() {
                                             to={`/match/${ht.matchId}`}
                                             className="text-xs text-fg-subtle hover:text-fg-secondary underline underline-offset-2 whitespace-nowrap"
                                         >
-                                            {fmtDate(ht.timestamp)}
+                                            {fmtDateBR(ht.timestamp)}
                                         </Link>
                                         <span className="font-semibold text-fg flex-1">{ht.playerName}</span>
                                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-gold-soft text-gold-fg border border-gold/30">

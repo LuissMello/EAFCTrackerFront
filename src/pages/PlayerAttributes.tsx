@@ -2,6 +2,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
+import { useRefresh } from "../hooks/useRefresh.tsx";
+import { clamp01to100 } from "../utils/number.ts";
+import { mapAttr, pick } from "../utils/playerAttributes.ts";
+import type { PlayerMatchStats } from "../types/playerAttributes.ts";
+import { ATTR_LABELS } from "../utils/playerAttributes.ts";
+import { Card, ProgressBar, ErrorState } from "../components/AttributeUi.tsx";
+import { Skeleton } from "../components/ui.tsx";
 
 /******** Helpers ********/
 function isAbort(err: any) {
@@ -12,21 +19,8 @@ function isAbort(err: any) {
         err?.__CANCEL__ === true
     );
 }
-function pick<T = any>(obj: any, camel: string, pascal: string): T {
-    if (!obj) return undefined as any;
-    if (camel in obj) return obj[camel];
-    if (pascal in obj) return obj[pascal];
-    return undefined as any;
-}
-function clamp01to100(x: number) {
-    if (!Number.isFinite(x)) return 0;
-    return Math.max(0, Math.min(100, x));
-}
 
 /******** Tipos ********/
-type PlayerMatchStats = {
-    aceleracao: number; pique: number; finalizacao: number; falta: number; cabeceio: number; forcaDoChute: number; chuteLonge: number; voleio: number; penalti: number; visao: number; cruzamento: number; lancamento: number; passeCurto: number; curva: number; agilidade: number; equilibrio: number; posAtaqueInutil: number; controleBola: number; conducao: number; interceptacaos: number; nocaoDefensiva: number; divididaEmPe: number; carrinho: number; impulsao: number; folego: number; forca: number; reacao: number; combatividade: number; frieza: number; elasticidadeGL: number; manejoGL: number; chuteGL: number; reflexosGL: number; posGL: number;
-};
 type PlayerAttrRow = {
     playerId: number;
     playerName: string;
@@ -35,89 +29,15 @@ type PlayerAttrRow = {
     statistics: PlayerMatchStats | null;
 };
 
-/******** Constantes de UI ********/
-const ATTR_LABELS: Record<keyof PlayerMatchStats, string> = {
-    aceleracao: "ACELERAÇÃO",
-    pique: "PIQUE",
-    finalizacao: "FINALIZAÇÃO",
-    falta: "FALTA",
-    cabeceio: "CABECEIO",
-    forcaDoChute: "FORÇA DO CHUTE",
-    chuteLonge: "CHUTE LONGE",
-    voleio: "VOLEIO",
-    penalti: "PÊNALTI",
-    visao: "VISÃO",
-    cruzamento: "CRUZAMENTO",
-    lancamento: "LANÇAMENTO",
-    passeCurto: "PASSE CURTO",
-    curva: "CURVA",
-    agilidade: "AGILIDADE",
-    equilibrio: "EQUILÍBRIO",
-    posAtaqueInutil: "POSIÇÃO ATAQUE",
-    controleBola: "CONTROLE DE BOLA",
-    conducao: "CONDUÇÃO",
-    interceptacaos: "INTERCEPTAÇÕES",
-    nocaoDefensiva: "NOÇÃO DEFENSIVA",
-    divididaEmPe: "DIVIDIDA EM PÉ",
-    carrinho: "CARRINHO",
-    impulsao: "IMPULSÃO",
-    folego: "FÔLEGO",
-    forca: "FORÇA",
-    reacao: "REAÇÃO",
-    combatividade: "COMBATIVIDADE",
-    frieza: "FRIEZA",
-    elasticidadeGL: "ELASTICIDADE (GL)",
-    manejoGL: "MANEJO (GL)",
-    chuteGL: "CHUTE (GL)",
-    reflexosGL: "REFLEXOS (GL)",
-    posGL: "POSICIONAMENTO (GL)",
-};
-
 function isGk(pos?: string | null) {
     if (!pos) return false;
     const p = pos.trim().toLowerCase();
     return p === "gk" || p === "gol" || p === "goalkeeper" || p === "goleiro";
 }
 
-/******** UI atômicos ********/
-const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
-    <div className={`bg-surface rounded-2xl shadow-sm border p-4 ${className}`}>{children}</div>
-);
-function Skeleton({ className = "" }: { className?: string }) {
-    return <div className={`animate-pulse bg-surface-sunken rounded ${className}`} />;
-}
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-    return (
-        <div className="mx-auto my-8 max-w-xl rounded-2xl border bg-surface p-6 text-center shadow-sm">
-            <div className="text-negative font-semibold">Erro ao carregar</div>
-            <p className="mt-2 text-sm text-fg-muted">{message}</p>
-            <button
-                onClick={onRetry}
-                className="mt-4 rounded-xl bg-accent px-4 py-2 text-accent-fg hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-accent/30"
-            >
-                Tentar novamente
-            </button>
-        </div>
-    );
-}
-function ProgressBar({ value, label }: { value: number; label: string }) {
-    const pct = clamp01to100(value);
-    const color = pct < 40 ? "bg-quality-poor" : pct < 70 ? "bg-quality-decent" : "bg-quality-great";
-    return (
-        <div className="mb-3" aria-label={`${label}: ${Math.round(pct)}`}>
-            <label className="block text-[11px] sm:text-xs font-semibold text-fg-secondary mb-1 tracking-wide">{label}</label>
-            <div className="relative flex items-center">
-                <div className="w-full bg-surface-sunken/70 rounded-full h-2.5 overflow-hidden">
-                    <div className={`h-2.5 rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
-                </div>
-                <span className="ml-2 text-xs sm:text-sm font-semibold text-fg-secondary w-10 text-right">{Math.round(pct)}</span>
-            </div>
-        </div>
-    );
-}
-
 /******** Página ********/
 export default function PlayerAttributesPage() {
+    const { refreshKey } = useRefresh();
     const { clubId, clubName } = useClub();
 
     const [loading, setLoading] = useState(true);
@@ -146,6 +66,7 @@ export default function PlayerAttributesPage() {
                 const { data } = await api.get(`/api/clubs/${clubId}/players/attributes`, {
                     signal: controller.signal,
                 });
+                if (controller.signal.aborted) return;
                 const arr: any[] = Array.isArray(data) ? data : [];
 
                 const mapped: PlayerAttrRow[] = arr.map((row) => ({
@@ -162,15 +83,15 @@ export default function PlayerAttributesPage() {
                     setBasePlayerId(mapped[0].playerId);
                 }
             } catch (e: any) {
-                if (isAbort(e)) return;
+                if (controller.signal.aborted || isAbort(e)) return;
                 setError(e?.message ?? "Erro ao buscar atributos do clube");
             } finally {
-                setLoading(false);
+                if (!controller.signal.aborted) setLoading(false);
             }
         })();
 
         return () => controller.abort();
-    }, [clubId]);
+    }, [clubId, refreshKey]);
 
     const base = useMemo(
         () => rows.find((r) => String(r.playerId) === String(basePlayerId)),
@@ -402,45 +323,4 @@ export default function PlayerAttributesPage() {
             </Card>
         </div>
     );
-}
-
-/******** mapper ********/
-function mapAttr(be?: any | null): PlayerMatchStats | null {
-    if (!be) return null;
-    return {
-        aceleracao: pick<number>(be, "aceleracao", "Aceleracao"),
-        pique: pick(be, "pique", "Pique"),
-        finalizacao: pick(be, "finalizacao", "Finalizacao"),
-        falta: pick(be, "falta", "Falta"),
-        cabeceio: pick(be, "cabeceio", "Cabeceio"),
-        forcaDoChute: pick(be, "forcaDoChute", "ForcaDoChute"),
-        chuteLonge: pick(be, "chuteLonge", "ChuteLonge"),
-        voleio: pick(be, "voleio", "Voleio"),
-        penalti: pick(be, "penalti", "Penalti"),
-        visao: pick(be, "visao", "Visao"),
-        cruzamento: pick(be, "cruzamento", "Cruzamento"),
-        lancamento: pick(be, "lancamento", "Lancamento"),
-        passeCurto: pick(be, "passeCurto", "PasseCurto"),
-        curva: pick(be, "curva", "Curva"),
-        agilidade: pick(be, "agilidade", "Agilidade"),
-        equilibrio: pick(be, "equilibrio", "Equilibrio"),
-        posAtaqueInutil: pick(be, "posAtaqueInutil", "PosAtaqueInutil"),
-        controleBola: pick(be, "controleBola", "ControleBola"),
-        conducao: pick(be, "conducao", "Conducao"),
-        interceptacaos: pick(be, "interceptacaos", "Interceptacaos"),
-        nocaoDefensiva: pick(be, "nocaoDefensiva", "NocaoDefensiva"),
-        divididaEmPe: pick(be, "divididaEmPe", "DivididaEmPe"),
-        carrinho: pick(be, "carrinho", "Carrinho"),
-        impulsao: pick(be, "impulsao", "Impulsao"),
-        folego: pick(be, "folego", "Folego"),
-        forca: pick(be, "forca", "Forca"),
-        reacao: pick(be, "reacao", "Reacao"),
-        combatividade: pick(be, "combatividade", "Combatividade"),
-        frieza: pick(be, "frieza", "Frieza"),
-        elasticidadeGL: pick(be, "elasticidadeGL", "ElasticidadeGL"),
-        manejoGL: pick(be, "manejoGL", "ManejoGL"),
-        chuteGL: pick(be, "chuteGL", "ChuteGL"),
-        reflexosGL: pick(be, "reflexosGL", "ReflexosGL"),
-        posGL: pick(be, "posGL", "PosGL"),
-    };
 }

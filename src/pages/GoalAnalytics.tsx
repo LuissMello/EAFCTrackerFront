@@ -1,12 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
-import { useClub } from "../hooks/useClub.tsx";
+import { parseTimestamp, toYmd, daysAgoYmd, fmtDateBR } from "../utils/date.ts";
+import { useClubIds } from "../hooks/useClubIds.ts";
+import { useRefresh } from "../hooks/useRefresh.tsx";
+import { useAbortableFetch } from "../hooks/useAbortableFetch.ts";
+import { getPalette as getC, buildPassFlow } from "../utils/goalAnalysis.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface GoalAnalysisPlayer {
+  playerId: number;
   name: string;
   goals: number;
   assists: number;
@@ -15,12 +20,17 @@ interface GoalAnalysisPlayer {
 }
 
 interface GoalAnalysisPair {
+  fromId: number;
+  toId: number;
   from: string;
   to: string;
   count: number;
 }
 
 interface GoalAnalysisTrio {
+  preId: number;
+  assistId: number;
+  scorerId: number;
   pre: string;
   assist: string;
   scorer: string;
@@ -30,6 +40,9 @@ interface GoalAnalysisTrio {
 interface GoalAnalysisLink {
   matchId: number;
   matchTimestamp: string;
+  scorerId: number;
+  assistId: number | null;
+  preAssistId: number | null;
   scorerName: string;
   assistName: string | null;
   preAssistName: string | null;
@@ -52,51 +65,12 @@ interface GoalAnalysisResponse {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const PALETTE = [
-  { bg: "bg-blue-100",    text: "text-blue-800",    border: "border-blue-300",    dot: "bg-blue-500",    bar: "bg-blue-500"    },
-  { bg: "bg-emerald-100", text: "text-emerald-800", border: "border-emerald-300", dot: "bg-emerald-500", bar: "bg-emerald-500" },
-  { bg: "bg-violet-100",  text: "text-violet-800",  border: "border-violet-300",  dot: "bg-violet-500",  bar: "bg-violet-500"  },
-  { bg: "bg-amber-100",   text: "text-amber-800",   border: "border-amber-300",   dot: "bg-amber-500",   bar: "bg-amber-500"   },
-  { bg: "bg-rose-100",    text: "text-rose-800",    border: "border-rose-300",    dot: "bg-rose-500",    bar: "bg-rose-500"    },
-  { bg: "bg-cyan-100",    text: "text-cyan-800",    border: "border-cyan-300",    dot: "bg-cyan-500",    bar: "bg-cyan-500"    },
-  { bg: "bg-orange-100",  text: "text-orange-800",  border: "border-orange-300",  dot: "bg-orange-500",  bar: "bg-orange-500"  },
-  { bg: "bg-pink-100",    text: "text-pink-800",    border: "border-pink-300",    dot: "bg-pink-500",    bar: "bg-pink-500"    },
-  { bg: "bg-teal-100",    text: "text-teal-800",    border: "border-teal-300",    dot: "bg-teal-500",    bar: "bg-teal-500"    },
-  { bg: "bg-indigo-100",  text: "text-indigo-800",  border: "border-indigo-300",  dot: "bg-indigo-500",  bar: "bg-indigo-500"  },
-];
-
-function buildColorMap(players: GoalAnalysisPlayer[]): Map<string, number> {
-  const map = new Map<string, number>();
-  players.forEach((p, i) => map.set(p.name, i));
+function buildColorMap(players: GoalAnalysisPlayer[]): Map<number, number> {
+  const map = new Map<number, number>();
+  players.forEach((p, i) => map.set(p.playerId, i));
   return map;
 }
-
-function getC(idx: number) { return PALETTE[idx % PALETTE.length]; }
-
-function toDateStr(d: Date) { return d.toISOString().slice(0, 10); }
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
-interface PassFlowEntry { from: string; to: string; count: number }
-
-function buildPassFlow(links: GoalAnalysisLink[]): PassFlowEntry[] {
-  const map = new Map<string, PassFlowEntry>();
-  for (const l of links) {
-    if (l.assistName) {
-      const key = `${l.assistName}→${l.scorerName}`;
-      if (!map.has(key)) map.set(key, { from: l.assistName, to: l.scorerName, count: 0 });
-      map.get(key)!.count++;
-    }
-    if (l.preAssistName && l.assistName) {
-      const key = `${l.preAssistName}→${l.assistName}`;
-      if (!map.has(key)) map.set(key, { from: l.preAssistName, to: l.assistName, count: 0 });
-      map.get(key)!.count++;
-    }
-  }
-  return Array.from(map.values()).sort((a, b) => b.count - a.count);
-}
+const toDateStr = toYmd; // data local (evita deslocamento de fuso do toISOString)
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -120,7 +94,7 @@ const KpiCard: React.FC<{ icon: string; label: string; value: number | string; s
 
 interface LeaderboardProps {
   title: string; icon: string; players: GoalAnalysisPlayer[];
-  valueKey: "goals" | "assists" | "preAssists"; colorMap: Map<string, number>;
+  valueKey: "goals" | "assists" | "preAssists"; colorMap: Map<number, number>;
 }
 const Leaderboard: React.FC<LeaderboardProps> = ({ title, icon, players, valueKey, colorMap }) => {
   const sorted = [...players].filter(p => p[valueKey] > 0).sort((a, b) => b[valueKey] - a[valueKey]);
@@ -136,10 +110,10 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ title, icon, players, valueKe
       ) : (
         <div className="divide-y">
           {sorted.slice(0, 8).map((p, i) => {
-            const c = getC(colorMap.get(p.name) ?? i);
+            const c = getC(colorMap.get(p.playerId) ?? i);
             const pct = Math.round((p[valueKey] / max) * 100);
             return (
-              <div key={p.name} className="px-4 py-2.5 hover:bg-surface-raised transition-colors">
+              <div key={p.playerId} className="px-4 py-2.5 hover:bg-surface-raised transition-colors">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs text-fg-subtle w-4 text-right font-medium">{i + 1}</span>
                   <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
@@ -166,17 +140,17 @@ function mergeResponses(responses: GoalAnalysisResponse[]): GoalAnalysisResponse
   const allLinks = responses.flatMap(r => r.goalLinks);
 
   // Merge players by summing the stats already aggregated by the backend (from MatchPlayerEntity)
-  const playerMap = new Map<string, GoalAnalysisPlayer>();
+  const playerMap = new Map<number, GoalAnalysisPlayer>();
   for (const r of responses) {
     for (const p of r.players) {
-      const existing = playerMap.get(p.name);
+      const existing = playerMap.get(p.playerId);
       if (existing) {
         existing.goals      += p.goals;
         existing.assists    += p.assists;
         existing.preAssists += p.preAssists;
         existing.total      += p.total;
       } else {
-        playerMap.set(p.name, { ...p });
+        playerMap.set(p.playerId, { ...p });
       }
     }
   }
@@ -186,8 +160,8 @@ function mergeResponses(responses: GoalAnalysisResponse[]): GoalAnalysisResponse
   const pairMap = new Map<string, GoalAnalysisPair>();
   for (const l of allLinks) {
     if (!l.assistName) continue;
-    const key = `${l.assistName}→${l.scorerName}`;
-    if (!pairMap.has(key)) pairMap.set(key, { from: l.assistName, to: l.scorerName, count: 0 });
+    const key = `${l.assistId}→${l.scorerId}`;
+    if (!pairMap.has(key)) pairMap.set(key, { fromId: l.assistId!, toId: l.scorerId, from: l.assistName, to: l.scorerName, count: 0 });
     pairMap.get(key)!.count++;
   }
   const pairs = Array.from(pairMap.values()).sort((a, b) => b.count - a.count);
@@ -196,8 +170,8 @@ function mergeResponses(responses: GoalAnalysisResponse[]): GoalAnalysisResponse
   const trioMap = new Map<string, GoalAnalysisTrio>();
   for (const l of allLinks) {
     if (!l.preAssistName || !l.assistName) continue;
-    const key = `${l.preAssistName}→${l.assistName}→${l.scorerName}`;
-    if (!trioMap.has(key)) trioMap.set(key, { pre: l.preAssistName, assist: l.assistName, scorer: l.scorerName, count: 0 });
+    const key = `${l.preAssistId}→${l.assistId}→${l.scorerId}`;
+    if (!trioMap.has(key)) trioMap.set(key, { preId: l.preAssistId!, assistId: l.assistId!, scorerId: l.scorerId, pre: l.preAssistName, assist: l.assistName, scorer: l.scorerName, count: 0 });
     trioMap.get(key)!.count++;
   }
   const trios = Array.from(trioMap.values()).sort((a, b) => b.count - a.count);
@@ -214,50 +188,42 @@ function mergeResponses(responses: GoalAnalysisResponse[]): GoalAnalysisResponse
     players,
     pairs,
     trios,
-    goalLinks: allLinks.sort((a, b) => new Date(b.matchTimestamp).getTime() - new Date(a.matchTimestamp).getTime()),
+    goalLinks: allLinks.sort((a, b) => (parseTimestamp(b.matchTimestamp)?.getTime() ?? 0) - (parseTimestamp(a.matchTimestamp)?.getTime() ?? 0)),
   };
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function GoalAnalytics() {
-    const { club, selectedClubIds } = useClub();
+    const activeClubIds = useClubIds();
 
-    const now = new Date();
-
-  const [from, setFrom] = useState("2025-11-20");
-    const defaultTo = toDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
-    const [to, setTo] = useState(defaultTo);
-  const [data, setData] = useState<GoalAnalysisResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+    const [from, setFrom] = useState(() => daysAgoYmd(30));
+    const [to, setTo] = useState(() => {
+      const now = new Date();
+      return toDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    });
+    const [reloadKey, setReloadKey] = useState(0);
+    // "Atualizar"/modo ao vivo do cabeçalho
+    const { refreshKey } = useRefresh();
+  const [loaded, setLoaded] = useState<{ key: string; data: GoalAnalysisResponse } | null>(null);
+  const dataKey = `${activeClubIds.join(",")}|${from}|${to}`;
+  const data = loaded?.key === dataKey ? loaded.data : null;
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const activeClubIds = useMemo(() => {
-    const ids = selectedClubIds.length > 0 ? selectedClubIds : (club?.clubId ? [club.clubId] : []);
-    return ids;
-  }, [selectedClubIds, club]);
-
-  const fetch = useCallback(async () => {
-    if (activeClubIds.length === 0) return;
-    setLoading(true);
-    setError(null);
-    try {
+  const { loading, error } = useAbortableFetch(
+    async (signal) => {
       const responses = await Promise.all(
         activeClubIds.map(id =>
-          api.get<GoalAnalysisResponse>(API_ENDPOINTS.CLUB_GOAL_ANALYSIS(id, from, to))
+          api.get<GoalAnalysisResponse>(API_ENDPOINTS.CLUB_GOAL_ANALYSIS(id, from, to), { signal })
             .then(r => r.data)
         )
       );
-      setData(mergeResponses(responses));
-    } catch (e: any) {
-      setError(e?.message ?? "Erro ao carregar análise");
-    } finally {
-      setLoading(false);
-    }
-  }, [activeClubIds, from, to]);
-
-  useEffect(() => { fetch(); }, [fetch]);
+      if (signal.aborted) return;
+      setLoaded({ key: dataKey, data: mergeResponses(responses) });
+    },
+    [dataKey, reloadKey, refreshKey],
+    { enabled: activeClubIds.length > 0, errorMessage: "Erro ao carregar análise" }
+  );
 
   const colorMap = useMemo(() => data ? buildColorMap(data.players) : new Map(), [data]);
 
@@ -305,8 +271,9 @@ export default function GoalAnalytics() {
       <div className="bg-surface rounded-xl border shadow-sm p-4">
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-fg-muted uppercase tracking-wide">De</label>
+            <label htmlFor="ga-from" className="text-xs font-medium text-fg-muted uppercase tracking-wide">De</label>
             <input
+              id="ga-from"
               type="date"
               value={from}
               onChange={e => setFrom(e.target.value)}
@@ -314,8 +281,9 @@ export default function GoalAnalytics() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-fg-muted uppercase tracking-wide">Até</label>
+            <label htmlFor="ga-to" className="text-xs font-medium text-fg-muted uppercase tracking-wide">Até</label>
             <input
+              id="ga-to"
               type="date"
               value={to}
               onChange={e => setTo(e.target.value)}
@@ -323,9 +291,10 @@ export default function GoalAnalytics() {
             />
           </div>
           <button
-            onClick={fetch}
+            type="button"
+            onClick={() => setReloadKey(k => k + 1)}
             disabled={loading}
-            className="px-4 py-2 rounded-lg text-sm font-semibold bg-accent text-accent-fg hover:brightness-110 disabled:opacity-50 transition-colors"
+            className="btn btn-primary px-4"
           >
             {loading ? "Carregando…" : "Aplicar"}
           </button>
@@ -403,12 +372,12 @@ export default function GoalAnalytics() {
                   </thead>
                   <tbody>
                     {data.players.map((p, i) => {
-                      const ci = colorMap.get(p.name) ?? i;
+                      const ci = colorMap.get(p.playerId) ?? i;
                       const c = getC(ci);
                       const maxTotal = data.players[0]?.total ?? 1;
                       const pct = Math.round((p.total / maxTotal) * 100);
                       return (
-                        <tr key={p.name} className="border-b last:border-0 hover:bg-surface-raised transition-colors">
+                        <tr key={p.playerId} className="border-b last:border-0 hover:bg-surface-raised transition-colors">
                           <td className="px-4 py-3 text-fg-subtle text-xs font-medium">{i + 1}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
@@ -464,12 +433,12 @@ export default function GoalAnalytics() {
               ) : (
                 <div className="divide-y">
                   {data.pairs.map((pair, i) => {
-                    const fromC = getC(colorMap.get(pair.from) ?? 0);
-                    const toC = getC(colorMap.get(pair.to) ?? 1);
+                    const fromC = getC(colorMap.get(pair.fromId) ?? 0);
+                    const toC = getC(colorMap.get(pair.toId) ?? 1);
                     const maxPair = data.pairs[0].count;
                     const pct = Math.round((pair.count / maxPair) * 100);
                     return (
-                      <div key={`${pair.from}${pair.to}`} className="px-4 py-3 hover:bg-surface-raised transition-colors">
+                      <div key={`${pair.fromId}:${pair.toId}`} className="px-4 py-3 hover:bg-surface-raised transition-colors">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-xs text-fg-subtle w-4 text-right">{i + 1}</span>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${fromC.bg} ${fromC.text} ${fromC.border}`}>{pair.from}</span>
@@ -501,13 +470,13 @@ export default function GoalAnalytics() {
               ) : (
                 <div className="divide-y">
                   {data.trios.map((trio, i) => {
-                    const preC = getC(colorMap.get(trio.pre) ?? 0);
-                    const asstC = getC(colorMap.get(trio.assist) ?? 1);
-                    const scrC = getC(colorMap.get(trio.scorer) ?? 2);
+                    const preC = getC(colorMap.get(trio.preId) ?? 0);
+                    const asstC = getC(colorMap.get(trio.assistId) ?? 1);
+                    const scrC = getC(colorMap.get(trio.scorerId) ?? 2);
                     const maxTrio = data.trios[0].count;
                     const pct = Math.round((trio.count / maxTrio) * 100);
                     return (
-                      <div key={`${trio.pre}${trio.assist}${trio.scorer}`} className="px-4 py-3 hover:bg-surface-raised transition-colors">
+                      <div key={`${trio.preId}:${trio.assistId}:${trio.scorerId}`} className="px-4 py-3 hover:bg-surface-raised transition-colors">
                         <div className="flex items-center gap-1.5 flex-wrap mb-2">
                           <span className="text-xs text-fg-subtle w-4 text-right">{i + 1}</span>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${preC.bg} ${preC.text} ${preC.border}`}>{trio.pre}</span>
@@ -538,11 +507,11 @@ export default function GoalAnalytics() {
               </div>
               <div className="divide-y">
                 {passFlow.map((entry, i) => {
-                  const fromC = getC(colorMap.get(entry.from) ?? 0);
-                  const toC = getC(colorMap.get(entry.to) ?? 1);
+                  const fromC = getC(colorMap.get(entry.fromId ?? 0) ?? 0);
+                  const toC = getC(colorMap.get(entry.toId ?? 0) ?? 1);
                   const pct = Math.round((entry.count / passFlow[0].count) * 100);
                   return (
-                    <div key={`${entry.from}→${entry.to}`} className="px-4 py-3 hover:bg-surface-raised transition-colors">
+                    <div key={`${entry.fromId}:${entry.toId}`} className="px-4 py-3 hover:bg-surface-raised transition-colors">
                       <div className="flex items-center gap-2 mb-1.5">
                         <span className="text-xs text-fg-subtle w-5 text-right font-medium">{i + 1}</span>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${fromC.bg} ${fromC.text} ${fromC.border}`}>{entry.from}</span>
@@ -578,16 +547,16 @@ export default function GoalAnalytics() {
               {historyOpen && (
                 <div className="divide-y max-h-96 overflow-y-auto">
                   {data.goalLinks.map((l, i) => {
-                    const scorerIdx = colorMap.get(l.scorerName) ?? 0;
-                    const assistIdx = l.assistName ? (colorMap.get(l.assistName) ?? 1) : -1;
-                    const preIdx = l.preAssistName ? (colorMap.get(l.preAssistName) ?? 2) : -1;
+                    const scorerIdx = colorMap.get(l.scorerId) ?? 0;
+                    const assistIdx = l.assistName ? (colorMap.get(l.assistId ?? 0) ?? 1) : -1;
+                    const preIdx = l.preAssistName ? (colorMap.get(l.preAssistId ?? 0) ?? 2) : -1;
                     return (
                       <div key={i} className="px-4 py-2.5 hover:bg-surface-raised flex items-center gap-3 flex-wrap">
                         <Link
                           to={`/match/${l.matchId}/goals`}
                           className="text-xs text-fg-subtle hover:text-fg-secondary underline underline-offset-2 whitespace-nowrap transition-colors"
                         >
-                          {fmtDate(l.matchTimestamp)}
+                          {fmtDateBR(l.matchTimestamp)}
                         </Link>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {preIdx >= 0 && l.preAssistName && (

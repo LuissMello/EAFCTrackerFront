@@ -1,104 +1,20 @@
 // src/pages/PlayerStatisticsByDatePage.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import api from "../services/api.ts";
+import api, { isCanceled } from "../services/api.ts";
+import { API_ENDPOINTS } from "../config/urls.ts";
+import { useRefresh } from "../hooks/useRefresh.tsx";
+import { daysAgoYmd, toYmd, fmtBRFromISO } from "../utils/date.ts";
 import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
 import type { PlayerStats } from "../types/stats";
 import { Trophy, TrendingDown } from "lucide-react";
 import { Tooltip } from "../components/Tooltip.tsx";
 import { RatingPill } from "../components/ui.tsx";
-
-// ===== Tipos vindos da API =====
-type FullMatchStatisticsDto = {
-    overall?: {
-        totalMatches?: number;
-        totalWins?: number;
-        totalDraws?: number;
-        totalLosses?: number;
-
-        passAccuracyPercent?: number; PassAccuracyPercent?: number;
-        tackleSuccessPercent?: number; TackleSuccessPercent?: number;
-    };
-    players?: PlayerStats[];
-    clubs?: Array<{
-        clubId?: number; ClubId?: number;
-        goalsFor?: number; GoalsFor?: number;
-        goalsAgainst?: number; GoalsAgainst?: number;
-    }>;
-};
-
-type FullMatchStatisticsByDayDto = {
-    date: string; // "YYYY-MM-DD"
-    statistics: FullMatchStatisticsDto;
-};
-
-type DayBlock = {
-    date: string;
-    matchesCount: number;
-    wins: number;
-    draws: number;
-    losses: number;
-    goalsFor: number;
-    goalsAgainst: number;
-    players: PlayerStats[];
-};
-
-// ===== Utils =====
-function fmtYYYYMMDD(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const da = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${da}`;
-}
-const toNum = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-
-// "2025-11-04" -> "04/11/2025"
-function fmtBRFromISO(iso: string) {
-    if (!iso || iso.length < 10) return iso ?? "";
-    const [y, m, d] = iso.substring(0, 10).split("-");
-    return `${d}/${m}/${y}`;
-}
-
-// ======= Cores por data (NUNCA repete entre datas diferentes) =======
-type DateColor = { bg: string; border: string; fg: string };
-
-function buildDateColorMap(datesISODesc: string[]): Map<string, DateColor> {
-    const uniq: string[] = [];
-    const seen = new Set<string>();
-    for (const d of datesISODesc) {
-        const key = d.slice(0, 10);
-        if (!seen.has(key)) {
-            seen.add(key);
-            uniq.push(key);
-        }
-    }
-
-    const map = new Map<string, DateColor>();
-    const GOLDEN_ANGLE = 137.508;
-    for (let i = 0; i < uniq.length; i++) {
-        const h = (i * GOLDEN_ANGLE) % 360;
-        const bg = `hsl(${h} 80% 88%)`;
-        const border = `hsl(${h} 75% 45%)`;
-        const fg = "#111827";
-        map.set(uniq[i], { bg, border, fg });
-    }
-    return map;
-}
-
-const DateBadge: React.FC<{ dateISO: string; colorMap: Map<string, DateColor>; className?: string }> = ({ dateISO, colorMap, className }) => {
-    const key = dateISO.slice(0, 10);
-    const c = colorMap.get(key) ?? { bg: "#E5E7EB", border: "#9CA3AF", fg: "#111827" };
-    return (
-        <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${className ?? ""}`}
-            style={{ backgroundColor: c.bg, color: c.fg, borderColor: c.border }}
-            title={fmtBRFromISO(dateISO)}
-            aria-label={fmtBRFromISO(dateISO)}
-        >
-            {fmtBRFromISO(dateISO)}
-        </span>
-    );
-};
+import { toNum } from "../utils/number.ts";
+import { buildDateColorMap } from "../utils/dateColors.ts";
+import { getPassPct, getTacklePct, getMatchesPlayed, getSuccessfulTackles } from "../utils/playerDto.ts";
+import { DateBadge } from "../components/DateBadge.tsx";
+import type { FullMatchStatisticsByDayDto, DayBlock } from "../types/statsByDate.ts";
 
 /** Barra horizontal V/E/D para resumos */
 function RecordBar({ wins, draws, losses }: { wins: number; draws: number; losses: number }) {
@@ -125,43 +41,6 @@ function MiniBar({ value, max }: { value: number; max: number }) {
     return <div className="h-1.5 rounded bg-accent mt-1" style={{ width: `${w}%` }} />;
 }
 
-// Helpers para ler percentuais do DTO (camelCase / PascalCase)
-function getPassPct(p: any): number {
-    const v =
-        p?.passAccuracyPercent ??
-        p?.PassAccuracyPercent ??
-        p?.passSuccessPct ??
-        p?.PassSuccessPct ??
-        0;
-    return Number.isFinite(v) ? Number(v) : 0;
-}
-function getTacklePct(p: any): number {
-    const v =
-        p?.tackleSuccessPercent ??
-        p?.TackleSuccessPercent ??
-        0;
-    return Number.isFinite(v) ? Number(v) : 0;
-}
-// Matches/jogos do jogador no dia (tolerante a nomes)
-function getMatchesPlayed(p: any): number {
-    return toNum(
-        p?.matchesPlayed ??
-        p?.MatchesPlayed ??
-        p?.totalMatches ??
-        p?.TotalMatches ??
-        0
-    );
-}
-
-// Número de tackles certos (não tentativas, não %)
-function getSuccessfulTackles(p: any): number {
-    return toNum(
-        p?.totalTacklesMade ??   // camelCase
-        p?.TotalTacklesMade ??   // PascalCase (se vier assim)
-        0
-    );
-}
-
 const Info: React.FC<{ title: string }> = ({ title }) => (
     <Tooltip content={title}>
         <span
@@ -174,6 +53,7 @@ const Info: React.FC<{ title: string }> = ({ title }) => (
 );
 
 export default function PlayerStatisticsByDatePage() {
+    const { refreshKey } = useRefresh();
     const [searchParams, setSearchParams] = useSearchParams();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -181,26 +61,29 @@ export default function PlayerStatisticsByDatePage() {
     const [activeRange, setActiveRange] = useState<string | null>(null);
 
     // clubes selecionados (?clubIds=355651,352016,...)
-    const clubIds = useMemo(() => {
+    // Memoizado pela string dos IDs: outras mudanças na URL (ex.: dateFrom/dateTo) não refazem a busca
+    const clubIdsKey = (() => {
         const raw = searchParams.get("clubIds");
-        if (!raw) return [] as number[];
+        if (!raw) return "";
         return raw
             .split(",")
             .map((s) => parseInt(s.trim(), 10))
-            .filter((n) => !Number.isNaN(n));
-    }, [searchParams]);
+            .filter((n) => !Number.isNaN(n))
+            .join(",");
+    })();
+    const clubIds = useMemo(() => (clubIdsKey ? clubIdsKey.split(",").map(Number) : []), [clubIdsKey]);
 
     // range (URL ou mês atual)
     const [dateFrom, setDateFrom] = useState(() => {
         const fromUrl = searchParams.get("dateFrom");
         if (fromUrl) return fromUrl;
-        return "2025-10-14"; // FIXO
+        return daysAgoYmd(30); // padrão: últimos 30 dias
     });
     const [dateTo, setDateTo] = useState(() => {
         const toUrl = searchParams.get("dateTo");
         if (toUrl) return toUrl;
         const now = new Date();
-        return fmtYYYYMMDD(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+        return toYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     });
 
     const handleRangeChange = (start: string, end: string, range: string | null = null) => {
@@ -210,38 +93,39 @@ export default function PlayerStatisticsByDatePage() {
         const sp = new URLSearchParams(searchParams);
         sp.set("dateFrom", start);
         sp.set("dateTo", end);
-        setSearchParams(sp);
+        setSearchParams(sp, { replace: true });
     };
 
     const setQuickRangeDays = (nDays: number) => {
         const end = new Date();
         const start = new Date();
         start.setDate(end.getDate() - (nDays - 1));
-        handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end), `${nDays}d`);
+        handleRangeChange(toYmd(start), toYmd(end), `${nDays}d`);
     };
     const setCurrentMonth = () => {
         const now = new Date();
         const start = new Date(now.getFullYear(), now.getMonth(), 1);
         const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end), "currentMonth");
+        handleRangeChange(toYmd(start), toYmd(end), "currentMonth");
     };
     const setPreviousMonth = () => {
         const now = new Date();
         const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const end = new Date(now.getFullYear(), now.getMonth(), 0);
-        handleRangeChange(fmtYYYYMMDD(start), fmtYYYYMMDD(end), "prevMonth");
+        handleRangeChange(toYmd(start), toYmd(end), "prevMonth");
     };
 
     // ===== Fetch =====
     useEffect(() => {
-        let disposed = false;
+        const controller = new AbortController();
+        const { signal } = controller;
 
         async function fetchData() {
             setLoading(true);
             setError(null);
             try {
                 if (!clubIds.length) {
-                    if (!disposed) setDays([]);
+                    setDays([]);
                     return;
                 }
 
@@ -252,9 +136,10 @@ export default function PlayerStatisticsByDatePage() {
                 };
 
                 const { data } = await api.get<FullMatchStatisticsByDayDto[]>(
-                    "/api/Clubs/matches/statistics/by-date-range-grouped",
-                    { params }
+                    API_ENDPOINTS.MATCHES_STATS_BY_DATE,
+                    { params, signal }
                 );
+                if (signal.aborted) return;
 
                 const blocks: DayBlock[] = (Array.isArray(data) ? data : [])
                     .map((row) => {
@@ -287,19 +172,18 @@ export default function PlayerStatisticsByDatePage() {
                     })
                     .sort((a, b) => b.date.localeCompare(a.date));
 
-                if (!disposed) setDays(blocks);
+                setDays(blocks);
             } catch (e: any) {
-                if (!disposed) setError(e?.message ?? "Falha ao carregar dados");
+                if (signal.aborted || isCanceled(e)) return;
+                setError(e?.message ?? "Falha ao carregar dados");
             } finally {
-                if (!disposed) setLoading(false);
+                if (!signal.aborted) setLoading(false);
             }
         }
 
         fetchData();
-        return () => {
-            disposed = true;
-        };
-    }, [dateFrom, dateTo, clubIds]);
+        return () => controller.abort();
+    }, [dateFrom, dateTo, clubIds, refreshKey]);
 
     // ===== Mapa de cores por data =====
     const dateColorMap = useMemo(() => {

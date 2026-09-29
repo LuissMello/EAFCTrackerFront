@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import api from "../services/api.ts";
-import { crestUrl } from "../config/urls.ts";
+import api, { isUnauthorized } from "../services/api.ts";
+import { API_ENDPOINTS, crestUrl } from "../config/urls.ts";
+import { MSG_LOGIN_REQUIRED, useAuth } from "../hooks/useAuth.tsx";
 import { Crest } from "./ui.tsx";
 
 interface PlayerRow {
@@ -57,6 +58,7 @@ export function GoalLinkingSection({
   players,
 }: GoalLinkingSectionProps) {
   const [goalLinks, setGoalLinks] = useState<GoalLink[]>([]);
+  const { isAdmin, openLogin } = useAuth();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -99,6 +101,7 @@ export function GoalLinkingSection({
 
     const fetchExistingGoals = async () => {
       setLoading(true);
+      setError(null);
       try {
         const { data } = await api.get<ApiGoalsResponse>(`/api/Matches/${matchId}/goals`);
 
@@ -106,13 +109,7 @@ export function GoalLinkingSection({
 
         // Filter goals for this club only (use Number() to ensure type match)
         const numericClubId = Number(clubId);
-        let clubGoals = data.goals.filter((g) => Number(g.clubId) === numericClubId);
-
-        // If no goals for this club but API has goals, it might be from another club
-        // the user owns (e.g., viewing old match from different club). Use those goals.
-        if (clubGoals.length === 0 && data.goals.length > 0) {
-          clubGoals = data.goals;
-        }
+        const clubGoals = data.goals.filter((g) => Number(g.clubId) === numericClubId);
 
         if (clubGoals.length > 0) {
           // Map API response to GoalLink format
@@ -133,10 +130,10 @@ export function GoalLinkingSection({
           setSaved(false);
         }
       } catch {
-        // API error (e.g., 404) - use initial links
+        // Falha de leitura não significa que não existam vínculos gravados.
         if (!cancelled) {
-          setGoalLinks(initialGoalLinks);
-          setSaved(false);
+          setGoalLinks([]);
+          setError("Não foi possível carregar os vínculos. Tente abrir a partida novamente antes de editar.");
         }
       } finally {
         if (!cancelled) {
@@ -216,10 +213,15 @@ export function GoalLinkingSection({
   };
 
   const handleSubmit = async () => {
+    // Registrar gols é uma ação administrativa: sem sessão, pede login em vez de chamar a API
+    if (!isAdmin) {
+      openLogin(MSG_LOGIN_REQUIRED);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await api.post(`/api/Matches/${matchId}/goals`, {
+      await api.post(API_ENDPOINTS.MATCH_GOALS(matchId), {
         goals: goalLinks.map((g) => ({
           scorerPlayerEntityId: g.scorerPlayerId,
           assistPlayerEntityId: g.assistPlayerId,
@@ -228,7 +230,12 @@ export function GoalLinkingSection({
       });
       setSaved(true);
     } catch (err: any) {
-      setError(err?.message ?? "Erro ao salvar vínculos");
+      // 401: o modal de login já foi aberto pelo interceptor
+      setError(
+        isUnauthorized(err)
+          ? "É necessário entrar como administrador para salvar os vínculos."
+          : err?.message ?? "Erro ao salvar vínculos"
+      );
     } finally {
       setSaving(false);
     }
@@ -284,6 +291,15 @@ export function GoalLinkingSection({
   }
 
   // No goals case
+  if (error && goalLinks.length === 0) {
+    return (
+      <div className="bg-surface shadow-sm rounded-xl p-4 border">
+        <h3 className="text-lg font-semibold mb-4">{clubName} - Assistências</h3>
+        <p role="alert" className="text-sm text-negative-fg">{error}</p>
+      </div>
+    );
+  }
+
   if (goalLinks.length === 0) {
     return (
       <div className="bg-surface shadow-sm rounded-xl p-4 border">
@@ -389,6 +405,7 @@ export function GoalLinkingSection({
           <button
             onClick={handleSubmit}
             disabled={saving}
+            title={isAdmin ? undefined : "Requer login de administrador"}
             className="inline-flex items-center gap-2 rounded-lg border border-accent px-4 py-2 text-sm font-medium shadow-sm bg-accent text-accent-fg hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {saving ? "Salvando..." : "Salvar Vínculos"}

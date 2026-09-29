@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import api from "../services/api.ts";
 import {
   Chart as ChartJS,
@@ -14,7 +14,11 @@ import {
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 import { useClub } from "../hooks/useClub.tsx";
+import { useClubIds } from "../hooks/useClubIds.ts";
+import { useAbortableFetch } from "../hooks/useAbortableFetch.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
+import { parseTimestamp, fmtDateBRShort } from "../utils/date.ts";
+import { withAlpha, colorFromId } from "../utils/chart.ts";
 import OverallSummaryCard, { ClubOverallRow } from "../components/OverallSummaryCard.tsx";
 import { useTheme } from "../hooks/useTheme.tsx";
 import { chartTheme, cssVar } from "../utils/themeColors.ts";
@@ -72,57 +76,26 @@ interface ClubSeries {
 // Helpers
 // =========================
 
-const BR_DATE = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "2-digit",
-});
-const formatDate = (iso: string) => BR_DATE.format(new Date(iso));
-
-const toNum = (s?: string | null): number => {
-  if (s === null || s === undefined) return 0;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
-};
-
-// cor → rgba com alpha
-function withAlpha(hex: string, alpha: number) {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-// hash → cor estável (mesma função usada em Trends)
-function colorFromId(num: number) {
-  let x = Math.imul(num ^ 0x9e3779b9, 0x85ebca6b);
-  x ^= x >>> 13;
-  x = Math.imul(x, 0xc2b2ae35);
-  x ^= x >>> 16;
-  const r = (x & 0xff).toString(16).padStart(2, "0");
-  const g = ((x >>> 8) & 0xff).toString(16).padStart(2, "0");
-  const b = ((x >>> 16) & 0xff).toString(16).padStart(2, "0");
-  return `#${r}${g}${b}`.toUpperCase();
-}
-
-// média móvel simples
-function movingAvg(arr: number[], win = 5) {
-  if (!arr || arr.length === 0) return [];
-  const out: number[] = [];
-  let sum = 0;
-  for (let i = 0; i < arr.length; i++) {
-    sum += arr[i] ?? 0;
-    if (i >= win) sum -= arr[i - win] ?? 0;
-    out.push(i >= win - 1 ? sum / win : arr[i]);
-  }
-  return out;
-}
 
 const pad = (arr: (number | null)[], len: number) => [
   ...arr,
   ...Array(Math.max(0, len - arr.length)).fill(null),
 ];
+
+const knownNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+// Uma média não deve atravessar um trecho sem captura de SR.
+const movingAvgWithGaps = (values: (number | null)[], windowSize: number): (number | null)[] =>
+  values.map((_, index) => {
+    const window = values.slice(Math.max(0, index - windowSize + 1), index + 1);
+    return window.some((value) => value === null)
+      ? null
+      : window.reduce<number>((total, value) => total + (value ?? 0), 0) / window.length;
+  });
 
 type MatchResult = "W" | "D" | "L";
 const resultOf = (p: OverallPoint): MatchResult =>
@@ -175,7 +148,7 @@ const resultMarkersPlugin = {
 // Partidas antes das 8h contam no dia anterior (sessões que viram a madrugada,
 // ex.: 22h→2h, viram uma única "sessão" / dia).
 const DAY_CUTOFF_HOUR = 8;
-const sessionInstant = (iso: string) => new Date(new Date(iso).getTime() - DAY_CUTOFF_HOUR * 3600_000);
+const sessionInstant = (iso: string) => new Date((parseTimestamp(iso)?.getTime() ?? NaN) - DAY_CUTOFF_HOUR * 3600_000);
 
 // "dia de sessão" (com cutoff de 8h) usado para agrupar partidas
 const dayKey = (iso: string) => {
@@ -189,7 +162,7 @@ interface DayZone {
   start: number; // índice (na série) da primeira partida do dia
   end: number; // índice da última partida do dia
   label: string; // ex.: "30/05"
-  delta: number; // variação líquida de SR no dia
+  delta: number | null; // null quando falta captura anterior ou final
   count: number; // partidas no dia
 }
 
@@ -222,7 +195,7 @@ const dayZonesPlugin = {
     ctx.save();
     groups.forEach((g, gi) => {
       const { left, right } = boundsFor(g, gi);
-      ctx.fillStyle = g.delta > 0 ? zonePos : g.delta < 0 ? zoneNeg : zoneNeutral;
+      ctx.fillStyle = g.delta !== null && g.delta > 0 ? zonePos : g.delta !== null && g.delta < 0 ? zoneNeg : zoneNeutral;
       ctx.fillRect(left, chartArea.top, right - left, chartArea.bottom - chartArea.top);
       if (gi < groups.length - 1) {
         ctx.strokeStyle = t.grid;
@@ -257,14 +230,100 @@ const dayZonesPlugin = {
       ctx.fillStyle = t.fgMuted;
       ctx.textBaseline = "top";
       ctx.fillText(g.label, cx, chartArea.top + 3);
-      const deltaText = g.delta > 0 ? `+${g.delta}` : `${g.delta}`;
+      const deltaText = g.delta === null ? "—" : g.delta > 0 ? `+${g.delta}` : `${g.delta}`;
       ctx.font = "bold 11px sans-serif";
-      ctx.fillStyle = g.delta > 0 ? t.positive : g.delta < 0 ? t.negative : t.fgMuted;
-      ctx.fillText(`${deltaText} SR`, cx, chartArea.top + 15);
+      ctx.fillStyle = g.delta !== null && g.delta > 0 ? t.positive : g.delta !== null && g.delta < 0 ? t.negative : t.fgMuted;
+      ctx.fillText(g.delta === null ? deltaText : `${deltaText} SR`, cx, chartArea.top + 15);
     });
     ctx.restore();
   },
 };
+
+// =========================
+// MatchHistoryTable
+// =========================
+
+const RESULT_BADGE: Record<MatchResult, string> = {
+  W: "bg-positive-soft text-positive-fg",
+  D: "bg-warning-soft text-warning-fg",
+  L: "bg-negative-soft text-negative-fg",
+};
+const RESULT_LABEL: Record<MatchResult, string> = { W: "V", D: "E", L: "D" };
+
+function MatchHistoryTable({ series, showClubName }: { series: ClubSeries; showClubName?: boolean }) {
+  const rows = [...series.points].reverse(); // mais recente primeiro
+
+  return (
+    <div className="bg-surface border rounded-xl overflow-hidden">
+      {showClubName && (
+        <div className="px-4 py-3 border-b font-semibold text-fg-secondary">{series.clubName}</div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-surface-raised text-xs text-fg-muted uppercase tracking-wide">
+              <th scope="col" className="px-3 py-2 text-left">Data</th>
+              <th scope="col" className="px-3 py-2 text-left">Adversário</th>
+              <th scope="col" className="px-3 py-2 text-center">Placar</th>
+              <th scope="col" className="px-3 py-2 text-center">Res.</th>
+              <th scope="col" className="px-3 py-2 text-right">SR</th>
+              <th scope="col" className="px-3 py-2 text-right">SR Adv.</th>
+              <th scope="col" className="px-3 py-2 text-right">Δ SR</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((p, i) => {
+              const ourSR = knownNumber(p.ourStats?.skillRating);
+              const oppSR = knownNumber(p.oppStats?.skillRating);
+              const prevP = rows[i + 1]; // partida anterior (mais antiga)
+              const previousSR = knownNumber(prevP?.ourStats?.skillRating);
+              const delta = ourSR !== null && previousSR !== null ? ourSR - previousSR : null;
+              const res = resultOf(p);
+              const scoreColor =
+                res === "W" ? "text-positive" : res === "L" ? "text-negative" : "text-warning";
+
+              return (
+                <tr key={p.matchId} className="hover:bg-surface-raised transition-colors">
+                  <td className="px-3 py-2 text-fg-muted whitespace-nowrap">{fmtDateBRShort(p.date)}</td>
+                  <td className="px-3 py-2 text-fg font-medium max-w-[140px] truncate">
+                    {p.oppName || "—"}
+                  </td>
+                  <td className={`px-3 py-2 text-center font-bold ${scoreColor}`}>
+                    {p.goalsFor}–{p.goalsAgainst}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <span className={`inline-block text-xs font-bold px-1.5 py-0.5 rounded ${RESULT_BADGE[res]}`}>
+                      {RESULT_LABEL[res]}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-fg">
+                    {ourSR ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-fg-subtle">
+                    {oppSR ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono font-semibold">
+                    {delta === null ? (
+                      <span className="text-fg-subtle">—</span>
+                    ) : (
+                      <span
+                        className={
+                          delta > 0 ? "text-positive" : delta < 0 ? "text-negative" : "text-fg-subtle"
+                        }
+                      >
+                        {delta > 0 ? `+${delta}` : delta}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 // =========================
 // Component
@@ -274,18 +333,13 @@ type Metric = "sr" | "division";
 type ChartKind = "line" | "area";
 
 export default function OverallEvolution() {
-  const { club, selectedClubIds, selectedClubs } = useClub();
+  const { club, selectedClubs } = useClub();
   const { resolvedTheme } = useTheme();
 
   // ids efetivos (multi). Se nenhum selecionado, tenta o single legacy.
-  const idsToUse = useMemo<number[]>(
-    () => (selectedClubIds?.length ? selectedClubIds : club?.clubId ? [club.clubId] : []),
-    [selectedClubIds, club?.clubId]
-  );
+  const idsToUse = useClubIds();
 
   const [pageSize, setPageSize] = useState(20);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState<number>(0);
 
   const [seriesByClub, setSeriesByClub] = useState<Record<number, ClubSeries>>({});
@@ -298,79 +352,69 @@ export default function OverallEvolution() {
   type XMode = "index" | "date";
   const [xMode, setXMode] = useState<XMode>("date");
 
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
   // -------- Fetch (multi) --------
-  useEffect(() => {
-    if (!idsToUse.length) return;
-    const controller = new AbortController();
+  const { loading, error } = useAbortableFetch(
+    async (signal) => {
+      const promises = idsToUse.map((id) =>
+        api.get<PagedResult<MatchWithOverallStatsDto>>(API_ENDPOINTS.CLUB_MATCHES_OVERALL(id, pageSize), {
+          signal,
+        })
+      );
 
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
+      const resArr = await Promise.all(promises);
+      if (signal.aborted) return;
 
-        const promises = idsToUse.map((id) =>
-          api.get<PagedResult<MatchWithOverallStatsDto>>(API_ENDPOINTS.CLUB_MATCHES_OVERALL(id, pageSize), {
-            signal: (controller as any).signal,
-          })
-        );
+      const map: Record<number, ClubSeries> = {};
+      resArr.forEach((res, idx) => {
+        const id = idsToUse[idx];
+        const items = res.data?.items ?? [];
+        const points: OverallPoint[] = items
+          .map((it) => ({
+            matchId: it.matchId,
+            date: it.date,
+            ourStats: it.ourClub?.overallStats ?? null,
+            oppStats: it.opponent?.overallStats ?? null,
+            oppName: it.opponent?.clubName ?? "—",
+            goalsFor: it.ourClub?.goals ?? 0,
+            goalsAgainst: it.opponent?.goals ?? 0,
+          }))
+          // página 1 vem do mais novo → mais antigo; ordena ascendente por data
+          .sort((a, b) => (parseTimestamp(a.date)?.getTime() ?? 0) - (parseTimestamp(b.date)?.getTime() ?? 0));
 
-        const resArr = await Promise.all(promises);
-        if (!mountedRef.current) return;
+        const meta = selectedClubs.find((c) => c.clubId === id);
+        map[id] = {
+          clubId: id,
+          clubName:
+            meta?.clubName ??
+            items.find((it) => it.ourClub?.clubName)?.ourClub?.clubName ??
+            `Clube ${id}`,
+          crestAssetId: meta?.crestAssetId ?? null,
+          points,
+        };
+      });
 
-        const map: Record<number, ClubSeries> = {};
-        resArr.forEach((res, idx) => {
-          const id = idsToUse[idx];
-          const items = res.data?.items ?? [];
-          const points: OverallPoint[] = items
-            .map((it) => ({
-              matchId: it.matchId,
-              date: it.date,
-              ourStats: it.ourClub?.overallStats ?? null,
-              oppStats: it.opponent?.overallStats ?? null,
-              oppName: it.opponent?.clubName ?? "—",
-              goalsFor: it.ourClub?.goals ?? 0,
-              goalsAgainst: it.opponent?.goals ?? 0,
-            }))
-            // página 1 vem do mais novo → mais antigo; ordena ascendente por data
-            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-          const meta = selectedClubs.find((c) => c.clubId === id);
-          map[id] = {
-            clubId: id,
-            clubName:
-              meta?.clubName ??
-              items.find((it) => it.ourClub?.clubName)?.ourClub?.clubName ??
-              `Clube ${id}`,
-            crestAssetId: meta?.crestAssetId ?? null,
-            points,
-          };
-        });
-
-        setSeriesByClub(map);
-      } catch (e: any) {
-        if (!mountedRef.current) return;
-        if (e?.name === "CanceledError" || e?.name === "AbortError") return;
-        setError(e?.message ?? "Erro ao carregar evolução");
-      } finally {
-        if (mountedRef.current) setLoading(false);
-      }
-    })();
-
-    return () => controller.abort();
-  }, [idsToUse.join(","), pageSize, reloadNonce]);
+      setSeriesByClub(map);
+    },
+    [idsToUse.join(","), pageSize, reloadNonce],
+    { enabled: idsToUse.length > 0, errorMessage: "Erro ao carregar evolução" }
+  );
 
   // -------- Derived --------
+  // Nome/escudo vêm da seleção atual quando disponíveis (podem chegar depois da busca das séries)
   const clubsWithData = useMemo(
-    () => idsToUse.map((id) => seriesByClub[id]).filter((x): x is ClubSeries => !!x),
-    [idsToUse, seriesByClub]
+    () =>
+      idsToUse
+        .map((id) => {
+          const s = seriesByClub[id];
+          if (!s) return undefined;
+          const meta = selectedClubs.find((c) => c.clubId === id);
+          if (!meta) return s;
+          const clubName = meta.clubName ?? s.clubName;
+          const crestAssetId = s.crestAssetId ?? meta.crestAssetId ?? null;
+          return clubName === s.clubName && crestAssetId === s.crestAssetId ? s : { ...s, clubName, crestAssetId };
+        })
+        .filter((x): x is ClubSeries => !!x),
+    [idsToUse, seriesByClub, selectedClubs]
   );
 
   const singleClub = clubsWithData.length === 1 ? clubsWithData[0] : null;
@@ -389,7 +433,7 @@ export default function OverallEvolution() {
   const xIndexLabels = useMemo(() => Array.from({ length: maxLen }, (_, i) => `Jogo ${i + 1}`), [maxLen]);
   const xDateLabels = useMemo(() => {
     if (!singleClub) return xIndexLabels;
-    return singleClub.points.map((p) => formatDate(p.date));
+    return singleClub.points.map((p) => fmtDateBRShort(p.date));
   }, [singleClub, xIndexLabels]);
   const xLabels = effectiveXMode === "index" ? xIndexLabels : xDateLabels;
 
@@ -405,14 +449,13 @@ export default function OverallEvolution() {
     for (let i = 1; i <= pts.length; i++) {
       if (i === pts.length || dayKey(pts[i].date) !== dayKey(pts[start].date)) {
         const end = i - 1;
-        const srEnd = toNum(pts[end].ourStats?.skillRating);
-        // baseline = SR antes da 1ª partida do dia (ou a própria 1ª, p/ o dia inicial)
-        const srBase = toNum(pts[start > 0 ? start - 1 : start].ourStats?.skillRating);
+        const srEnd = knownNumber(pts[end].ourStats?.skillRating);
+        const srBase = start > 0 ? knownNumber(pts[start - 1].ourStats?.skillRating) : null;
         zones.push({
           start,
           end,
           label: formatDayShort(pts[start].date),
-          delta: srEnd - srBase,
+          delta: srEnd !== null && srBase !== null ? srEnd - srBase : null,
           count: end - start + 1,
         });
         start = i;
@@ -430,16 +473,19 @@ export default function OverallEvolution() {
 
     const datasets: any[] = clubsWithData.map((c) => {
       const raw = c.points.map((p) =>
-        metric === "sr" ? toNum(p.ourStats?.skillRating) : toNum(p.ourStats?.currentDivision)
+        metric === "sr" ? knownNumber(p.ourStats?.skillRating) : knownNumber(p.ourStats?.currentDivision)
       );
-      const vals = metric === "sr" && smooth ? movingAvg(raw, 5) : raw;
+      const vals = metric === "sr" && smooth ? movingAvgWithGaps(raw, 5) : raw;
       const hex = colorFromId(c.clubId);
       // Variação de SR vs. jogo anterior (sempre a partir do SR real, não suavizado)
       const markers: SrMarker[] =
         metric === "sr"
           ? c.points.map((p, i) => {
               if (i === 0) return null;
-              const delta = toNum(p.ourStats?.skillRating) - toNum(c.points[i - 1].ourStats?.skillRating);
+              const currentSR = knownNumber(p.ourStats?.skillRating);
+              const previousSR = knownNumber(c.points[i - 1].ourStats?.skillRating);
+              if (currentSR === null || previousSR === null) return null;
+              const delta = currentSR - previousSR;
               const text = delta > 0 ? `+${delta}` : `${delta}`;
               return { text, color: RESULT_COLOR[resultOf(p)] };
             })
@@ -460,7 +506,7 @@ export default function OverallEvolution() {
 
     // SR de adversário (apenas single club, métrica SR) para contexto
     if (metric === "sr" && singleClub) {
-      const oppVals = singleClub.points.map((p) => toNum(p.oppStats?.skillRating));
+      const oppVals = singleClub.points.map((p) => knownNumber(p.oppStats?.skillRating));
       datasets.push({
         label: "SR adversário",
         data: pad(oppVals, maxLen),
@@ -502,7 +548,7 @@ export default function OverallEvolution() {
               const p = singleClub?.points?.[i];
               if (!p) return items?.[0]?.label ?? "";
               const vs = p.oppName ? ` vs ${p.oppName}` : "";
-              return `${formatDate(p.date)}${vs} • ${p.goalsFor}-${p.goalsAgainst}`;
+              return `${fmtDateBRShort(p.date)}${vs} • ${p.goalsFor}-${p.goalsAgainst}`;
             },
             label: (ctx: any) => {
               const v = ctx.raw as number;
@@ -716,6 +762,20 @@ export default function OverallEvolution() {
                   clubId={c.clubId}
                   clubName={c.clubName}
                   crestAssetId={c.crestAssetId}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* HISTÓRICO DE PARTIDAS */}
+          <div>
+            <div className="text-xs text-fg-muted mb-2">Histórico de partidas</div>
+            <div className="space-y-4">
+              {clubsWithData.map((c) => (
+                <MatchHistoryTable
+                  key={c.clubId}
+                  series={c}
+                  showClubName={clubsWithData.length > 1}
                 />
               ))}
             </div>

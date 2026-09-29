@@ -1,29 +1,37 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import api from "../services/api.ts";
+import api, { isCanceled } from "../services/api.ts";
 import { useClub } from "../hooks/useClub.tsx";
 import { PlayerStats, ClubStats } from "../types/stats";
 import { TeamStatsSection } from "../components/TeamStatsSection.tsx";
 import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
 import { API_ENDPOINTS } from "../config/urls.ts";
+import { useRefresh } from "../hooks/useRefresh.tsx";
 
 export default function PlayerStatisticsPage() {
+  const { refreshKey } = useRefresh();
   const { club, selectedClubs } = useClub();
   const fallbackClubId = club?.clubId ?? null;
 
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Lê os clubIds da URL (?clubIds=1,2,3). Se não houver, usa clubId único (back-compat).
-  const groupClubIds = useMemo(() => {
+  // A chave em string mantém o array estável: mudanças em outros parâmetros da URL não disparam nova busca.
+  const groupClubIdsKey = (() => {
     const raw = searchParams.get("clubIds");
     if (raw && raw.trim().length) {
       return raw
         .split(",")
         .map((s) => parseInt(s, 10))
-        .filter((n) => !Number.isNaN(n));
+        .filter((n) => !Number.isNaN(n))
+        .join(",");
     }
-    return fallbackClubId ? [fallbackClubId] : [];
-  }, [searchParams, fallbackClubId]);
+    return fallbackClubId ? String(fallbackClubId) : "";
+  })();
+  const groupClubIds = useMemo(
+    () => (groupClubIdsKey ? groupClubIdsKey.split(",").map(Number) : []),
+    [groupClubIdsKey]
+  );
 
   // estado
   const [players, setPlayers] = useState<PlayerStats[]>([]);
@@ -92,13 +100,14 @@ export default function PlayerStatisticsPage() {
 
   const fetchStats = useCallback(
     async (count: number) => {
-      setError(null);
-      setFetching(true);
-      setLoading(true);
-
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
+      const { signal } = controller;
+
+      setError(null);
+      setFetching(true);
+      setLoading(true);
 
       try {
         const ids = groupClubIds;
@@ -108,7 +117,6 @@ export default function PlayerStatisticsPage() {
           if (!singleId) {
             setPlayers([]);
             setClubStats(null);
-            setLoading(false);
             return;
           }
           const params: Record<string, any> = { count };
@@ -116,8 +124,9 @@ export default function PlayerStatisticsPage() {
 
           const { data } = await api.get(
             API_ENDPOINTS.CLUB_STATS(singleId),
-            { params, signal: controller.signal }
+            { params, signal }
           );
+          if (signal.aborted) return;
           setPlayers(data.players ?? []);
           setClubStats(data.clubs?.[0] ?? null);
         } else {
@@ -129,17 +138,21 @@ export default function PlayerStatisticsPage() {
 
           const { data } = await api.get(
             API_ENDPOINTS.CLUB_STATS_GROUPED,
-            { params, signal: controller.signal }
+            { params, signal }
           );
+          if (signal.aborted) return;
           setPlayers(data.players ?? []);
           setClubStats(data.clubs?.[0] ?? null);
         }
       } catch (err: any) {
-        if (err?.name === "CanceledError" || err?.message === "canceled") return;
+        if (signal.aborted || isCanceled(err)) return;
         setError(err?.message ?? "Erro ao buscar estatísticas.");
       } finally {
-        setLoading(false);
-        setFetching(false);
+        // Requisição cancelada/substituída não mexe no estado de carregamento da nova
+        if (!signal.aborted) {
+          setLoading(false);
+          setFetching(false);
+        }
       }
     },
     [groupClubIds, oppPlayers]
@@ -147,7 +160,8 @@ export default function PlayerStatisticsPage() {
 
   useEffect(() => {
     fetchStats(matchCount);
-  }, [fetchStats, matchCount]);
+    return () => abortRef.current?.abort();
+  }, [fetchStats, matchCount, refreshKey]);
 
   return (
     <div className="p-4 sm:p-6 max-w-[98vw] mx-auto">
@@ -191,8 +205,9 @@ export default function PlayerStatisticsPage() {
                 className="border rounded-lg px-3 py-2 w-28"
               />
               <button
+                type="button"
                 onClick={() => fetchStats(matchCount)}
-                className="px-3 py-2 rounded-lg bg-accent text-accent-fg hover:brightness-110"
+                className="btn btn-primary"
               >
                 Atualizar
               </button>

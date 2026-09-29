@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, CalendarDays, ArrowUpRight } from "lucide-react";
-import api from "../services/api.ts";
+import api, { isCanceled } from "../services/api.ts";
+import { API_ENDPOINTS } from "../config/urls.ts";
+import { useRefresh } from "../hooks/useRefresh.tsx";
 import { PlayerStatsTable } from "./PlayerStatsTable.tsx";
 import { Skeleton } from "./ui.tsx";
 import type { PlayerStats } from "../types/stats";
@@ -50,20 +52,25 @@ function labelForDate(iso: string): string {
  * Painel recolhível na Home com o último dia que aparece em /statisticsbydate —
  * um "como está o seu dia" sem precisar navegar e rolar até o final.
  */
-export default function LatestDayPanel({ clubIds }: { clubIds: number[] }) {
+export default function LatestDayPanel({ clubIds, showAllVersions = false }: { clubIds: number[]; showAllVersions?: boolean }) {
     const [day, setDay] = useState<DayDto | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [open, setOpen] = useState(false);
 
     const clubIdsKey = clubIds.join(",");
+    // "Atualizar" / modo ao vivo do cabeçalho: relê o dia sem recarregar a página
+    const { refreshKey } = useRefresh();
 
     useEffect(() => {
-        let disposed = false;
+        const controller = new AbortController();
+        const { signal } = controller;
 
         async function run() {
-            if (!clubIds.length) {
+            if (!clubIdsKey) {
                 setDay(null);
+                setError(null);
+                setLoading(false);
                 return;
             }
             setLoading(true);
@@ -78,25 +85,22 @@ export default function LatestDayPanel({ clubIds }: { clubIds: number[] }) {
                     start: fmtYYYYMMDD(start),
                     end: fmtYYYYMMDD(end),
                 };
-                const { data } = await api.get<DayDto[]>(
-                    "/api/Clubs/matches/statistics/by-date-range-grouped",
-                    { params }
-                );
+                const { data } = await api.get<DayDto[]>(API_ENDPOINTS.MATCHES_STATS_BY_DATE, { params, signal });
+                if (signal.aborted) return;
                 const arr = (Array.isArray(data) ? data : []).slice();
                 arr.sort((a, b) => String(b.date).localeCompare(String(a.date)));
-                if (!disposed) setDay(arr[0] ?? null);
+                setDay(arr[0] ?? null);
             } catch (e: any) {
-                if (!disposed) setError("Falha ao carregar o dia");
+                if (signal.aborted || isCanceled(e)) return;
+                setError("Falha ao carregar o dia");
             } finally {
-                if (!disposed) setLoading(false);
+                if (!signal.aborted) setLoading(false);
             }
         }
 
         run();
-        return () => {
-            disposed = true;
-        };
-    }, [clubIdsKey, clubIds.length]);
+        return () => controller.abort();
+    }, [clubIdsKey, refreshKey]);
 
     if (!clubIds.length) return null;
     if (loading && !day) {
@@ -140,7 +144,7 @@ export default function LatestDayPanel({ clubIds }: { clubIds: number[] }) {
 
                 <div className="min-w-0">
                     <div className="text-[11px] font-semibold uppercase tracking-widest text-fg-subtle">
-                        Acompanhamento do dia
+                        Acompanhamento do dia{showAllVersions ? " · todas as versões" : ""}
                     </div>
                     <div className="font-display font-bold text-lg uppercase tracking-wide leading-none text-fg">
                         {labelForDate(day.date)}

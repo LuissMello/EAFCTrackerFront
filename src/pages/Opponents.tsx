@@ -1,9 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { useClub } from "../hooks/useClub.tsx";
 import { Card, SectionHeader } from "../components/ui.tsx";
+import { fmtDateBR } from "../utils/date.ts";
+import { useClubIds } from "../hooks/useClubIds.ts";
+import { useAbortableFetch } from "../hooks/useAbortableFetch.ts";
 
 interface OpponentRecordDto {
     name: string;
@@ -33,10 +36,6 @@ interface OpponentsAnalysisDto {
 
 type SortKey = "matches" | "wins" | "draws" | "losses" | "winRate" | "goalsFor" | "goalsAgainst" | "goalDiff";
 
-function fmtDate(iso: string | null) {
-    if (!iso) return "—";
-    return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
 
 const KpiCard: React.FC<{ label: string; value: number | string; sub?: string }> = ({ label, value, sub }) => (
     <Card className="p-4 flex flex-col gap-1">
@@ -61,9 +60,17 @@ function SortTh({
 }) {
     const active = col === sortKey;
     return (
-        <th
-            className="text-center px-3 py-2.5 font-medium cursor-pointer select-none hover:bg-surface-sunken transition-colors whitespace-nowrap"
+        <th scope="col"
+            className="text-center px-3 py-2.5 font-medium cursor-pointer select-none hover:bg-surface-sunken transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+            aria-sort={active ? (dir === "desc" ? "descending" : "ascending") : "none"}
+            tabIndex={0}
             onClick={() => onChange(col)}
+            onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onChange(col);
+                }
+            }}
         >
             {label}{active ? (dir === "desc" ? " ↓" : " ↑") : ""}
         </th>
@@ -71,34 +78,24 @@ function SortTh({
 }
 
 export default function Opponents() {
-    const { club, selectedClubIds } = useClub();
+    const activeClubIds = useClubIds();
 
-    const activeClubIds = useMemo(() => {
-        return selectedClubIds.length > 0 ? selectedClubIds : (club?.clubId ? [club.clubId] : []);
-    }, [selectedClubIds, club]);
-
-    const [data, setData] = useState<OpponentsAnalysisDto | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [loaded, setLoaded] = useState<{ key: string; data: OpponentsAnalysisDto } | null>(null);
+    const clubIdsKey = activeClubIds.join(",");
+    const data = loaded?.key === clubIdsKey ? loaded.data : null;
     const [sortKey, setSortKey] = useState<SortKey>("matches");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-    const load = useCallback(async () => {
-        if (activeClubIds.length === 0) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const clubIdsStr = activeClubIds.join(",");
-            const { data: resp } = await api.get<OpponentsAnalysisDto>(API_ENDPOINTS.CLUB_OPPONENTS(clubIdsStr));
-            setData(resp);
-        } catch (e: any) {
-            setError(e?.message ?? "Erro ao carregar adversários");
-        } finally {
-            setLoading(false);
-        }
-    }, [activeClubIds]);
-
-    useEffect(() => { load(); }, [load]);
+    const { loading, error } = useAbortableFetch(
+        async (signal) => {
+            const clubIdsStr = clubIdsKey;
+            const { data: resp } = await api.get<OpponentsAnalysisDto>(API_ENDPOINTS.CLUB_OPPONENTS(clubIdsStr), { signal });
+            if (signal.aborted) return;
+            setLoaded({ key: clubIdsStr, data: resp });
+        },
+        [clubIdsKey],
+        { enabled: activeClubIds.length > 0, errorMessage: "Erro ao carregar adversários" }
+    );
 
     const handleSort = (key: SortKey) => {
         if (key === sortKey) {
@@ -253,7 +250,7 @@ export default function Opponents() {
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="border-b bg-surface-raised/50 text-fg-muted text-xs uppercase tracking-wide">
-                                        <th className="text-left px-4 py-2.5 font-medium">Adversário</th>
+                                        <th scope="col" className="text-left px-4 py-2.5 font-medium">Adversário</th>
                                         <SortTh col="matches" label="Partidas" sortKey={sortKey} dir={sortDir} onChange={handleSort} />
                                         <SortTh col="wins" label="V" sortKey={sortKey} dir={sortDir} onChange={handleSort} />
                                         <SortTh col="draws" label="E" sortKey={sortKey} dir={sortDir} onChange={handleSort} />
@@ -262,7 +259,7 @@ export default function Opponents() {
                                         <SortTh col="goalsFor" label="GF" sortKey={sortKey} dir={sortDir} onChange={handleSort} />
                                         <SortTh col="goalsAgainst" label="GS" sortKey={sortKey} dir={sortDir} onChange={handleSort} />
                                         <SortTh col="goalDiff" label="Saldo" sortKey={sortKey} dir={sortDir} onChange={handleSort} />
-                                        <th className="text-center px-3 py-2.5 font-medium whitespace-nowrap">Último</th>
+                                        <th scope="col" className="text-center px-3 py-2.5 font-medium whitespace-nowrap">Último</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -285,7 +282,7 @@ export default function Opponents() {
                                                     {opp.goalDiff > 0 ? "+" : ""}{opp.goalDiff}
                                                 </span>
                                             </td>
-                                            <td className="px-3 py-3 text-center text-xs text-fg-subtle whitespace-nowrap">{fmtDate(opp.lastMatch)}</td>
+                                            <td className="px-3 py-3 text-center text-xs text-fg-subtle whitespace-nowrap">{fmtDateBR(opp.lastMatch)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
