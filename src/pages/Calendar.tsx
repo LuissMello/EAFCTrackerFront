@@ -5,6 +5,7 @@ import { useClub } from "../hooks/useClub.tsx";
 import { useRefresh } from "../hooks/useRefresh.tsx";
 import { API_ENDPOINTS, crestUrl, onImgError } from "../config/urls.ts";
 import { parseTimestamp, toYmd } from "../utils/date.ts";
+import { useAuth } from "../hooks/useAuth.tsx";
 
 // ===== Tipos =====
 export interface CalendarDaySummaryDto {
@@ -53,6 +54,7 @@ export interface CalendarMatchSummaryDto {
 }
 export interface CalendarDayDetailsDto {
     date: string;
+    timeZoneId: string;
     totalMatches: number;
     wins: number;
     draws: number;
@@ -60,13 +62,13 @@ export interface CalendarDayDetailsDto {
     goalsFor: number;
     goalsAgainst: number;
     matches: CalendarMatchSummaryDto[];
+    sessions: { id: number; startedAt: string; endedAt: string; matchIds: number[] }[];
 }
 
 // ===== Helpers =====
 const ptMonth = new Intl.DateTimeFormat("pt-BR", { month: "long" });
 const ptWeekday = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
 const ptDay = new Intl.DateTimeFormat("pt-BR", { day: "2-digit" });
-const ptTime = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 const fromYmd = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
@@ -102,6 +104,7 @@ type ViewMode = "monthly" | "weekly";
 
 export default function CalendarPage() {
     const { club } = useClub();
+    const { isAdmin } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
 
     // 🔹 Suporta seleção múltipla via URL (?clubIds=1,2,3) OU um único via context (?clubId)
@@ -124,6 +127,8 @@ export default function CalendarPage() {
 
     // Estado de visualização
     const [viewMode, setViewMode] = useState<ViewMode>("monthly");
+    const [groupingMode, setGroupingMode] = useState<"sessions" | "calendar">("sessions");
+    const showSessions = groupingMode === "sessions" && selectedClubIds.length === 1;
 
     // Âncoras de navegação
     const [referenceMonth, setReferenceMonth] = useState<Date>(startOfMonth(new Date()));
@@ -152,6 +157,16 @@ export default function CalendarPage() {
         dayCacheRef.current = {};
         setReloadKey((k) => k + 1);
     }, []);
+
+    const changeBoundary = async (matchId: number, mode: "auto" | "split" | "join") => {
+        if (selectedClubIds.length !== 1) return;
+        try {
+            await api.put(API_ENDPOINTS.ADMIN_SESSION_BOUNDARY(selectedClubIds[0], matchId), { mode });
+            refreshCalendar();
+        } catch {
+            setErrorDay("Não foi possível ajustar esta sessão.");
+        }
+    };
 
     // "Atualizar"/modo ao vivo do cabeçalho: mesmo efeito do botão local (limpa caches e recarrega)
     const { refreshKey: globalRefreshKey } = useRefresh();
@@ -223,6 +238,7 @@ export default function CalendarPage() {
         didInitFromUrlRef.current = true;
 
         const modeParam = searchParams.get("mode");
+        if (searchParams.get("grouping") === "calendar") setGroupingMode("calendar");
         const ymYear = Number(searchParams.get("year"));
         const ymMonth = Number(searchParams.get("month"));
         const weekStartParam = searchParams.get("weekStart");
@@ -250,6 +266,7 @@ export default function CalendarPage() {
     useEffect(() => {
         const next = new URLSearchParams(searchParams.toString());
         next.set("mode", viewMode);
+        next.set("grouping", groupingMode);
 
         if (viewMode === "monthly") {
             next.set("year", String(referenceMonth.getFullYear()));
@@ -267,7 +284,7 @@ export default function CalendarPage() {
         const prevStr = searchParams.toString();
         const nextStr = next.toString();
         if (prevStr !== nextStr) setSearchParams(next, { replace: true });
-    }, [viewMode, referenceMonth, referenceWeekStart, selectedDate, searchParams, setSearchParams]);
+    }, [viewMode, groupingMode, referenceMonth, referenceWeekStart, selectedDate, searchParams, setSearchParams]);
 
     // ===== Buscar mês (com cache) + prefetch =====
     useEffect(() => {
@@ -277,7 +294,7 @@ export default function CalendarPage() {
         const ids = clubKey.split(",").map(Number);
 
         async function fetchMonth(y: number, m: number, write = true) {
-            const k = `${y}-${pad(m)}|${clubKey}`;
+            const k = `${y}-${pad(m)}|${clubKey}|${showSessions}`;
             const cached = monthCacheRef.current[k];
             if (cached) {
                 if (!signal.aborted && write) { setMonthData(cached); setLoadingMonth(false); }
@@ -285,7 +302,7 @@ export default function CalendarPage() {
             }
             if (write) { setLoadingMonth(true); setErrorMonth(null); setMonthData(null); }
             try {
-                const params: any = { year: y, month: m };
+                const params: any = { year: y, month: m, sessions: showSessions };
                 if (ids.length > 1) params.clubIds = clubKey;
                 else params.clubId = ids[0];
 
@@ -309,7 +326,7 @@ export default function CalendarPage() {
         const next = new Date(year, month1to12, 1); fetchMonth(next.getFullYear(), next.getMonth() + 1, false);
 
         return () => controller.abort();
-    }, [clubKey, year, month1to12, reloadKey]);
+    }, [clubKey, year, month1to12, showSessions, reloadKey]);
 
     // ===== Buscar dia (com cache) =====
     useEffect(() => {
@@ -319,13 +336,13 @@ export default function CalendarPage() {
         const ids = clubKey.split(",").map(Number);
 
         async function run() {
-            const cacheKey = `${selectedDate}|${clubKey}`;
+            const cacheKey = `${selectedDate}|${clubKey}|${showSessions}`;
             const cached = dayCacheRef.current[cacheKey];
             if (cached) { if (!signal.aborted) { setDayData(cached); setLoadingDay(false); } return; }
 
             setLoadingDay(true); setErrorDay(null); setDayData(null);
             try {
-                const params: any = { date: selectedDate };
+                const params: any = { date: selectedDate, sessions: showSessions };
                 if (ids.length > 1) params.clubIds = clubKey;
                 else params.clubId = ids[0];
 
@@ -345,7 +362,7 @@ export default function CalendarPage() {
         }
         run();
         return () => controller.abort();
-    }, [selectedDate, clubKey, reloadKey]);
+    }, [selectedDate, clubKey, showSessions, reloadKey]);
 
     // Navegação por teclado
     function handleKeyNav(e: KeyboardEvent<HTMLDivElement>) {
@@ -423,6 +440,20 @@ export default function CalendarPage() {
                 </div>
             </div>
 
+            <div className="flex items-center gap-2 mb-3 text-sm">
+                <span className="text-fg-muted">Organizar por:</span>
+                <button type="button" aria-pressed={showSessions} disabled={selectedClubIds.length !== 1}
+                    onClick={() => setGroupingMode("sessions")}
+                    className={`px-3 py-1.5 rounded-lg border ${showSessions ? "bg-accent text-accent-fg" : "bg-surface"} disabled:opacity-50`}>
+                    Sessões
+                </button>
+                <button type="button" aria-pressed={!showSessions} onClick={() => setGroupingMode("calendar")}
+                    className={`px-3 py-1.5 rounded-lg border ${!showSessions ? "bg-accent text-accent-fg" : "bg-surface"}`}>
+                    Dias do calendário
+                </button>
+                {selectedClubIds.length > 1 && <span className="text-xs text-fg-muted">Selecione um clube para ver sessões.</span>}
+            </div>
+
             {/* Aviso quando não há clube definido */}
             {!hasAnyClub && (
                 <div className="p-4 bg-warning-soft border border-warning/30 rounded text-warning-fg">
@@ -432,7 +463,7 @@ export default function CalendarPage() {
 
             {/* Legenda/ajuda */}
             <div ref={legendRef} className="flex items-center gap-3 text-xs text-fg-muted mt-3 mb-2">
-                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-accent/70" />Partidas no dia</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-accent/70" />{showSessions ? "Partidas da sessão" : "Partidas no dia"}</span>
                 <span className="px-1 rounded bg-positive-soft text-positive-fg">V</span>
                 <span className="px-1 rounded bg-warning-soft text-warning-fg">E</span>
                 <span className="px-1 rounded bg-negative-soft text-negative-fg">D</span>
@@ -529,7 +560,7 @@ export default function CalendarPage() {
                     <div className="absolute right-0 top-0 h-full w-full sm:w-[560px] bg-surface shadow-xl p-4 overflow-y-auto">
                         <div className="flex items-center justify-between mb-3">
                             <div>
-                                <h2 id={dialogTitleId} className="text-xl font-semibold">{ptDay.format(fromYmd(selectedDate))} {ptMonth.format(fromYmd(selectedDate))}</h2>
+                                <h2 id={dialogTitleId} className="text-xl font-semibold">{showSessions ? "Sessões de " : ""}{ptDay.format(fromYmd(selectedDate))} {ptMonth.format(fromYmd(selectedDate))}</h2>
                                 {dayData && (
                                     <div className="flex items-center gap-1.5 flex-wrap mt-1">
                                         <span className="text-sm text-fg-muted">{dayData.totalMatches} jogo(s)</span>
@@ -562,7 +593,9 @@ export default function CalendarPage() {
                             <div className="space-y-3">
                                 {dayData.matches.map((m) => {
                                     const kickoffDate = parseTimestamp(m.timestamp);
-                                    const kickoff = kickoffDate ? ptTime.format(kickoffDate) : "";
+                                    const timeZone = showSessions ? dayData.timeZoneId : undefined;
+                                    const kickoff = kickoffDate ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone }).format(kickoffDate) : "";
+                                    const session = showSessions ? dayData.sessions?.find(s => s.matchIds[0] === m.matchId) : undefined;
                                     const aWon = m.clubAGoals > m.clubBGoals;
                                     const bWon = m.clubBGoals > m.clubAGoals;
                                     const resultBorder =
@@ -571,7 +604,9 @@ export default function CalendarPage() {
                                         : m.resultForClub === "D" ? "border-l-4 border-l-warning"
                                         : "";
                                     return (
-                                        <div key={m.matchId} className={`border rounded-xl p-3 hover:shadow ${resultBorder}`}>
+                                        <div key={m.matchId}>
+                                        {session && <div className="text-sm font-semibold text-fg mt-4 mb-2">Sessão {new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone }).format(parseTimestamp(session.startedAt) ?? new Date(session.startedAt))} – {new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone }).format(parseTimestamp(session.endedAt) ?? new Date(session.endedAt))}</div>}
+                                        <div className={`border rounded-xl p-3 hover:shadow ${resultBorder}`}>
                                             <div className="flex items-center justify-between mb-2">
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <Crest id={m.clubACrestAssetId} alt={m.clubAName} />
@@ -598,6 +633,12 @@ export default function CalendarPage() {
                                             </div>
 
                                             <div className="mt-2 flex justify-end">
+                                                {isAdmin && showSessions && (
+                                                    <div className="flex gap-1 mr-auto">
+                                                        <button type="button" className="text-xs underline" onClick={() => changeBoundary(m.matchId, session ? "join" : "split")}>{session ? "Unir à anterior" : "Separar aqui"}</button>
+                                                        <button type="button" className="text-xs underline text-fg-muted" onClick={() => changeBoundary(m.matchId, "auto")}>Automático</button>
+                                                    </div>
+                                                )}
                                                 <Link
                                                     to={`/match/${m.matchId}`}
                                                     className="inline-flex items-center gap-1 text-xs border rounded-lg px-3 py-1.5 bg-surface hover:bg-surface-raised text-fg-secondary shadow-sm"
@@ -605,6 +646,7 @@ export default function CalendarPage() {
                                                     Ver detalhes →
                                                 </Link>
                                             </div>
+                                        </div>
                                         </div>
                                     );
                                 })}

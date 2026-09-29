@@ -33,6 +33,7 @@ export const API_ENDPOINTS = {
   // Calendar
   CALENDAR: '/api/Calendar',
   CALENDAR_DAY: '/api/Calendar/day',
+  CALENDAR_SESSION_MEMBERSHIPS: '/api/Calendar/session-memberships',
 
   // Trends
   TRENDS_CLUB: (clubId: number, last: number) => `/api/Trends/club/${clubId}?last=${last}`,
@@ -65,6 +66,8 @@ export const API_ENDPOINTS = {
   ADMIN_CLUB_SEARCH: (name: string) => `/api/admin/clubs/search?name=${encodeURIComponent(name)}`,
   ADMIN_TRACKED_CLUBS: '/api/admin/tracked-clubs',
   ADMIN_TRACKED_CLUB: (clubId: number) => `/api/admin/tracked-clubs/${clubId}`,
+  ADMIN_SESSION_SETTINGS: (clubId: number) => `/api/admin/tracked-clubs/${clubId}/session-settings`,
+  ADMIN_SESSION_BOUNDARY: (clubId: number, matchId: number) => `/api/admin/tracked-clubs/${clubId}/session-boundaries/${matchId}`,
 };
 
 // External Asset URLs

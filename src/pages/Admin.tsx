@@ -25,6 +25,8 @@ interface TrackedClub {
   addedAt: string;
   gameVersion: number | null;
   gameVersionName: string | null;
+  timeZoneId: string;
+  sessionGapMinutes: number;
 }
 
 interface ClubSearchResult {
@@ -183,6 +185,27 @@ function AdminPanel({ onSignOut }: { onSignOut: () => void }) {
   const [newClubName, setNewClubName] = useState("");
   const [clubsLoading, setClubsLoading] = useState(false);
   const [clubsError, setClubsError] = useState<string | null>(null);
+  const [savingSessionClub, setSavingSessionClub] = useState<number | null>(null);
+
+  async function saveSessionSettings(clubId: number, form: HTMLFormElement) {
+    const values = new FormData(form);
+    const timeZoneId = String(values.get("timeZoneId") ?? "").trim();
+    const gapMinutes = Number(values.get("gapMinutes"));
+    if (!timeZoneId || !Number.isInteger(gapMinutes) || gapMinutes < 15 || gapMinutes > 360) {
+      showToast("Informe um fuso válido e intervalo entre 15 e 360 minutos.", "error");
+      return;
+    }
+    setSavingSessionClub(clubId);
+    try {
+      await api.put(API_ENDPOINTS.ADMIN_SESSION_SETTINGS(clubId), { timeZoneId, gapMinutes });
+      await loadClubs();
+      showToast("Configuração das sessões salva.");
+    } catch (e: any) {
+      showToast(e?.response?.data?.detail ?? "Erro ao salvar sessões.", "error");
+    } finally {
+      setSavingSessionClub(null);
+    }
+  }
 
   const [searchName, setSearchName] = useState("");
   const [searching, setSearching] = useState(false);
@@ -501,7 +524,8 @@ function AdminPanel({ onSignOut }: { onSignOut: () => void }) {
           ) : (
             <ul className="divide-y">
               {clubs.map((c) => (
-                <li key={c.clubId} className="flex items-center gap-3 px-4 py-3">
+                <li key={c.clubId} className="px-4 py-3">
+                  <div className="flex items-center gap-3">
                   <span className="font-mono text-sm text-fg w-24">{c.clubId}</span>
                   <span className="flex-1 text-sm text-fg-muted flex items-center gap-2 min-w-0">
                     <span className="truncate">{c.name ?? <em className="text-fg-subtle">sem nome</em>}</span>
@@ -515,11 +539,25 @@ function AdminPanel({ onSignOut }: { onSignOut: () => void }) {
                   >
                     Remover
                   </button>
+                  </div>
+                  <details className="mt-2 text-xs text-fg-muted">
+                    <summary className="cursor-pointer">Configurar sessões de jogo</summary>
+                    <form className="flex flex-wrap items-end gap-2 mt-2" onSubmit={(e) => { e.preventDefault(); saveSessionSettings(c.clubId, e.currentTarget); }}>
+                      <label className="flex flex-col gap-1">Fuso horário (IANA)
+                        <input name="timeZoneId" defaultValue={c.timeZoneId ?? "America/Sao_Paulo"} required maxLength={100} className={`${INPUT_CLS} w-52`} list="club-time-zones" />
+                      </label>
+                      <label className="flex flex-col gap-1">Intervalo máximo entre partidas (min)
+                        <input name="gapMinutes" type="number" min={15} max={360} required defaultValue={c.sessionGapMinutes ?? 120} className={`${INPUT_CLS} w-36`} />
+                      </label>
+                      <button type="submit" disabled={savingSessionClub === c.clubId} className="btn btn-secondary px-3">{savingSessionClub === c.clubId ? "Salvando…" : "Salvar"}</button>
+                    </form>
+                  </details>
                 </li>
               ))}
             </ul>
           )}
         </Card>
+        <datalist id="club-time-zones"><option value="America/Sao_Paulo" /><option value="America/New_York" /><option value="Europe/Lisbon" /><option value="Europe/London" /><option value="UTC" /></datalist>
 
         <form
           className="flex gap-2 items-end flex-wrap mb-3"

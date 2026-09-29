@@ -63,6 +63,8 @@ interface OverallPoint {
   oppName: string;
   goalsFor: number;
   goalsAgainst: number;
+  sessionId: number | null;
+  sessionDate: string | null;
 }
 
 interface ClubSeries {
@@ -145,18 +147,9 @@ const resultMarkersPlugin = {
   },
 };
 
-// Partidas antes das 8h contam no dia anterior (sessões que viram a madrugada,
-// ex.: 22h→2h, viram uma única "sessão" / dia).
-const DAY_CUTOFF_HOUR = 8;
-const sessionInstant = (iso: string) => new Date((parseTimestamp(iso)?.getTime() ?? NaN) - DAY_CUTOFF_HOUR * 3600_000);
-
-// "dia de sessão" (com cutoff de 8h) usado para agrupar partidas
-const dayKey = (iso: string) => {
-  const d = sessionInstant(iso);
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-};
 const DAY_SHORT = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
-const formatDayShort = (iso: string) => DAY_SHORT.format(sessionInstant(iso));
+const formatSessionDay = (date: string | null, fallback: string) =>
+  date ? DAY_SHORT.format(new Date(`${date}T12:00:00`)) : fmtDateBRShort(fallback);
 
 interface DayZone {
   start: number; // índice (na série) da primeira partida do dia
@@ -362,6 +355,15 @@ export default function OverallEvolution() {
       );
 
       const resArr = await Promise.all(promises);
+      const memberships = await Promise.all(resArr.map(async (res, idx) => {
+        const matchIds = (res.data?.items ?? []).map(item => item.matchId);
+        if (!matchIds.length) return new Map<number, { sessionId: number; date: string }>();
+        const { data } = await api.get<{ matchId: number; sessionId: number; date: string }[]>(
+          API_ENDPOINTS.CALENDAR_SESSION_MEMBERSHIPS,
+          { params: { clubId: idsToUse[idx], matchIds: matchIds.join(",") }, signal }
+        );
+        return new Map(data.map(item => [item.matchId, item]));
+      }));
       if (signal.aborted) return;
 
       const map: Record<number, ClubSeries> = {};
@@ -377,6 +379,8 @@ export default function OverallEvolution() {
             oppName: it.opponent?.clubName ?? "—",
             goalsFor: it.ourClub?.goals ?? 0,
             goalsAgainst: it.opponent?.goals ?? 0,
+            sessionId: memberships[idx].get(it.matchId)?.sessionId ?? null,
+            sessionDate: memberships[idx].get(it.matchId)?.date ?? null,
           }))
           // página 1 vem do mais novo → mais antigo; ordena ascendente por data
           .sort((a, b) => (parseTimestamp(a.date)?.getTime() ?? 0) - (parseTimestamp(b.date)?.getTime() ?? 0));
@@ -440,21 +444,23 @@ export default function OverallEvolution() {
   const manyPoints = maxLen > 25;
   const pointRadius = manyPoints ? 0 : 2;
 
-  // Agrupa as partidas (single club) por dia → faixas verticais com Δ SR líquido.
+  // Agrupa pela sessão atribuída pela API; a faixa continua válida ao cruzar a meia-noite.
   const dayZones = useMemo<DayZone[]>(() => {
     if (!singleClub) return [];
     const pts = singleClub.points;
     const zones: DayZone[] = [];
     let start = 0;
     for (let i = 1; i <= pts.length; i++) {
-      if (i === pts.length || dayKey(pts[i].date) !== dayKey(pts[start].date)) {
+      if (i === pts.length ||
+          (pts[i].sessionId === null ? `match:${pts[i].matchId}` : `session:${pts[i].sessionId}`) !==
+          (pts[start].sessionId === null ? `match:${pts[start].matchId}` : `session:${pts[start].sessionId}`)) {
         const end = i - 1;
         const srEnd = knownNumber(pts[end].ourStats?.skillRating);
         const srBase = start > 0 ? knownNumber(pts[start - 1].ourStats?.skillRating) : null;
         zones.push({
           start,
           end,
-          label: formatDayShort(pts[start].date),
+          label: formatSessionDay(pts[start].sessionDate, pts[start].date),
           delta: srEnd !== null && srBase !== null ? srEnd - srBase : null,
           count: end - start + 1,
         });
@@ -708,10 +714,10 @@ export default function OverallEvolution() {
               {!!singleClub && (
                 <label
                   className="text-sm text-fg-secondary flex items-center gap-1.5"
-                  title="Agrupa as partidas por dia em faixas, com a variação líquida de SR no dia."
+                  title="Agrupa as partidas por sessão de jogo, com a variação líquida de SR em cada sessão."
                 >
                   <input type="checkbox" checked={showDayZones} onChange={(e) => setShowDayZones(e.target.checked)} />
-                  Zonas por dia
+                  Sessões de jogo
                 </label>
               )}
 

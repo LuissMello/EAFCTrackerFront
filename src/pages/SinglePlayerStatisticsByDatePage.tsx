@@ -86,6 +86,7 @@ export default function PlayerStatisticsByPlayerPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState<DayBlock[]>([]);
+  const [groupSessions, setGroupSessions] = useState(true);
 
   // clubes selecionados (?clubIds=355651,352016,...)
   // Memoizado pela string dos IDs: outras mudanças na URL (ex.: dateFrom/dateTo) não refazem a busca
@@ -164,6 +165,7 @@ export default function PlayerStatisticsByPlayerPage() {
           clubIds: clubIds.join(","),
           start: dateFrom,
           end: dateTo,
+          sessions: String(groupSessions && clubIds.length === 1),
         };
 
         const { data } = await api.get<FullMatchStatisticsByDayDto[]>(
@@ -204,7 +206,7 @@ export default function PlayerStatisticsByPlayerPage() {
 
     fetchData();
     return () => controller.abort();
-  }, [dateFrom, dateTo, clubIds, refreshKey]);
+  }, [dateFrom, dateTo, clubIds, groupSessions, refreshKey]);
 
   // ===== Índice de jogadores (chips) =====
   const playerOptions: SimplePlayerOption[] = useMemo(() => {
@@ -310,6 +312,7 @@ export default function PlayerStatisticsByPlayerPage() {
           start: dateFrom,
           end: dateTo,
           clubIds: clubIds.join(","),
+          sessions: String(groupSessions && clubIds.length === 1),
         };
 
         const { data } = await api.get<PlayerStatisticsByDayDto[]>(
@@ -331,7 +334,7 @@ export default function PlayerStatisticsByPlayerPage() {
 
     fetchMatches();
     return () => controller.abort();
-  }, [selectedPlayerId, dateFrom, dateTo, clubIds, refreshKey]);
+  }, [selectedPlayerId, dateFrom, dateTo, clubIds, groupSessions, refreshKey]);
 
   // ===== Resumo por dia só desse jogador =====
   const perDayForPlayer: PlayerDaySummary[] = useMemo(() => {
@@ -1070,6 +1073,14 @@ export default function PlayerStatisticsByPlayerPage() {
           </div>
         </div>
       </header>
+
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-fg-muted">Agrupar por:</span>
+        <button type="button" disabled={clubIds.length !== 1} aria-pressed={groupSessions && clubIds.length === 1}
+          onClick={() => setGroupSessions(true)} className={`px-3 py-1.5 rounded-lg border ${groupSessions && clubIds.length === 1 ? "bg-accent text-accent-fg" : "bg-surface"} disabled:opacity-50`}>Dia de jogo</button>
+        <button type="button" aria-pressed={!groupSessions || clubIds.length !== 1}
+          onClick={() => setGroupSessions(false)} className={`px-3 py-1.5 rounded-lg border ${!groupSessions || clubIds.length !== 1 ? "bg-accent text-accent-fg" : "bg-surface"}`}>Dias do calendário</button>
+      </div>
 
       {/* BLOCO DE RESUMO GERAL (período ou dia) */}
       {summary && (
