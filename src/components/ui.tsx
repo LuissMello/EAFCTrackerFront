@@ -68,12 +68,15 @@ export function Crest({
     size = 28,
     rounded = "rounded-md",
     className = "",
+    fallbackSrc,
 }: {
     src?: string | null;
     alt?: string;
     size?: number;
     rounded?: string;
     className?: string;
+    /** Imagem alternativa tentada uma vez se `src` falhar, antes do logo genérico. */
+    fallbackSrc?: string | null;
 }) {
     return (
         <span
@@ -85,7 +88,15 @@ export function Crest({
                 alt={alt}
                 loading="lazy"
                 className="w-full h-full object-contain p-0.5"
-                onError={onImgError}
+                onError={(e) => {
+                    const img = e.currentTarget;
+                    if (fallbackSrc && img.dataset.triedFallback !== fallbackSrc && img.getAttribute("src") !== fallbackSrc) {
+                        img.dataset.triedFallback = fallbackSrc;
+                        img.src = fallbackSrc;
+                        return;
+                    }
+                    onImgError(e);
+                }}
             />
         </span>
     );

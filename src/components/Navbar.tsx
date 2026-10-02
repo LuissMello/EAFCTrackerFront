@@ -62,6 +62,7 @@ const NAV_LINKS = [
     { to: "/goal-analytics", label: "Gols" },
     { to: "/trends", label: "Trends" },
     { to: "/overall-evolution", label: "Evolução" },
+    { to: "/registrar-gols", label: "Registrar gols" },
 ];
 
 // Rotas secundárias. Admin permanece visível; a própria página exige login.

@@ -68,6 +68,20 @@ export const API_ENDPOINTS = {
   ADMIN_TRACKED_CLUB: (clubId: number) => `/api/admin/tracked-clubs/${clubId}`,
   ADMIN_SESSION_SETTINGS: (clubId: number) => `/api/admin/tracked-clubs/${clubId}/session-settings`,
   ADMIN_SESSION_BOUNDARY: (clubId: number, matchId: number) => `/api/admin/tracked-clubs/${clubId}/session-boundaries/${matchId}`,
+  ADMIN_GOAL_REG_LINK_PENDING: '/api/admin/goal-registrations/link-pending',
+
+  // Registro de gols antecipado (público)
+  GOAL_REGISTRATIONS: '/api/goal-registrations',
+  GOAL_REGISTRATION: (id: number) => `/api/goal-registrations/${id}`,
+  GOAL_REG_CURRENT: (clubId: number) => `/api/goal-registrations/current?clubId=${clubId}`,
+  GOAL_REG_GOALS: (id: number) => `/api/goal-registrations/${id}/goals`,
+  GOAL_REG_GOAL: (id: number, goalId: number) => `/api/goal-registrations/${id}/goals/${goalId}`,
+  GOAL_REGISTRATIONS_BY_CLUB: (clubId: number, limit = 50) => `/api/goal-registrations?clubId=${clubId}&limit=${limit}`,
+  GOAL_REG_ROSTER: (clubId: number) => `/api/goal-registrations/roster?clubId=${clubId}`,
+  GOAL_REG_OPPONENT_SEARCH: (q: string, clubId: number, limit = 15) =>
+    `/api/goal-registrations/opponents/search?q=${encodeURIComponent(q)}&clubId=${clubId}&limit=${limit}`,
+  GOAL_REG_OPPONENT_PREVIEW: (opponentClubId: number, clubId: number, name?: string | null) =>
+    `/api/goal-registrations/opponents/${opponentClubId}/preview?clubId=${clubId}${name ? `&name=${encodeURIComponent(name)}` : ''}`,
 };
 
 // External Asset URLs

@@ -46,6 +46,8 @@ const SETTING_META: Record<string, SettingMeta> = {
   fetch_interval_minutes: { label: "Intervalo de busca (minutos)", min: 1, max: 1440 },
   max_parallel_fetches: { label: "Buscas em paralelo", min: 1, max: 8 },
   live_interval_minutes: { label: "Intervalo no modo ao vivo (minutos)", min: 1, max: 60 },
+  goal_link_window_minutes: { label: "Janela para vincular registro à partida (minutos)", min: 30, max: 2880 },
+  goal_registration_expire_days: { label: "Dias até expirar registros sem partida", min: 1, max: 60 },
 };
 
 function metaFor(key: string): SettingMeta {

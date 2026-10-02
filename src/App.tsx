@@ -25,6 +25,7 @@ const PlayerProfile = lazy(() => import("./pages/PlayerProfile.tsx"));
 const Opponents = lazy(() => import("./pages/Opponents.tsx"));
 const OverallEvolution = lazy(() => import("./pages/OverallEvolution.tsx"));
 const Admin = lazy(() => import("./pages/Admin.tsx"));
+const RegistrarGols = lazy(() => import("./pages/RegistrarGols.tsx"));
 
 function PageFallback() {
     return (
@@ -81,6 +82,7 @@ function AppRoutes() {
                     <Route path="/player/:playerEntityId" element={<PlayerProfile />} />
                     <Route path="/opponents" element={<Opponents />} />
                     <Route path="/overall-evolution" element={<OverallEvolution />} />
+                    <Route path="/registrar-gols" element={<RegistrarGols />} />
                     <Route path="/admin" element={<Admin />} />
                 </Routes>
             </Suspense>

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import api, { isUnauthorized } from "../services/api.ts";
+import api from "../services/api.ts";
 import { API_ENDPOINTS, crestUrl } from "../config/urls.ts";
-import { MSG_LOGIN_REQUIRED, useAuth } from "../hooks/useAuth.tsx";
+import { describeApiError } from "../utils/apiError.ts";
 import { Crest } from "./ui.tsx";
 
 interface PlayerRow {
@@ -58,7 +58,6 @@ export function GoalLinkingSection({
   players,
 }: GoalLinkingSectionProps) {
   const [goalLinks, setGoalLinks] = useState<GoalLink[]>([]);
-  const { isAdmin, openLogin } = useAuth();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -213,11 +212,7 @@ export function GoalLinkingSection({
   };
 
   const handleSubmit = async () => {
-    // Registrar gols é uma ação administrativa: sem sessão, pede login em vez de chamar a API
-    if (!isAdmin) {
-      openLogin(MSG_LOGIN_REQUIRED);
-      return;
-    }
+    // Vínculo manual de gols é PÚBLICO (sem login; o backend limita por IP e devolve 429 quando excede)
     setSaving(true);
     setError(null);
     try {
@@ -230,12 +225,7 @@ export function GoalLinkingSection({
       });
       setSaved(true);
     } catch (err: any) {
-      // 401: o modal de login já foi aberto pelo interceptor
-      setError(
-        isUnauthorized(err)
-          ? "É necessário entrar como administrador para salvar os vínculos."
-          : err?.message ?? "Erro ao salvar vínculos"
-      );
+      setError(describeApiError(err, "Erro ao salvar vínculos").message);
     } finally {
       setSaving(false);
     }
@@ -405,7 +395,6 @@ export function GoalLinkingSection({
           <button
             onClick={handleSubmit}
             disabled={saving}
-            title={isAdmin ? undefined : "Requer login de administrador"}
             className="inline-flex items-center gap-2 rounded-lg border border-accent px-4 py-2 text-sm font-medium shadow-sm bg-accent text-accent-fg hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {saving ? "Salvando..." : "Salvar Vínculos"}
