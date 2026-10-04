@@ -4,16 +4,18 @@ import { useSearchParams } from "react-router-dom";
 import api, { isCanceled } from "../services/api.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { useRefresh } from "../hooks/useRefresh.tsx";
-import { daysAgoYmd, toYmd, fmtBRFromISO } from "../utils/date.ts";
+import { fmtBRFromISO } from "../utils/date.ts";
 import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
 import type { PlayerStats } from "../types/stats";
-import { Trophy, TrendingDown } from "lucide-react";
+import { ChevronDown, Trophy, TrendingDown } from "lucide-react";
 import { Tooltip } from "../components/Tooltip.tsx";
-import { RatingPill } from "../components/ui.tsx";
+import { RatingPill, PageHeader, PageShell } from "../components/ui.tsx";
 import { toNum } from "../utils/number.ts";
-import { buildDateColorMap } from "../utils/dateColors.ts";
+import { buildDateColorMap, NEUTRAL_DATE_COLOR } from "../utils/dateColors.ts";
 import { getPassPct, getTacklePct, getMatchesPlayed, getSuccessfulTackles } from "../utils/playerDto.ts";
 import { DateBadge } from "../components/DateBadge.tsx";
+import { DateRangeBar } from "../components/DateRangeBar.tsx";
+import { useUrlDateRange } from "../hooks/useUrlDateRange.ts";
 import type { FullMatchStatisticsByDayDto, DayBlock } from "../types/statsByDate.ts";
 
 /** Barra horizontal V/E/D para resumos */
@@ -26,7 +28,7 @@ function RecordBar({ wins, draws, losses }: { wins: number; draws: number; losse
                 {draws > 0 && <div className="bg-warning" style={{ width: `${(draws / total) * 100}%` }} />}
                 {losses > 0 && <div className="bg-negative" style={{ width: `${(losses / total) * 100}%` }} />}
             </div>
-            <div className="flex justify-between text-[10px] mt-0.5 font-medium">
+            <div className="flex justify-between text-[11px] mt-0.5 font-medium">
                 <span className="text-positive">{wins}V</span>
                 <span className="text-warning">{draws}E</span>
                 <span className="text-negative">{losses}D</span>
@@ -54,12 +56,20 @@ const Info: React.FC<{ title: string }> = ({ title }) => (
 
 export default function PlayerStatisticsByDatePage() {
     const { refreshKey } = useRefresh();
-    const [searchParams, setSearchParams] = useSearchParams();
+    const [searchParams] = useSearchParams();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [days, setDays] = useState<DayBlock[]>([]);
-    const [activeRange, setActiveRange] = useState<string | null>(null);
     const [groupSessions, setGroupSessions] = useState(true);
+    // Acordeão por dia: só o primeiro (mais recente) começa aberto; as tabelas só são montadas quando abertas
+    const [openDays, setOpenDays] = useState<Set<string>>(new Set());
+    const toggleDay = (key: string) =>
+        setOpenDays((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
 
     // clubes selecionados (?clubIds=355651,352016,...)
     // Memoizado pela string dos IDs: outras mudanças na URL (ex.: dateFrom/dateTo) não refazem a busca
@@ -74,47 +84,8 @@ export default function PlayerStatisticsByDatePage() {
     })();
     const clubIds = useMemo(() => (clubIdsKey ? clubIdsKey.split(",").map(Number) : []), [clubIdsKey]);
 
-    // range (URL ou mês atual)
-    const [dateFrom, setDateFrom] = useState(() => {
-        const fromUrl = searchParams.get("dateFrom");
-        if (fromUrl) return fromUrl;
-        return daysAgoYmd(30); // padrão: últimos 30 dias
-    });
-    const [dateTo, setDateTo] = useState(() => {
-        const toUrl = searchParams.get("dateTo");
-        if (toUrl) return toUrl;
-        const now = new Date();
-        return toYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
-    });
-
-    const handleRangeChange = (start: string, end: string, range: string | null = null) => {
-        setDateFrom(start);
-        setDateTo(end);
-        setActiveRange(range);
-        const sp = new URLSearchParams(searchParams);
-        sp.set("dateFrom", start);
-        sp.set("dateTo", end);
-        setSearchParams(sp, { replace: true });
-    };
-
-    const setQuickRangeDays = (nDays: number) => {
-        const end = new Date();
-        const start = new Date();
-        start.setDate(end.getDate() - (nDays - 1));
-        handleRangeChange(toYmd(start), toYmd(end), `${nDays}d`);
-    };
-    const setCurrentMonth = () => {
-        const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), 1);
-        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        handleRangeChange(toYmd(start), toYmd(end), "currentMonth");
-    };
-    const setPreviousMonth = () => {
-        const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        const end = new Date(now.getFullYear(), now.getMonth(), 0);
-        handleRangeChange(toYmd(start), toYmd(end), "prevMonth");
-    };
+    // Período na URL (?dateFrom=&dateTo=) — padrão: últimos 30 dias, terminando hoje
+    const [{ from: dateFrom, to: dateTo }, setRange] = useUrlDateRange();
 
     // ===== Fetch =====
     useEffect(() => {
@@ -394,56 +365,22 @@ export default function PlayerStatisticsByDatePage() {
         };
     }, [days]);
 
+    // Ao carregar um novo conjunto de dias, abre só o primeiro
+    const firstDayKey = days[0]?.date.slice(0, 10) ?? "";
+    useEffect(() => {
+        setOpenDays(firstDayKey ? new Set([firstDayKey]) : new Set());
+    }, [firstDayKey, dateFrom, dateTo, groupSessions]);
+
     // ===== Render =====
     return (
-        <div className="p-4 flex flex-col gap-6">
-            <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <h1 className="font-display font-bold uppercase tracking-wide text-xl sm:text-2xl text-fg">Estatísticas por Data (Agrupadas)</h1>
-                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-                    <div className="flex gap-2 items-center">
-                        <label className="text-sm">
-                            Início:
-                            <input
-                                type="date"
-                                value={dateFrom}
-                                onChange={(e) => handleRangeChange(e.target.value, dateTo)}
-                                className="ml-1 border rounded px-2 py-1"
-                            />
-                        </label>
-                        <label className="text-sm">
-                            Fim:
-                            <input
-                                type="date"
-                                value={dateTo}
-                                onChange={(e) => handleRangeChange(dateFrom, e.target.value)}
-                                className="ml-1 border rounded px-2 py-1"
-                            />
-                        </label>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                        {([
-                            { label: "7d", key: "7d", action: () => setQuickRangeDays(7) },
-                            { label: "14d", key: "14d", action: () => setQuickRangeDays(14) },
-                            { label: "30d", key: "30d", action: () => setQuickRangeDays(30) },
-                            { label: "Mês atual", key: "currentMonth", action: setCurrentMonth },
-                            { label: "Mês anterior", key: "prevMonth", action: setPreviousMonth },
-                        ] as const).map(({ label, key, action }) => (
-                            <button
-                                key={key}
-                                onClick={action}
-                                className={`text-xs border rounded px-2 py-1 transition-colors ${
-                                    activeRange === key
-                                        ? "bg-accent text-accent-fg border-accent font-medium"
-                                        : "bg-surface text-fg-secondary hover:bg-surface-raised"
-                                }`}
-                            >
-                                {label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </header>
+        <PageShell className="flex flex-col gap-6">
+            <PageHeader
+                eyebrow="Período"
+                title="Estatísticas por período"
+                subtitle="Resumo do clube e dos jogadores, dia a dia"
+                className="-mb-2"
+            />
+            <DateRangeBar from={dateFrom} to={dateTo} onChange={setRange} idPrefix="psbd" />
 
             <div className="flex items-center gap-2 text-sm">
                 <span className="text-fg-muted">Agrupar por:</span>
@@ -662,25 +599,31 @@ export default function PlayerStatisticsByDatePage() {
                         </h2>
                     </div>
                     <div className="overflow-x-auto rounded-lg border border-l-4 border-l-positive bg-surface">
-                        <table className="table-auto w-full text-sm">
+                        <table className="table-fixed w-full min-w-[640px] text-xs xl:text-sm">
+                            <colgroup>
+                                <col style={{ width: "14%" }} />
+                                {Array.from({ length: 9 }).map((_, i) => (
+                                    <col key={i} style={{ width: "9.55%" }} />
+                                ))}
+                            </colgroup>
                             <thead className="bg-positive-soft text-positive-fg">
                                 <tr>
-                                    <th className="px-3 py-2 text-left">Jogador</th>
-                                    <th className="px-3 py-2 text-center">Gols</th>
-                                    <th className="px-3 py-2 text-center">Assistências</th>
-                                    <th className="px-3 py-2 text-center">Pré-Assist.</th>
-                                    <th className="px-3 py-2 text-center">Passe (%)</th>
-                                    <th className="px-3 py-2 text-center">Desarme (%)</th>
-                                    <th className="px-3 py-2 text-center">
+                                    <th className="px-1.5 py-2 xl:px-2 text-left">Jogador</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">Gols</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom"><span title="Assistências">Assist.</span></th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom"><span title="Pré-assistências">Pré</span></th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">Passe (%)</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">Desarme (%)</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">
                                         Tackles certos
                                         <Info title="Número de desarmes/tackles bem sucedidos no dia" />
                                     </th>
-                                    <th className="px-3 py-2 text-center">
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">
                                         Participações
                                         <Info title="(Gols + Assistências + Pré-Assist.) / Jogos do dia" />
                                     </th>
-                                    <th className="px-3 py-2 text-center">Defesas</th>
-                                    <th className="px-3 py-2 text-center">Nota</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">Defesas</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">Nota</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -693,42 +636,42 @@ export default function PlayerStatisticsByDatePage() {
                                 )}
                                 {bestDayPerPlayer.map((r, i) => (
                                     <tr key={r.playerId} className={`hover:bg-surface-raised ${i % 2 === 1 ? "bg-surface-raised" : ""}`}>
-                                        <td className="px-3 py-2 text-left sticky left-0 bg-inherit border-r border-border">{r.playerName}</td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1.5 py-1.5 xl:px-2 text-left sticky left-0 bg-inherit border-r border-border [overflow-wrap:anywhere]">{r.playerName}</td>
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.goals.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.goals.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.goals.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.assists.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.assists.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.assists.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.preAssists.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.preAssists.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.preAssists.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.passPct.value.toFixed(1)}%{" "}
-                                            <DateBadge className="ml-1" dateISO={r.passPct.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.passPct.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.tacklePct.value.toFixed(1)}%{" "}
-                                            <DateBadge className="ml-1" dateISO={r.tacklePct.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.tacklePct.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.tackles.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.tackles.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.tackles.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.participations.value.toFixed(2)}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.participations.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.participations.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.saves.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.saves.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.saves.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             <RatingPill value={Number(r.rating.value)} />{" "}
-                                            <DateBadge className="ml-1" dateISO={r.rating.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.rating.date} colorMap={dateColorMap} />
                                         </td>
                                     </tr>
                                 ))}
@@ -748,25 +691,31 @@ export default function PlayerStatisticsByDatePage() {
                         </h2>
                     </div>
                     <div className="overflow-x-auto rounded-lg border border-l-4 border-l-negative bg-surface">
-                        <table className="table-auto w-full text-sm">
+                        <table className="table-fixed w-full min-w-[640px] text-xs xl:text-sm">
+                            <colgroup>
+                                <col style={{ width: "14%" }} />
+                                {Array.from({ length: 9 }).map((_, i) => (
+                                    <col key={i} style={{ width: "9.55%" }} />
+                                ))}
+                            </colgroup>
                             <thead className="bg-negative-soft text-negative-fg">
                                 <tr>
-                                    <th className="px-3 py-2 text-left">Jogador</th>
-                                    <th className="px-3 py-2 text-center">Gols</th>
-                                    <th className="px-3 py-2 text-center">Assistências</th>
-                                    <th className="px-3 py-2 text-center">Pré-Assist.</th>
-                                    <th className="px-3 py-2 text-center">Passe (%)</th>
-                                    <th className="px-3 py-2 text-center">Desarme (%)</th>
-                                    <th className="px-3 py-2 text-center">
+                                    <th className="px-1.5 py-2 xl:px-2 text-left">Jogador</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">Gols</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom"><span title="Assistências">Assist.</span></th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom"><span title="Pré-assistências">Pré</span></th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">Passe (%)</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">Desarme (%)</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">
                                         Tackles certos
                                         <Info title="Número de desarmes/tackles bem sucedidos no dia" />
                                     </th>
-                                    <th className="px-3 py-2 text-center">
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">
                                         Participações
                                         <Info title="(Gols + Assistências + Pré-Assist.) / Jogos do dia" />
                                     </th>
-                                    <th className="px-3 py-2 text-center">Defesas</th>
-                                    <th className="px-3 py-2 text-center">Nota</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">Defesas</th>
+                                    <th className="px-1 py-2 xl:px-2 text-center leading-tight align-bottom">Nota</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -779,42 +728,42 @@ export default function PlayerStatisticsByDatePage() {
                                 )}
                                 {worstDayPerPlayer.map((r, i) => (
                                     <tr key={r.playerId} className={`hover:bg-surface-raised ${i % 2 === 1 ? "bg-surface-raised" : ""}`}>
-                                        <td className="px-3 py-2 text-left sticky left-0 bg-inherit border-r border-border">{r.playerName}</td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1.5 py-1.5 xl:px-2 text-left sticky left-0 bg-inherit border-r border-border [overflow-wrap:anywhere]">{r.playerName}</td>
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.goals.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.goals.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.goals.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.assists.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.assists.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.assists.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.preAssists.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.preAssists.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.preAssists.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.passPct.value.toFixed(1)}%{" "}
-                                            <DateBadge className="ml-1" dateISO={r.passPct.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.passPct.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.tacklePct.value.toFixed(1)}%{" "}
-                                            <DateBadge className="ml-1" dateISO={r.tacklePct.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.tacklePct.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.tackles.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.tackles.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.tackles.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.participations.value.toFixed(2)}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.participations.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.participations.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             {r.saves.value}{" "}
-                                            <DateBadge className="ml-1" dateISO={r.saves.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.saves.date} colorMap={dateColorMap} />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        <td className="px-1 py-1.5 xl:px-2 text-center align-top">
                                             <RatingPill value={Number(r.rating.value)} />{" "}
-                                            <DateBadge className="ml-1" dateISO={r.rating.date} colorMap={dateColorMap} />
+                                            <DateBadge short className="!flex mx-auto mt-0.5 w-fit" dateISO={r.rating.date} colorMap={dateColorMap} />
                                         </td>
                                     </tr>
                                 ))}
@@ -832,17 +781,22 @@ export default function PlayerStatisticsByDatePage() {
                     )}
                     {days.map((d) => {
                         const key = d.date.slice(0, 10);
-                        const dateColors = dateColorMap.get(key) ?? { bg: "#E5E7EB", border: "#9CA3AF", fg: "#111827" };
+                        const dateColors = dateColorMap.get(key) ?? NEUTRAL_DATE_COLOR;
+                        const isOpen = openDays.has(key);
+                        const panelId = `day-panel-${key}`;
                         return (
                             <section
                                 key={d.date}
                                 className="rounded-xl border p-3 shadow-sm"
-                                style={{
-                                    borderLeft: `8px solid ${dateColors.border}`,
-                                    backgroundColor: `${dateColors.bg}22`,
-                                }}
+                                style={{ borderLeft: `8px solid ${dateColors.border}` }}
                             >
-                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                <button
+                                    type="button"
+                                    aria-expanded={isOpen}
+                                    aria-controls={panelId}
+                                    onClick={() => toggleDay(key)}
+                                    className={`flex min-h-[44px] w-full flex-wrap items-center gap-2 rounded-lg px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isOpen ? "mb-2" : ""}`}
+                                >
                                     <DateBadge dateISO={d.date} colorMap={dateColorMap} />
                                     {bestOverallDay?.date === d.date && (
                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gold-soft text-gold-fg border border-gold/40">
@@ -865,21 +819,26 @@ export default function PlayerStatisticsByDatePage() {
                                     <span className="px-2 py-0.5 rounded-full bg-surface border text-xs">
                                         GA/jg {d.matchesCount ? (d.goalsAgainst / d.matchesCount).toFixed(2) : "—"}
                                     </span>
-                                </div>
+                                    <ChevronDown aria-hidden="true" className={`ml-auto h-5 w-5 flex-shrink-0 text-fg-muted transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                                </button>
 
-                                <PlayerStatsTable
-                                    players={d.players}
-                                    loading={false}
-                                    error={null}
-                                    clubStats={null}
-                                    compactMode
-                                    hiddenColumns={["totalSecondsPlayed"]}
-                                />
+                                {isOpen && (
+                                    <div id={panelId}>
+                                        <PlayerStatsTable
+                                            players={d.players}
+                                            loading={false}
+                                            error={null}
+                                            clubStats={null}
+                                            compactMode
+                                            hiddenColumns={["totalSecondsPlayed"]}
+                                        />
+                                    </div>
+                                )}
                             </section>
                         );
                     })}
                 </div>
             )}
-        </div>
+        </PageShell>
     );
 }

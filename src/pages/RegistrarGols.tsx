@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import ConfirmDialog from "../components/ConfirmDialog.tsx";
-import { Card, SectionHeader } from "../components/ui.tsx";
+import { Card, PageHeader, PageShell } from "../components/ui.tsx";
 import { ActiveRegistrationBanner } from "../components/goalRegistration/ActiveRegistrationBanner.tsx";
 import { OpponentPreviewCard } from "../components/goalRegistration/OpponentPreviewCard.tsx";
 import { OpponentSearch } from "../components/goalRegistration/OpponentSearch.tsx";
@@ -171,7 +171,7 @@ export default function RegistrarGols() {
   // ----- Tela de pontuação -----
   if (active && clubId !== null) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-4">
+      <PageShell size="md" className="!py-4">
         <h1 className="sr-only">Registrar gols</h1>
         <ScoringScreen
           key={active.registration.id}
@@ -182,7 +182,7 @@ export default function RegistrarGols() {
           onExit={leaveScoring}
           onCancelled={leaveScoring}
         />
-      </main>
+      </PageShell>
     );
   }
 
@@ -224,8 +224,8 @@ export default function RegistrarGols() {
   ) : null;
 
   return (
-    <main className="mx-auto max-w-3xl space-y-5 px-4 py-6">
-      <SectionHeader as="h1" eyebrow="Ao vivo" title="Registrar gols" />
+    <PageShell size="md" className="space-y-5">
+      <PageHeader eyebrow="Ao vivo" title="Registrar gols" className="mb-0" />
 
       <div className="space-y-1 text-sm text-fg-muted">
         <p>Registre cada gol na hora, durante o jogo. Quando a partida for buscada, o vínculo é feito automaticamente.</p>
@@ -315,6 +315,6 @@ export default function RegistrarGols() {
         onConfirm={() => void confirmCancelCurrentRegistration()}
         onCancel={() => setConfirmCancelCurrent(false)}
       />
-    </main>
+    </PageShell>
   );
 }

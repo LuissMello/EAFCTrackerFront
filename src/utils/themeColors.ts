@@ -19,6 +19,22 @@ export function cssVar(name: string, alpha = 1): string {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/** Token CSS como #RRGGBB (para usar com withAlpha). */
+export function cssVarHex(name: string, fallback = "#64748B"): string {
+    if (typeof window === "undefined") return fallback;
+    const channels = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const parts = channels.split(/\s+/).map(Number);
+    if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) return fallback;
+    return "#" + parts.slice(0, 3).map((n) => n.toString(16).padStart(2, "0")).join("");
+}
+
+const SERIES_VARS = ["--color-accent", "--chart-series-2", "--chart-series-3", "--chart-series-4", "--chart-series-5"];
+
+/** Cor da n-ésima série de um gráfico (1ª = accent do tema; depois tokens --chart-series-N). */
+export function seriesColor(index: number): string {
+    return cssVarHex(SERIES_VARS[Math.max(0, index) % SERIES_VARS.length]);
+}
+
 /** Common chart-chrome colors derived from the active theme. */
 export function chartTheme() {
     return {

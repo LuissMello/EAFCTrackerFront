@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import api from "../services/api.ts";
 import { API_ENDPOINTS, crestUrl } from "../config/urls.ts";
 import { ClubStats } from "../types/stats.ts";
-import { Crest } from "../components/ui.tsx";
+import { Crest, EmptyState, PageHeader, PageShell } from "../components/ui.tsx";
 import { getPalette, buildPassFlow } from "../utils/goalAnalysis.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ const PlayerPill: React.FC<PlayerPillProps> = ({ name, colorIdx, label, icon }) 
   const c = getPalette(colorIdx);
   return (
     <div className="flex flex-col items-center gap-0.5 min-w-0">
-      {label && <span className="text-[10px] text-fg-subtle uppercase tracking-wide">{label}</span>}
+      {label && <span className="text-[11px] text-fg-subtle uppercase tracking-wide">{label}</span>}
       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${c.bg} ${c.text} ${c.border} whitespace-nowrap max-w-[140px] truncate`}>
         {icon && <span>{icon}</span>}
         {name}
@@ -142,7 +142,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, index, colorMap }) => {
           </>
         ) : (
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-[10px] text-fg-subtle uppercase tracking-wide">Pré-Assist</span>
+            <span className="text-[11px] text-fg-subtle uppercase tracking-wide">Pré-Assist</span>
             <span className="px-2.5 py-1 rounded-full text-xs border border-dashed border-border text-fg-subtle whitespace-nowrap">—</span>
           </div>
         )}
@@ -154,7 +154,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, index, colorMap }) => {
           </>
         ) : (
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-[10px] text-fg-subtle uppercase tracking-wide">Assist</span>
+            <span className="text-[11px] text-fg-subtle uppercase tracking-wide">Assist</span>
             <span className="px-2.5 py-1 rounded-full text-xs border border-dashed border-border text-fg-subtle whitespace-nowrap">—</span>
           </div>
         )}
@@ -245,17 +245,18 @@ export default function MatchGoalAnalysis() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
-        <Skeleton className="h-8 w-48" />
+      <PageShell className="space-y-6" aria-busy>
+        <PageHeader eyebrow="Partida" title="Análise de gols" subtitle="Carregando…" className="mb-0" />
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </PageShell>
     );
   }
 
   if (error) {
     return (
-      <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      <PageShell>
+        <PageHeader eyebrow="Partida" title="Análise de gols" />
         <div className="rounded-xl border border-negative/40 p-4 bg-negative-soft text-negative-fg">
           <div className="font-semibold">Erro ao carregar análise</div>
           <div className="text-sm mt-1">{error}</div>
@@ -263,40 +264,49 @@ export default function MatchGoalAnalysis() {
             ← Voltar para a partida
           </Link>
         </div>
-      </div>
+      </PageShell>
     );
   }
 
   if (goals.length === 0) {
     return (
-      <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-4">
-        <Link to={`/match/${matchId}`} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm bg-surface shadow-sm hover:bg-surface-raised">
-          ← Voltar para a partida
-        </Link>
-        <div className="bg-surface rounded-xl border shadow-sm p-8 text-center text-fg-muted">
-          <div className="text-4xl mb-3">⚽</div>
-          <div className="font-semibold">Nenhum vínculo de gol registrado</div>
-          <div className="text-sm mt-1">Registre as assistências na página da partida para ver a análise aqui.</div>
-        </div>
-      </div>
+      <PageShell className="space-y-4">
+        <PageHeader
+          eyebrow="Partida"
+          title="Análise de gols"
+          className="mb-0"
+          actions={
+            <Link to={`/match/${matchId}`} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm bg-surface shadow-sm hover:bg-surface-raised">
+              ← Voltar para a partida
+            </Link>
+          }
+        />
+        <EmptyState icon="⚽" title="Nenhum vínculo de gol registrado">
+          Registre as assistências na página da partida para ver a análise aqui.
+        </EmptyState>
+      </PageShell>
     );
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-5">
+    <PageShell className="space-y-5">
 
-      {/* Back */}
-      <div className="flex items-center gap-2">
-        <Link
-          to={`/match/${matchId}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-surface hover:bg-surface-raised"
-        >
-          ← Voltar para a partida
-        </Link>
-        <span className="text-fg-subtle text-sm">Análise de Gols</span>
-      </div>
+      {/* Cabeçalho */}
+      <PageHeader
+        eyebrow="Partida"
+        title="Análise de gols"
+        className="mb-0"
+        actions={
+          <Link
+            to={`/match/${matchId}`}
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-surface hover:bg-surface-raised"
+          >
+            ← Voltar para a partida
+          </Link>
+        }
+      />
 
       {/* Match Header */}
       <div className="bg-surface rounded-xl border shadow-sm p-5">
@@ -598,6 +608,6 @@ export default function MatchGoalAnalysis() {
 
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import api, { isCanceled } from "../services/api.ts";
 import { useRefresh } from "../hooks/useRefresh.tsx";
 import { API_ENDPOINTS } from "../config/urls.ts";
-import { RatingPill, ResultPill, Outcome } from "../components/ui.tsx";
+import { PageHeader, PageShell, RatingPill, ResultPill, Outcome } from "../components/ui.tsx";
 import { fmtDateBR } from "../utils/date.ts";
 
 interface PlayerMatchHistoryDto {
@@ -145,31 +145,28 @@ export default function PlayerProfile() {
     const maxPosCount = positionEntries[0]?.[1] ?? 1;
 
     return (
-        <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
-            <div className="flex items-center gap-3">
-                <button
-                    onClick={() => navigate(-1)}
-                    className="px-3 py-1.5 rounded-lg text-sm font-medium border bg-surface hover:bg-surface-raised transition-colors text-fg-secondary"
-                >
-                    Voltar
-                </button>
-                {data && (
-                    <div className="flex items-center gap-3 flex-1">
-                        <div>
-                            <h1 className="text-xl font-black text-fg tracking-tight">{data.name}</h1>
-                            <p className="text-sm text-fg-muted">@{data.accountName}</p>
-                        </div>
-                        {data.proOverall != null && (
-                            <span className="ml-2 px-3 py-1 rounded-full text-sm font-bold bg-accent text-accent-fg">
+        <PageShell className="space-y-6">
+            <PageHeader
+                eyebrow="Jogador"
+                title={data?.name ?? "Jogador"}
+                subtitle={data ? `@${data.accountName}` : loading ? "Carregando…" : undefined}
+                className="mb-0"
+                actions={
+                    <>
+                        {data?.proOverall != null && (
+                            <span className="px-3 py-1 rounded-full text-sm font-bold bg-accent text-accent-fg">
                                 OVR {data.proOverall}
                             </span>
                         )}
-                    </div>
-                )}
-                {loading && (
-                    <div className="text-sm text-fg-subtle animate-pulse">Carregando...</div>
-                )}
-            </div>
+                        <button
+                            onClick={() => navigate(-1)}
+                            className="px-3 py-1.5 rounded-lg text-sm font-medium border bg-surface hover:bg-surface-raised transition-colors text-fg-secondary"
+                        >
+                            ← Voltar
+                        </button>
+                    </>
+                }
+            />
 
             {error && (
                 <div className="bg-negative-soft border border-negative/30 rounded-xl p-4 text-sm text-negative-fg">{error}</div>
@@ -376,6 +373,6 @@ export default function PlayerProfile() {
                     </div>
                 </>
             )}
-        </div>
+        </PageShell>
     );
 }

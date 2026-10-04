@@ -46,12 +46,12 @@ const ConfidenceFilterBar: React.FC<ConfidenceFilterProps> = ({ value, onChange,
   ];
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-[10px] text-fg-subtle font-medium uppercase tracking-wide mr-0.5">Mostrar:</span>
+      <span className="text-[11px] text-fg-subtle font-medium uppercase tracking-wide mr-0.5">Mostrar:</span>
       {options.map((opt) => (
         <button
           key={opt.key}
           onClick={() => onChange(opt.key)}
-          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-all border ${
+          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all border ${
             value === opt.key
               ? 'bg-accent text-accent-fg border-accent'
               : 'bg-surface text-fg-muted border-border hover:border-border-strong hover:text-fg-secondary'
@@ -105,7 +105,7 @@ const MatchStatsTabs: React.FC<MatchStatsTabsProps> = ({
         >
           {tab}
           {tab === UNKNOWN_TAB && unknownCount > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-border text-fg-muted text-[9px] font-bold">
+            <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-border text-fg-muted text-[11px] font-bold">
               {unknownCount > 99 ? '99+' : unknownCount}
             </span>
           )}
@@ -158,12 +158,12 @@ const PlayerEventTable: React.FC<PlayerEventTableProps> = ({ club, columns }) =>
                   title={`ID ${col.id} · ${badge.label}`}
                 >
                   <div className="flex items-center justify-center gap-0.5 leading-tight">
-                    <span className={`text-[9px] font-bold leading-none shrink-0 ${badge.dotCls}`}>
+                    <span className={`text-[11px] font-bold leading-none shrink-0 ${badge.dotCls}`}>
                       {badge.symbol}
                     </span>
                     <span className="text-[11px]">{col.label}</span>
                   </div>
-                  <div className="text-[9px] font-normal text-fg-subtle mt-0.5">ID {col.id}</div>
+                  <div className="text-[11px] font-normal text-fg-subtle mt-0.5">ID {col.id}</div>
                 </th>
               );
             })}
@@ -203,7 +203,7 @@ const PlayerEventTable: React.FC<PlayerEventTableProps> = ({ club, columns }) =>
                         {val}
                       </span>
                     ) : (
-                      <span className="text-fg-subtle text-[10px]">–</span>
+                      <span className="text-fg-subtle text-[11px]">–</span>
                     )}
                   </td>
                 );
@@ -318,7 +318,7 @@ export const MatchEaPostGameStats: React.FC<MatchEaPostGameStatsProps> = ({
               </div>
             ))}
           </div>
-          <span className="text-fg-subtle text-[10px] uppercase tracking-widest font-medium whitespace-nowrap">
+          <span className="text-fg-subtle text-[11px] uppercase tracking-widest font-medium whitespace-nowrap">
             Eventos — Por jogador
           </span>
         </div>
@@ -343,7 +343,7 @@ export const MatchEaPostGameStats: React.FC<MatchEaPostGameStatsProps> = ({
             counts={confidenceCounts}
           />
           {/* Legenda inline */}
-          <div className="flex items-center gap-3 text-[10px] text-fg-subtle">
+          <div className="flex items-center gap-3 text-[11px] text-fg-subtle">
             <span><span className="text-positive font-bold">✓</span> confirmado</span>
             <span><span className="text-warning font-bold">~</span> provável</span>
             <span><span className="text-negative font-bold">✗</span> incerto</span>

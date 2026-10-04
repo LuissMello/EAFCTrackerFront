@@ -5,6 +5,35 @@ import type { MatchResultDto, MatchTypeFilter } from "../../types/match.ts";
 import { formatDateSafe, perspectiveForSelected } from "../../utils/matchResults.ts";
 import { Crest } from "../ui.tsx";
 import { GameVersionBadge } from "../GameVersionBadge.tsx";
+import { rememberMatch } from "../../utils/matchHandoff.ts";
+
+const HERO_FRAME =
+  "group relative block overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-slate-900 to-slate-950 text-slate-100 shadow-raised";
+
+/** Moldura do placar: link para a partida ou apenas um bloco (na própria página da partida). */
+function HeroFrame({
+  asLink,
+  m,
+  matchType,
+  children,
+}: {
+  asLink: boolean;
+  m: MatchResultDto;
+  matchType: MatchTypeFilter;
+  children: React.ReactNode;
+}) {
+  if (!asLink) return <div className={HERO_FRAME}>{children}</div>;
+  return (
+    <Link
+      to={`/match/${m.matchId}?matchType=${matchType}`}
+      onClick={() => rememberMatch(m)}
+      className={`${HERO_FRAME} transition hover:brightness-110`}
+      title="Ver detalhes da última partida"
+    >
+      {children}
+    </Link>
+  );
+}
 
 /** Placar em destaque (último resultado) — elemento "broadcast". */
 export const ScoreboardHero = React.memo(function ScoreboardHero({
@@ -12,11 +41,16 @@ export const ScoreboardHero = React.memo(function ScoreboardHero({
   matchType,
   selectedClubIds,
   fallbackClubName,
+  asLink = true,
+  label = "Último resultado",
 }: {
   m: MatchResultDto;
   matchType: MatchTypeFilter;
   selectedClubIds: number[];
   fallbackClubName?: string | null;
+  /** false = só exibe (ex.: na própria página da partida) */
+  asLink?: boolean;
+  label?: string;
 }) {
   const p = perspectiveForSelected(m, selectedClubIds, fallbackClubName);
   const outcome = p.myGoals === p.oppGoals ? "draw" : p.myGoals > p.oppGoals ? "win" : "loss";
@@ -37,23 +71,19 @@ export const ScoreboardHero = React.memo(function ScoreboardHero({
   const tagLabel = outcome === "win" ? "Vitória" : outcome === "loss" ? "Derrota" : "Empate";
 
   const scoreColor = (mine: boolean) =>
-    mine && outcome === "win" ? "text-positive" : mine && outcome === "loss" ? "text-negative" : "text-slate-100";
+    mine && outcome === "win" ? "text-green-400" : mine && outcome === "loss" ? "text-red-400" : "text-slate-100";
 
   return (
-    <Link
-      to={`/match/${m.matchId}?matchType=${matchType}`}
-      className="group relative block overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-slate-900 to-slate-950 text-slate-100 shadow-raised transition hover:brightness-110"
-      title="Ver detalhes da última partida"
-    >
+    <HeroFrame asLink={asLink} m={m} matchType={matchType}>
       <span className={`absolute inset-x-0 top-0 h-1 ${accentBar}`} />
 
       <div className="flex items-center justify-between px-4 sm:px-6 pt-4 text-[11px] uppercase tracking-widest text-slate-400">
         <span className="inline-flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-accent" /> Último resultado
+          <span className="w-1.5 h-1.5 rounded-full bg-accent" /> {label}
         </span>
         <span className="inline-flex items-center gap-2 tabular-nums">
           <GameVersionBadge version={m.gameVersion} />
-          {formatDateSafe(m.timestamp)}
+          {m.timestamp != null ? formatDateSafe(m.timestamp) : null}
         </span>
       </div>
 
@@ -62,7 +92,7 @@ export const ScoreboardHero = React.memo(function ScoreboardHero({
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Crest src={crestUrl(crestA)} size={44} rounded="rounded-xl" />
           <div className="min-w-0">
-            <div className="font-display text-base sm:text-2xl uppercase leading-none tracking-wide truncate" title={m.clubAName}>
+            <div className="font-display text-base sm:text-2xl uppercase leading-tight sm:leading-none tracking-wide [overflow-wrap:anywhere] sm:truncate" title={m.clubAName}>
               {m.clubAName}
             </div>
             {divA && <div className="mt-1 text-[11px] text-slate-400">Divisão {divA}</div>}
@@ -84,7 +114,7 @@ export const ScoreboardHero = React.memo(function ScoreboardHero({
         {/* Clube B */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0 justify-end text-right">
           <div className="min-w-0">
-            <div className="font-display text-base sm:text-2xl uppercase leading-none tracking-wide truncate" title={m.clubBName}>
+            <div className="font-display text-base sm:text-2xl uppercase leading-tight sm:leading-none tracking-wide [overflow-wrap:anywhere] sm:truncate" title={m.clubBName}>
               {m.clubBName}
             </div>
             {divB && <div className="mt-1 text-[11px] text-slate-400">Divisão {divB}</div>}
@@ -96,6 +126,6 @@ export const ScoreboardHero = React.memo(function ScoreboardHero({
       {stadiumName && (
         <div className="px-4 sm:px-6 pb-4 text-center text-[11px] text-slate-400 whitespace-normal [overflow-wrap:anywhere]">{stadiumName}</div>
       )}
-    </Link>
+    </HeroFrame>
   );
 });

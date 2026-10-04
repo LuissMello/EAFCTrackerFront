@@ -1,10 +1,10 @@
 ﻿// src/pages/PlayerStatisticsByPlayerPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import api, { isCanceled } from "../services/api.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { useRefresh } from "../hooks/useRefresh.tsx";
-import { daysAgoYmd, toYmd, fmtHM, fmtBRFromISO } from "../utils/date.ts";
+import { fmtHM, fmtBRFromISO } from "../utils/date.ts";
 import { PlayerSingleStatsTable } from "../components/PlayerSingleStatsTable.tsx";
 import type { PlayerStats } from "../types/stats";
 import { toNum } from "../utils/number.ts";
@@ -13,6 +13,10 @@ import { withAlpha, movingAvg } from "../utils/chart.ts";
 import { getPassPct, getTacklePct, getMatchesPlayed, getSuccessfulTackles } from "../utils/playerDto.ts";
 import { DateBadge } from "../components/DateBadge.tsx";
 import { ChartCard } from "../components/ChartCard.tsx";
+import { PageHeader, PageShell } from "../components/ui.tsx";
+import { DateRangeBar } from "../components/DateRangeBar.tsx";
+import { useUrlDateRange } from "../hooks/useUrlDateRange.ts";
+import { useUrlEnum } from "../hooks/useUrlState.ts";
 import { buildGameRows } from "../utils/gameRows.ts";
 import type {
   FullMatchStatisticsByDayDto,
@@ -67,6 +71,10 @@ function RecordBar({ wins, draws, losses }: { wins: number; draws: number; losse
   );
 }
 
+type StatsTab = "summary" | "best" | "games";
+const STATS_TABS = ["summary", "best", "games"] as const;
+const TAB_LABEL: Record<StatsTab, string> = { summary: "Resumo", best: "Melhores dias", games: "Jogo a jogo" };
+
 const CHART_COLORS = {
   goals: "#3B82F6",      // blue
   assists: "#10B981",    // emerald
@@ -82,7 +90,7 @@ const PLAYER_COMPARE_COLORS = ["#3B82F6", "#F97316"]; // blue, orange
 export default function PlayerStatisticsByPlayerPage() {
   const { refreshKey } = useRefresh();
   const { resolvedTheme } = useTheme();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState<DayBlock[]>([]);
@@ -101,51 +109,8 @@ export default function PlayerStatisticsByPlayerPage() {
   })();
   const clubIds = useMemo(() => (clubIdsKey ? clubIdsKey.split(",").map(Number) : []), [clubIdsKey]);
 
-  // range (URL ou fixo/inicial)
-  const [dateFrom, setDateFrom] = useState(() => {
-    const fromUrl = searchParams.get("dateFrom");
-    if (fromUrl) return fromUrl;
-    return daysAgoYmd(30); // padrão: últimos 30 dias
-  });
-  const [dateTo, setDateTo] = useState(() => {
-    const toUrl = searchParams.get("dateTo");
-    if (toUrl) return toUrl;
-    const now = new Date();
-    return toYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
-  });
-
-  const [activeQuickRange, setActiveQuickRange] = useState<string | null>(null);
-
-  const handleRangeChange = (start: string, end: string) => {
-    setDateFrom(start);
-    setDateTo(end);
-    const sp = new URLSearchParams(searchParams);
-    sp.set("dateFrom", start);
-    sp.set("dateTo", end);
-    setSearchParams(sp, { replace: true });
-  };
-
-  const setQuickRangeDays = (nDays: number) => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - (nDays - 1));
-    handleRangeChange(toYmd(start), toYmd(end));
-    setActiveQuickRange(`${nDays}d`);
-  };
-  const setCurrentMonth = () => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    handleRangeChange(toYmd(start), toYmd(end));
-    setActiveQuickRange("current");
-  };
-  const setPreviousMonth = () => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const end = new Date(now.getFullYear(), now.getMonth(), 0);
-    handleRangeChange(toYmd(start), toYmd(end));
-    setActiveQuickRange("prev");
-  };
+  // Período na URL (?dateFrom=&dateTo=): últimos 30 dias por padrão
+  const [{ from: dateFrom, to: dateTo }, setRange] = useUrlDateRange();
 
   // ===== Fetch agrupado por dia (clubes + todos jogadores) =====
   useEffect(() => {
@@ -228,6 +193,10 @@ export default function PlayerStatisticsByPlayerPage() {
   }, [days]);
 
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
+  // true quando o usuário escolheu o jogador (senão foi o padrão automático: primeiro da lista)
+  const [playerPicked, setPlayerPicked] = useState(false);
+  // Abas: só o conteúdo da aba ativa é montado (tabelas/gráficos pesados ficam fora do DOM nas outras)
+  const [tab, setTab] = useUrlEnum<StatsTab>("tab", "summary", STATS_TABS);
 
   // seleção padrão
   useEffect(() => {
@@ -240,6 +209,7 @@ export default function PlayerStatisticsByPlayerPage() {
   }, [playerOptions, selectedPlayerIds]);
 
   const togglePlayerSelection = (playerId: number) => {
+    setPlayerPicked(true);
     setSelectedPlayerIds((prev) => {
       if (prev.includes(playerId)) {
         // Remove player
@@ -556,7 +526,7 @@ export default function PlayerStatisticsByPlayerPage() {
       legend: {
         display: showLegend,
         position: "top" as const,
-        labels: { boxWidth: 12, padding: 8, font: { size: 10 }, color: t.fg },
+        labels: { boxWidth: 12, padding: 8, font: { size: 11 }, color: t.fg },
       },
       tooltip: {
         backgroundColor: t.surface,
@@ -575,7 +545,7 @@ export default function PlayerStatisticsByPlayerPage() {
     scales: {
       x: {
         grid: { display: false, color: t.grid },
-        ticks: { maxRotation: 45, minRotation: 45, font: { size: 10 }, color: t.fgMuted },
+        ticks: { maxRotation: 45, minRotation: 45, font: { size: 11 }, color: t.fgMuted },
       },
       y: {
         grid: { color: t.grid },
@@ -903,67 +873,28 @@ export default function PlayerStatisticsByPlayerPage() {
     .join(" vs ");
 
   const modeBadgeClass =
-    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border " +
+    "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border " +
     (useDaysRanking ? "bg-positive-soft text-positive-fg border-positive/40" : "bg-accent/10 text-accent border-accent/30");
 
   const modeLabel = useDaysRanking ? "Modo: dias" : "Modo: jogos";
 
-  const qbCls = (key: string) =>
-    `text-xs border rounded-lg px-2.5 py-1 shadow-sm transition-colors ${
-      activeQuickRange === key
-        ? "bg-accent text-accent-fg border-accent"
-        : "bg-surface text-fg-secondary hover:bg-surface-raised"
-    }`;
-
   const rankTopClass =
-    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-positive-soft text-positive-fg border-positive/40";
+    "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-positive-soft text-positive-fg border-positive/40";
   const rankWorstClass =
-    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-negative-soft text-negative-fg border-negative/40";
+    "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-negative-soft text-negative-fg border-negative/40";
 
   return (
-    <div className="p-4 flex flex-col gap-6">
-      {/* Header & filtros */}
+    <PageShell className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Período"
+        title="Estatísticas individuais"
+        subtitle="Desempenho de cada jogador por dia e por jogo"
+        className="-mb-2"
+      />
+      {/* Filtros */}
       <header className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-2">
-              <Link
-                to="/"
-                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-surface hover:bg-surface-raised"
-              >
-                ← Voltar
-              </Link>
-              <span className="text-fg-subtle text-sm">Estatísticas individuais por data</span>
-            </div>
-          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <div className="flex gap-2 items-center">
-              <label className="text-sm">
-                Início:
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => { handleRangeChange(e.target.value, dateTo); setActiveQuickRange(null); }}
-                  className="ml-1 border rounded px-2 py-1"
-                />
-              </label>
-              <label className="text-sm">
-                Fim:
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => { handleRangeChange(dateFrom, e.target.value); setActiveQuickRange(null); }}
-                  className="ml-1 border rounded px-2 py-1"
-                />
-              </label>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => setQuickRangeDays(7)} className={qbCls("7d")}>7d</button>
-              <button onClick={() => setQuickRangeDays(14)} className={qbCls("14d")}>14d</button>
-              <button onClick={() => setQuickRangeDays(30)} className={qbCls("30d")}>30d</button>
-              <button onClick={setCurrentMonth} className={qbCls("current")}>Mês atual</button>
-              <button onClick={setPreviousMonth} className={qbCls("prev")}>Mês anterior</button>
-            </div>
-          </div>
+          <DateRangeBar from={dateFrom} to={dateTo} onChange={setRange} idPrefix="spbd" />
         </div>
 
         {/* Seleção de jogador e dia – chips */}
@@ -1036,34 +967,26 @@ export default function PlayerStatisticsByPlayerPage() {
                 Todos os dias
               </button>
 
-              {/* Chips de datas, cada um na cor do dia */}
+              {/* Chips de datas: neutros (cor só para V/E/D); o selecionado usa o destaque do tema */}
               {datesForSelectedPlayer.map((d) => {
                 const key = d.slice(0, 10);
-                const c = dateColorMap.get(key) ?? {
-                  bg: "#E5E7EB",
-                  border: "#9CA3AF",
-                  fg: "#111827",
-                };
                 const isActive = selectedDayKey === d;
 
                 return (
                   <button
                     key={d}
                     type="button"
+                    aria-pressed={isActive}
                     onClick={() => setSelectedDayKey(d)}
                     className={
-                      "px-3 py-1 rounded-full text-xs sm:text-sm border transition-transform " +
-                      (isActive ? "ring-2 ring-accent ring-offset-1 ring-offset-bg" : "")
+                      "min-h-[36px] px-3 py-1 rounded-full text-xs sm:text-sm border transition-colors " +
+                      (isActive
+                        ? "bg-accent text-accent-fg border-accent"
+                        : "bg-surface-sunken text-fg-secondary border-border-strong hover:bg-surface-raised")
                     }
-                    style={{
-                      backgroundColor: c.bg,
-                      borderColor: c.border,
-                      color: c.fg,
-                      transform: isActive ? "scale(1.03)" : "scale(1.0)",
-                    }}
                   >
                     {fmtBRFromISO(d)}
-                    <span className="opacity-60 text-[10px] ml-0.5">
+                    <span className="opacity-80 text-[11px] ml-0.5">
                       {" · "}{perDayForPlayer.find((pd) => pd.date.slice(0, 10) === key)?.matches ?? 0}j
                     </span>
                   </button>
@@ -1082,8 +1005,45 @@ export default function PlayerStatisticsByPlayerPage() {
           onClick={() => setGroupSessions(false)} className={`px-3 py-1.5 rounded-lg border ${!groupSessions || clubIds.length !== 1 ? "bg-accent text-accent-fg" : "bg-surface"}`}>Dias do calendário</button>
       </div>
 
+      {selectedPlayerIds.length > 0 && (
+        <p className="text-sm text-fg-secondary" role="status">
+          Mostrando: <strong>{isComparing ? selectedPlayerNames : selectedPlayerName}</strong>
+          {!playerPicked && !isComparing && (
+            <span className="text-fg-muted"> (primeiro jogador do período — escolha outro nos botões acima)</span>
+          )}
+        </p>
+      )}
+
+      <div role="tablist" aria-label="Seções de estatísticas individuais" className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-surface p-1 scroll-touch-x">
+        {STATS_TABS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            id={`stats-tab-${t}`}
+            aria-selected={tab === t}
+            tabIndex={tab === t ? 0 : -1}
+            onClick={() => setTab(t)}
+            onKeyDown={(e) => {
+              const i = STATS_TABS.indexOf(t);
+              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                const next = STATS_TABS[(i + (e.key === "ArrowRight" ? 1 : STATS_TABS.length - 1)) % STATS_TABS.length];
+                setTab(next);
+                document.getElementById(`stats-tab-${next}`)?.focus();
+              }
+            }}
+            className={`min-h-[40px] flex-1 whitespace-nowrap rounded-lg px-4 text-sm font-semibold transition-colors ${
+              tab === t ? "bg-accent text-accent-fg" : "text-fg-secondary hover:bg-surface-raised"
+            }`}
+          >
+            {TAB_LABEL[t]}
+          </button>
+        ))}
+      </div>
+
       {/* BLOCO DE RESUMO GERAL (período ou dia) */}
-      {summary && (
+      {tab === "summary" && summary && (
         <section className="rounded-xl border border-border bg-surface p-3 sm:p-4 flex flex-col gap-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
             <div className="flex items-center gap-2">
@@ -1145,7 +1105,7 @@ export default function PlayerStatisticsByPlayerPage() {
       )}
 
       {/* BLOCO: MELHOR DIA + RANKINGS */}
-      {selectedPlayerId && perDayForPlayer.length > 0 && (
+      {tab === "best" && selectedPlayerId && perDayForPlayer.length > 0 && (
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1603,25 +1563,25 @@ export default function PlayerStatisticsByPlayerPage() {
       )}
 
       {/* ===== VISÃO: TODOS OS DIAS (TABELA ÚNICA) ===== */}
-      {!loading && !error && selectedPlayerId && selectedDayKey === "all" && perDayForPlayer.length > 0 && (
+      {tab === "summary" && !loading && !error && selectedPlayerId && selectedDayKey === "all" && perDayForPlayer.length > 0 && (
         <section className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">{selectedPlayerName} — resumo por dia</h2>
 
           <div className="overflow-x-auto rounded-lg border bg-surface">
-            <table className="table-auto w-full text-sm">
+            <table className="table-auto w-full text-xs xl:text-sm">
               <thead className="bg-surface-raised">
                 <tr>
-                  <th className="px-3 py-2 text-left">Data</th>
-                  <th className="px-3 py-2 text-center">Janela</th>
-                  <th className="px-3 py-2 text-right">Jogos</th>
-                  <th className="px-3 py-2 text-right">Gols</th>
-                  <th className="px-3 py-2 text-right">Assist.</th>
-                  <th className="px-3 py-2 text-right">Pré-Assist.</th>
-                  <th className="px-3 py-2 text-right">Passes (C/T)</th>
-                  <th className="px-3 py-2 text-right">% Passes</th>
-                  <th className="px-3 py-2 text-right">Desarmes (C/T)</th>
-                  <th className="px-3 py-2 text-right">% Desarmes</th>
-                  <th className="px-3 py-2 text-right">Nota média</th>
+                  <th className="px-1.5 xl:px-2 py-2 text-left">Data</th>
+                  <th className="px-1.5 xl:px-2 py-2 text-center">Janela</th>
+                  <th className="px-1.5 xl:px-2 py-2 text-right">Jogos</th>
+                  <th className="px-1.5 xl:px-2 py-2 text-right">Gols</th>
+                  <th className="px-1.5 xl:px-2 py-2 text-right">Assist.</th>
+                  <th className="px-1.5 xl:px-2 py-2 text-right">Pré-Assist.</th>
+                  <th className="px-1.5 xl:px-2 py-2 text-right">Passes (C/T)</th>
+                  <th className="px-1.5 xl:px-2 py-2 text-right">% Passes</th>
+                  <th className="px-1.5 xl:px-2 py-2 text-right">Desarmes (C/T)</th>
+                  <th className="px-1.5 xl:px-2 py-2 text-right">% Desarmes</th>
+                  <th className="px-1.5 xl:px-2 py-2 text-right">Nota média</th>
                 </tr>
               </thead>
               <tbody>
@@ -1642,10 +1602,10 @@ export default function PlayerStatisticsByPlayerPage() {
 
                   return (
                     <tr key={d.date} className={`hover:bg-surface-raised ${rowBorder}`}>
-                      <td className="px-3 py-2 text-left">
+                      <td className="px-1.5 xl:px-2 py-2 text-left">
                         <DateBadge dateISO={key} colorMap={dateColorMap} />
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-1.5 xl:px-2 py-2 text-center">
                         {hasWindow ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-800 border border-slate-300">
                             {sameTime ? d.firstMatchTime : `${d.firstMatchTime}–${d.lastMatchTime}`}
@@ -1654,19 +1614,19 @@ export default function PlayerStatisticsByPlayerPage() {
                           "—"
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right">{d.matches}</td>
-                      <td className="px-3 py-2 text-right">{d.goals}</td>
-                      <td className="px-3 py-2 text-right">{d.assists}</td>
-                      <td className="px-3 py-2 text-right">{d.preAssists}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-1.5 xl:px-2 py-2 text-right">{d.matches}</td>
+                      <td className="px-1.5 xl:px-2 py-2 text-right">{d.goals}</td>
+                      <td className="px-1.5 xl:px-2 py-2 text-right">{d.assists}</td>
+                      <td className="px-1.5 xl:px-2 py-2 text-right">{d.preAssists}</td>
+                      <td className="px-1.5 xl:px-2 py-2 text-right">
                         {d.passesMade} / {d.passesAttempted}
                       </td>
-                      <td className="px-3 py-2 text-right">{d.passPct.toFixed(1)}%</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-1.5 xl:px-2 py-2 text-right">{d.passPct.toFixed(1)}%</td>
+                      <td className="px-1.5 xl:px-2 py-2 text-right">
                         {d.tacklesMade} / {d.tacklesAttempted}
                       </td>
-                      <td className="px-3 py-2 text-right">{d.tacklePct.toFixed(1)}%</td>
-                      <td className="px-3 py-2 text-right">{d.rating.toFixed(2)}</td>
+                      <td className="px-1.5 xl:px-2 py-2 text-right">{d.tacklePct.toFixed(1)}%</td>
+                      <td className="px-1.5 xl:px-2 py-2 text-right">{d.rating.toFixed(2)}</td>
                     </tr>
                   );
                 })}
@@ -1759,7 +1719,20 @@ export default function PlayerStatisticsByPlayerPage() {
       )}
 
       {/* ===== VISÃO: DIA ESPECÍFICO (jogo a jogo em UMA tabela) ===== */}
-      {!loading && !error && selectedPlayerId && selectedDayKey !== "all" && (
+      {tab === "games" && !loading && !error && selectedPlayerId && selectedDayKey === "all" && datesForSelectedPlayer.length > 0 && (
+        <section className="rounded-xl border p-4 shadow-sm flex flex-col gap-3">
+          <p className="text-sm text-fg-secondary">
+            O jogo a jogo mostra um dia por vez. Escolha uma data nos chips acima ou abra o dia mais recente.
+          </p>
+          <div>
+            <button type="button" className="btn btn-primary" onClick={() => setSelectedDayKey(datesForSelectedPlayer[0])}>
+              Ver o dia mais recente
+            </button>
+          </div>
+        </section>
+      )}
+
+      {tab === "games" && !loading && !error && selectedPlayerId && selectedDayKey !== "all" && (
         <section className="rounded-xl border p-4 shadow-sm flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-1">
@@ -1830,6 +1803,6 @@ export default function PlayerStatisticsByPlayerPage() {
           )}
         </section>
       )}
-    </div>
+    </PageShell>
   );
 }

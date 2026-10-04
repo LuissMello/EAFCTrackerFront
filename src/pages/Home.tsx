@@ -1,7 +1,7 @@
 // src/pages/Home.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, X } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
 import { useClub } from "../hooks/useClub.tsx";
 import { useMatchResults } from "../hooks/useMatchResults.ts";
 import { useGameVersions, gameVersionLabel } from "../hooks/useGameVersions.tsx";
@@ -16,6 +16,7 @@ import { PageControls } from "../components/match/PageControls.tsx";
 import { MatchCard } from "../components/match/MatchCard.tsx";
 import { ScoreboardHero } from "../components/match/ScoreboardHero.tsx";
 import { MatchListSkeleton } from "../components/match/Skeleton.tsx";
+import { PageHeader, PageShell } from "../components/ui.tsx";
 
 /* ======================
    Página
@@ -143,8 +144,11 @@ export default function Home() {
     if (gameVersion !== null) next.set("ver", String(gameVersion));
     else next.delete("ver");
 
-    next.set("page", String(page));
-    next.set("size", String(pageSize));
+    // Padrões (página 1, 30 por página) ficam fora da URL
+    if (page !== 1) next.set("page", String(page));
+    else next.delete("page");
+    if (pageSize !== 30) next.set("size", String(pageSize));
+    else next.delete("size");
 
     const prevStr = searchParams.toString();
     const nextStr = next.toString();
@@ -297,6 +301,27 @@ export default function Home() {
   const anyFilterActive =
     search.trim() !== "" || redFilter !== "all" || opponentDivision !== null || !!opponentCount || sortKey !== "recent" || gameVersion !== null || matchType !== "All";
 
+  // Mobile: bloco de filtros recolhido + resumo de uma linha
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount =
+    (search.trim() !== "" ? 1 : 0) +
+    (matchType !== "All" ? 1 : 0) +
+    (redFilter !== "all" ? 1 : 0) +
+    (opponentCount ? 1 : 0) +
+    (opponentDivision !== null ? 1 : 0) +
+    (gameVersion !== null ? 1 : 0) +
+    (sortKey !== "recent" ? 1 : 0);
+  const filtersSummary = (() => {
+    const parts: string[] = [matchType === "League" ? "Liga" : matchType === "Playoff" ? "Playoff" : "Todos os tipos"];
+    if (search.trim()) parts.push(`busca “${search.trim()}”`);
+    if (redFilter !== "all") parts.push(`verm. ${redFilter === "none" ? "nenhum" : redFilter === "1plus" ? "1+" : "2+"}`);
+    if (opponentCount) parts.push(`adv. ${opponentCount} jog.`);
+    if (opponentDivision !== null) parts.push(`div. ${opponentDivision}`);
+    if (gameVersion !== null) parts.push(gameVersionLabel(gameVersion));
+    if (sortKey !== "recent") parts.push(sortKey === "oldest" ? "mais antigas" : sortKey === "gf" ? "mais gols feitos" : "mais gols recebidos");
+    return parts.join(" · ");
+  })();
+
   const headerRight = hasSelection ? (
     selectedClubIds.length > 1 ? (
       <>
@@ -317,44 +342,38 @@ export default function Home() {
   const prev = () => hasPrev && setPage((p) => Math.max(1, p - 1));
 
   return (
-    <div className="p-4 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
-        <div className="flex items-stretch gap-3 min-w-0">
-          <span className="w-1.5 rounded-sm bg-accent flex-shrink-0" />
-          <div className="min-w-0">
-            <h1 className="font-display font-bold text-2xl sm:text-3xl uppercase tracking-wide leading-none">
-              Resultados das Partidas
-            </h1>
-            <p className="text-sm text-fg-muted mt-1.5">{headerRight}</p>
-          </div>
-        </div>
-
-        {hasResults && (
-          <div className="flex flex-col items-start gap-1.5">
-            <span className="text-xs text-fg-muted">Resumo das {summary.jogos} partidas exibidas nesta página</span>
-            <div className="flex items-center flex-wrap gap-3">
-            <RecordBar wins={summary.v} draws={summary.e} losses={summary.d} />
-            <div className="flex items-center flex-wrap gap-2 text-xs">
-              <Badge>
-                GP: <span className="tabular-nums ml-1">{summary.golsPro}</span>
-              </Badge>
-              <Badge>
-                GC: <span className="tabular-nums ml-1">{summary.golsContra}</span>
-              </Badge>
-              <Badge color={summary.saldo >= 0 ? "green" : "red"}>
-                Saldo: <span className="tabular-nums ml-1">{summary.saldo >= 0 ? "+" : ""}{summary.saldo}</span>
-              </Badge>
-              {summary.cartoes > 0 && (
-                <Badge color="red">
-                  🟥 <span className="tabular-nums ml-1">{summary.cartoes}</span>
-                </Badge>
-              )}
+    <PageShell>
+      <PageHeader
+        eyebrow="Partidas"
+        title="Resultados das partidas"
+        subtitle={headerRight}
+        actions={
+          hasResults ? (
+            <div className="flex flex-col items-start gap-1.5">
+              <span className="hidden sm:inline text-xs text-fg-muted">Resumo das {summary.jogos} partidas exibidas nesta página</span>
+              <div className="flex items-center flex-wrap gap-3">
+                <RecordBar wins={summary.v} draws={summary.e} losses={summary.d} />
+                <div className="flex items-center flex-wrap gap-2 text-xs">
+                  <Badge>
+                    GP: <span className="tabular-nums ml-1">{summary.golsPro}</span>
+                  </Badge>
+                  <Badge>
+                    GC: <span className="tabular-nums ml-1">{summary.golsContra}</span>
+                  </Badge>
+                  <Badge color={summary.saldo >= 0 ? "green" : "red"}>
+                    Saldo: <span className="tabular-nums ml-1">{summary.saldo >= 0 ? "+" : ""}{summary.saldo}</span>
+                  </Badge>
+                  {summary.cartoes > 0 && (
+                    <Badge color="red">
+                      🟥 <span className="tabular-nums ml-1">{summary.cartoes}</span>
+                    </Badge>
+                  )}
+                </div>
+              </div>
             </div>
-            </div>
-          </div>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* Placar em destaque */}
       {latest && page === 1 && sortKey === "recent" && (
@@ -376,8 +395,26 @@ export default function Home() {
       )}
 
       {/* Toolbar */}
-      <div className="sticky top-[calc(var(--nav-h,52px)+0.5rem)] z-20 rounded-xl border border-border bg-surface-raised/95 backdrop-blur px-3 py-3">
-        <div className="flex flex-col gap-2.5">
+      <div className="sm:sticky sm:top-[calc(var(--nav-h,52px)+0.5rem)] z-20 rounded-xl border border-border bg-surface-raised/95 backdrop-blur px-3 py-2 sm:py-3">
+        {/* Mobile: filtros recolhidos por padrão, com resumo em uma linha */}
+        <div className="sm:hidden flex items-center gap-2">
+          <button
+            type="button"
+            aria-expanded={filtersOpen}
+            aria-controls="home-filters"
+            onClick={() => setFiltersOpen((v) => !v)}
+            className="btn btn-secondary h-10 px-3"
+          >
+            Filtros
+            {activeFilterCount > 0 && (
+              <span className="rounded-full bg-accent px-1.5 text-[11px] font-bold leading-5 text-accent-fg">{activeFilterCount}</span>
+            )}
+            <ChevronDown className={`w-4 h-4 transition-transform ${filtersOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+          </button>
+          <span className="min-w-0 flex-1 truncate text-sm text-fg-muted">{filtersSummary}</span>
+        </div>
+
+        <div id="home-filters" className={`${filtersOpen ? "mt-2.5 flex" : "hidden"} sm:mt-0 sm:flex flex-col gap-2.5`}>
           {/* Linha 1: tipo de partida + busca */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
             <Segmented value={matchType} onChange={setMatchType} />
@@ -544,7 +581,7 @@ export default function Home() {
 
       {!hasSelection && (
         <div className="mt-4 p-3 bg-warning-soft border border-warning/40 rounded-lg text-warning-fg">
-          Selecione clubes no menu (botão “Clubes”) para começar.
+          Selecione clubes no botão “Selecionar clubes” (no topo da página) para começar.
         </div>
       )}
 
@@ -608,6 +645,6 @@ export default function Home() {
           </div>
         )
       )}
-    </div>
+    </PageShell>
   );
 }

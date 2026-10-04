@@ -8,7 +8,8 @@ import { MSG_LOGIN_REQUIRED, useAuth } from "../hooks/useAuth.tsx";
 import { gameVersionLabel, useGameVersions } from "../hooks/useGameVersions.tsx";
 import type { GameVersion } from "../hooks/useGameVersions.tsx";
 import { fmtBRFromISO } from "../utils/date.ts";
-import { Card, SectionHeader } from "../components/ui.tsx";
+import { Card, PageHeader, PageShell, SectionHeader } from "../components/ui.tsx";
+import { clearApiResourceCache } from "../hooks/useApiResource.ts";
 
 /** Campo de texto/número no padrão "Broadcast" (claro/escuro) */
 const INPUT_CLS =
@@ -90,16 +91,17 @@ export default function Admin() {
 
   if (checking) {
     return (
-      <main className="max-w-md mx-auto px-4 py-10">
-        <SectionHeader as="h1" eyebrow="Painel" title="Administração" className="mb-4" />
+      <PageShell size="sm">
+        <PageHeader eyebrow="Painel" title="Administração" />
         <div role="status" className="text-sm text-fg-muted">Verificando sessão…</div>
-      </main>
+      </PageShell>
     );
   }
 
   if (!isAdmin) {
     return (
-      <main className="max-w-md mx-auto px-4 py-10">
+      <PageShell size="sm">
+        <PageHeader eyebrow="Painel" title="Administração" />
         <section aria-labelledby="admin-restricted-title">
         <Card className="p-6 text-center space-y-3">
           <div aria-hidden="true" className="mx-auto w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent">
@@ -108,7 +110,7 @@ export default function Admin() {
               <path d="M8 11V7a4 4 0 0 1 8 0v4" />
             </svg>
           </div>
-          <h1 id="admin-restricted-title" className="font-display font-bold text-2xl uppercase tracking-wide leading-none text-fg">Área restrita</h1>
+          <h2 id="admin-restricted-title" className="font-display font-bold text-2xl uppercase tracking-wide leading-none text-fg">Área restrita</h2>
           <p className="text-sm text-fg-muted">
             A administração do sistema (clubes rastreados, versões do jogo e configurações) exige login de administrador.
             O restante do site continua público.
@@ -118,7 +120,7 @@ export default function Admin() {
           </button>
         </Card>
         </section>
-      </main>
+      </PageShell>
     );
   }
 
@@ -200,6 +202,7 @@ function AdminPanel({ onSignOut }: { onSignOut: () => void }) {
     setSavingSessionClub(clubId);
     try {
       await api.put(API_ENDPOINTS.ADMIN_SESSION_SETTINGS(clubId), { timeZoneId, gapMinutes });
+      clearApiResourceCache(); // noites/laboratório/retrospectiva dependem do reagrupamento
       await loadClubs();
       showToast("Configuração das sessões salva.");
     } catch (e: any) {
@@ -421,13 +424,17 @@ function AdminPanel({ onSignOut }: { onSignOut: () => void }) {
   }
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-8 space-y-10">
-      <div className="flex items-center justify-between gap-3">
-        <SectionHeader as="h1" eyebrow="Painel" title="Administração" />
-        <button type="button" onClick={onSignOut} className="btn btn-secondary px-3 py-1.5">
-          Sair
-        </button>
-      </div>
+    <PageShell size="md" className="space-y-10">
+      <PageHeader
+        eyebrow="Painel"
+        title="Administração"
+        className="mb-0"
+        actions={
+          <button type="button" onClick={onSignOut} className="btn btn-secondary px-3 py-1.5">
+            Sair
+          </button>
+        }
+      />
 
       {/* Configurações */}
       <section aria-labelledby="admin-settings-title">
@@ -802,6 +809,6 @@ function AdminPanel({ onSignOut }: { onSignOut: () => void }) {
           </div>
         )}
       </div>
-    </main>
+    </PageShell>
   );
 }

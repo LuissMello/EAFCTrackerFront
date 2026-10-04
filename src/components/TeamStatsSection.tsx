@@ -229,17 +229,17 @@ export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }
         <div className="flex items-end gap-2">
           <div className="flex flex-col items-center leading-none">
             <span className="text-2xl font-bold text-positive">{int.format(wins)}</span>
-            <span className="text-[10px] text-fg-subtle font-medium mt-0.5">V</span>
+            <span className="text-[11px] text-fg-subtle font-medium mt-0.5">V</span>
           </div>
           <span className="text-border-strong text-xl mb-3">/</span>
           <div className="flex flex-col items-center leading-none">
             <span className="text-2xl font-bold text-fg-muted">{int.format(draws)}</span>
-            <span className="text-[10px] text-fg-subtle font-medium mt-0.5">E</span>
+            <span className="text-[11px] text-fg-subtle font-medium mt-0.5">E</span>
           </div>
           <span className="text-border-strong text-xl mb-3">/</span>
           <div className="flex flex-col items-center leading-none">
             <span className="text-2xl font-bold text-negative">{int.format(losses)}</span>
-            <span className="text-[10px] text-fg-subtle font-medium mt-0.5">D</span>
+            <span className="text-[11px] text-fg-subtle font-medium mt-0.5">D</span>
           </div>
         </div>
       ),
@@ -256,12 +256,12 @@ export function TeamStatsSection({ clubStats, loading, error, hiddenStats = [] }
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-center leading-none">
             <span className="text-2xl font-bold text-negative">{int.format(clubStats.totalRedCards)}</span>
-            <span className="text-[10px] text-fg-subtle font-medium mt-0.5">vermelhos</span>
+            <span className="text-[11px] text-fg-subtle font-medium mt-0.5">vermelhos</span>
           </div>
           <span className="text-border-strong text-xl pb-4">/</span>
           <div className="flex flex-col items-center leading-none">
             <span className="text-2xl font-bold text-gold">{int.format(clubStats.totalMom)}</span>
-            <span className="text-[10px] text-fg-subtle font-medium mt-0.5">MOM 🏆</span>
+            <span className="text-[11px] text-fg-subtle font-medium mt-0.5">MOM 🏆</span>
           </div>
         </div>
       ),

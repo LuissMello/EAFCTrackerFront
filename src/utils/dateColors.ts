@@ -1,10 +1,18 @@
-// src/utils/dateColors.ts
+// Cores por data (selos de data e borda lateral dos dias nas estatísticas por período).
 
 export type DateColor = { bg: string; border: string; fg: string };
 
+/** Cor neutra (tokens do tema) usada só como fallback quando a data não está no mapa. */
+export const NEUTRAL_DATE_COLOR: DateColor = {
+  bg: "rgb(var(--color-surface-sunken))",
+  border: "rgb(var(--color-border-strong))",
+  fg: "rgb(var(--color-fg-secondary))",
+};
+
 /**
  * Cores por data (NUNCA repete entre datas diferentes): uma matiz distinta por dia (YYYY-MM-DD),
- * espaçadas pelo ângulo áureo, na ordem em que as datas aparecem.
+ * espaçadas pelo ângulo áureo, na ordem em que as datas aparecem. O selo é pastel com texto escuro,
+ * legível tanto no tema claro quanto no escuro.
  */
 export function buildDateColorMap(datesISODesc: string[]): Map<string, DateColor> {
   const uniq: string[] = [];

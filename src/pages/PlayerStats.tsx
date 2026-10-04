@@ -12,7 +12,7 @@ import type { PlayerMatchStats } from "../types/playerAttributes.ts";
 import { ATTR_LABELS, GROUPS } from "../utils/playerAttributes.ts";
 import { fmtNum, fmtPct } from "../utils/number.ts";
 import { Card, ProgressBar, ErrorState } from "../components/AttributeUi.tsx";
-import { Skeleton } from "../components/ui.tsx";
+import { EmptyState, PageHeader, PageShell, Skeleton } from "../components/ui.tsx";
 import { StatTile } from "../components/playerStats/StatTile.tsx";
 import { StatCompare } from "../components/playerStats/StatCompare.tsx";
 import { RadarSVG } from "../components/playerStats/RadarSVG.tsx";
@@ -376,18 +376,14 @@ export default function PlayerStatsPage() {
     };
   }, [player?.statistics, teamAttrs, attrCompareTarget]);
 
-  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
 
   /***************
    * Render
    ***************/
   if (loading) {
     return (
-      <div className="p-4 max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-6 w-40" />
-        </div>
+      <PageShell aria-busy>
+        <PageHeader eyebrow="Jogador na partida" title="Estatísticas do jogador" subtitle="Carregando…" />
         <Skeleton className="h-24 w-full mb-6" />
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           {Array.from({ length: 12 }).map((_, i) => (
@@ -398,11 +394,25 @@ export default function PlayerStatsPage() {
           <Skeleton className="h-80" />
           <Skeleton className="h-80" />
         </div>
-      </div>
+      </PageShell>
     );
   }
-  if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
-  if (!player) return <div className="p-4">Dados indisponíveis.</div>;
+  if (error) {
+    return (
+      <PageShell>
+        <PageHeader eyebrow="Jogador na partida" title="Estatísticas do jogador" />
+        <ErrorState message={error} onRetry={() => window.location.reload()} />
+      </PageShell>
+    );
+  }
+  if (!player) {
+    return (
+      <PageShell>
+        <PageHeader eyebrow="Jogador na partida" title="Estatísticas do jogador" />
+        <EmptyState title="Dados indisponíveis">Não foi possível carregar os dados deste jogador.</EmptyState>
+      </PageShell>
+    );
+  }
 
   const GK = (player?.position || "").toLowerCase().includes("gk");
   const passAcc = computedPassAcc;
@@ -416,11 +426,12 @@ export default function PlayerStatsPage() {
     GK && player.saves + player.goalsConceded > 0 ? (player.saves / (player.saves + player.goalsConceded)) * 100 : 0;
 
   return (
-    <div className="p-4 max-w-6xl mx-auto">
+    <PageShell>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold uppercase tracking-wide text-fg flex items-center gap-2">
+      <PageHeader
+        eyebrow="Jogador na partida"
+        title={
+          <span className="inline-flex items-center gap-2">
             {player.playerName}
             {player.mom && (
               <Tooltip content="Melhor em Campo">
@@ -429,17 +440,16 @@ export default function PlayerStatsPage() {
                 </span>
               </Tooltip>
             )}
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <a href={shareUrl} className="text-sm text-accent hover:underline">
-            Compartilhar
-          </a>
-          <Link to={`/match/${matchId}`} className="text-accent hover:underline text-sm">
-            ← Voltar para a partida
-          </Link>
-        </div>
-      </div>
+          </span>
+        }
+        actions={
+          <>
+            <Link to={`/match/${matchId}`} className="text-accent hover:underline text-sm">
+              ← Voltar para a partida
+            </Link>
+          </>
+        }
+      />
 
       {/* RESUMO DA PARTIDA */}
       <Card>
@@ -736,6 +746,6 @@ export default function PlayerStatsPage() {
           </ul>
         </Card>
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -393,8 +393,8 @@ const OverallSummaryCard: React.FC<Props> = ({
                                                 alt={`Divisão ${p.bestDivision ?? ""}`}
                                                 className="w-9 h-9 object-contain"
                                             />
-                                            <div className="mt-1 text-[10px] leading-tight font-semibold">{hpLabel}</div>
-                                            <div className="text-[9px] text-fg-muted leading-tight whitespace-nowrap">{seasonLabel}</div>
+                                            <div className="mt-1 text-[11px] leading-tight font-semibold">{hpLabel}</div>
+                                            <div className="text-[11px] text-fg-muted leading-tight whitespace-nowrap">{seasonLabel}</div>
                                         </div>
                                     );
                                 })}

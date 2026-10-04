@@ -118,7 +118,7 @@ export function LiveModeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const liveLabel = live.enabled ? "Ao vivo" : "Jogos em andamento";
+  const liveLabel = live.enabled ? "Ao vivo" : "Ligar modo ao vivo";
   const liveTitle = live.enabled
     ? `Ao vivo: busca automática a cada ${live.intervalMinutes} min até alguém desligar. Vale para todos os visitantes. Clique para desligar.`
     : `Ligar o modo ao vivo para todos os visitantes: busca automática a cada ${live.intervalMinutes} min até alguém desligar.`;

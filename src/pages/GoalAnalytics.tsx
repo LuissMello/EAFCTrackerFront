@@ -2,11 +2,14 @@ import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
-import { parseTimestamp, toYmd, daysAgoYmd, fmtDateBR } from "../utils/date.ts";
+import { parseTimestamp, fmtDateBR } from "../utils/date.ts";
 import { useClubIds } from "../hooks/useClubIds.ts";
 import { useRefresh } from "../hooks/useRefresh.tsx";
 import { useAbortableFetch } from "../hooks/useAbortableFetch.ts";
 import { getPalette as getC, buildPassFlow } from "../utils/goalAnalysis.ts";
+import { EmptyState, PageHeader, PageShell } from "../components/ui.tsx";
+import { DateRangeBar } from "../components/DateRangeBar.tsx";
+import { useUrlDateRange } from "../hooks/useUrlDateRange.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,7 +73,6 @@ function buildColorMap(players: GoalAnalysisPlayer[]): Map<number, number> {
   players.forEach((p, i) => map.set(p.playerId, i));
   return map;
 }
-const toDateStr = toYmd; // data local (evita deslocamento de fuso do toISOString)
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -197,12 +199,8 @@ function mergeResponses(responses: GoalAnalysisResponse[]): GoalAnalysisResponse
 export default function GoalAnalytics() {
     const activeClubIds = useClubIds();
 
-    const [from, setFrom] = useState(() => daysAgoYmd(30));
-    const [to, setTo] = useState(() => {
-      const now = new Date();
-      return toDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
-    });
-    const [reloadKey, setReloadKey] = useState(0);
+    // Período na URL (?dateFrom=&dateTo=), com os mesmos presets das outras telas
+    const [{ from, to }, setRange] = useUrlDateRange();
     // "Atualizar"/modo ao vivo do cabeçalho
     const { refreshKey } = useRefresh();
   const [loaded, setLoaded] = useState<{ key: string; data: GoalAnalysisResponse } | null>(null);
@@ -221,7 +219,7 @@ export default function GoalAnalytics() {
       if (signal.aborted) return;
       setLoaded({ key: dataKey, data: mergeResponses(responses) });
     },
-    [dataKey, reloadKey, refreshKey],
+    [dataKey, refreshKey],
     { enabled: activeClubIds.length > 0, errorMessage: "Erro ao carregar análise" }
   );
 
@@ -233,86 +231,30 @@ export default function GoalAnalytics() {
     ? Math.round((data.linkedGoals / data.totalGoals) * 100)
     : 0;
 
-  const PRESETS = [
-    { label: "7 dias",   days: 7 },
-    { label: "30 dias",  days: 30 },
-    { label: "90 dias",  days: 90 },
-    { label: "Este ano", days: 365 },
-  ];
-
   // ── Loading ────────────────────────────────────────────────────────────────
 
   if (activeClubIds.length === 0) {
     return (
-      <div className="p-6 max-w-5xl mx-auto">
-        <div className="bg-surface rounded-xl border shadow-sm p-8 text-center text-fg-muted">
-          <div className="text-4xl mb-3">⚽</div>
-          <div className="font-semibold">Nenhum clube selecionado</div>
-          <div className="text-sm mt-1">Selecione um clube no menu superior para ver a análise.</div>
-        </div>
-      </div>
+      <PageShell>
+        <PageHeader eyebrow="Análise" title="Gols" subtitle="Relações entre gols, assistências e criações de jogadas" />
+        <EmptyState icon="⚽" title="Nenhum clube selecionado">
+          Selecione um clube no menu superior para ver a análise.
+        </EmptyState>
+      </PageShell>
     );
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
+    <PageShell className="space-y-6">
 
       {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div>
-          <h1 className="text-xl font-black text-fg tracking-tight">Análise de Gols</h1>
-          <p className="text-sm text-fg-muted mt-0.5">Relações entre gols, assistências e criações de jogadas</p>
-        </div>
-      </div>
+      <PageHeader eyebrow="Análise" title="Gols" subtitle="Relações entre gols, assistências e criações de jogadas" className="mb-0" />
 
       {/* ── Filters ── */}
       <div className="bg-surface rounded-xl border shadow-sm p-4">
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="ga-from" className="text-xs font-medium text-fg-muted uppercase tracking-wide">De</label>
-            <input
-              id="ga-from"
-              type="date"
-              value={from}
-              onChange={e => setFrom(e.target.value)}
-              className="border rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="ga-to" className="text-xs font-medium text-fg-muted uppercase tracking-wide">Até</label>
-            <input
-              id="ga-to"
-              type="date"
-              value={to}
-              onChange={e => setTo(e.target.value)}
-              className="border rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => setReloadKey(k => k + 1)}
-            disabled={loading}
-            className="btn btn-primary px-4"
-          >
-            {loading ? "Carregando…" : "Aplicar"}
-          </button>
-          <div className="flex gap-2 flex-wrap">
-            {PRESETS.map(p => (
-              <button
-                key={p.days}
-                onClick={() => {
-                  setFrom(toDateStr(new Date(Date.now() - p.days * 86400000)));
-                  setTo(toDateStr(new Date()));
-                }}
-                className="px-3 py-2 rounded-lg text-xs font-medium border bg-surface-raised hover:bg-surface-sunken text-fg-muted transition-colors"
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <DateRangeBar from={from} to={to} onChange={setRange} idPrefix="ga" />
       </div>
 
       {error && (
@@ -593,6 +535,6 @@ export default function GoalAnalytics() {
           )}
         </>
       )}
-    </div>
+    </PageShell>
   );
 }

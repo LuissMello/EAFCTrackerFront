@@ -8,6 +8,7 @@ import { RefreshProvider } from "./hooks/useRefresh.tsx";
 import { LiveModeProvider } from "./hooks/useLiveMode.tsx";
 import { GameVersionsProvider } from "./hooks/useGameVersions.tsx";
 import { ThemeProvider } from "./hooks/useTheme.tsx";
+import { RouteEffects, SkipLink } from "./components/RouteEffects.tsx";
 
 // Code-splitting por rota (Home fica no bundle principal por ser a rota inicial)
 const MatchDetails = lazy(() => import("./pages/MatchDetails.tsx"));
@@ -26,6 +27,10 @@ const Opponents = lazy(() => import("./pages/Opponents.tsx"));
 const OverallEvolution = lazy(() => import("./pages/OverallEvolution.tsx"));
 const Admin = lazy(() => import("./pages/Admin.tsx"));
 const RegistrarGols = lazy(() => import("./pages/RegistrarGols.tsx"));
+const NoiteDeJogo = lazy(() => import("./pages/NoiteDeJogo.tsx"));
+const Laboratorio = lazy(() => import("./pages/Laboratorio.tsx"));
+const Retrospectiva = lazy(() => import("./pages/Retrospectiva.tsx"));
+const Cartas = lazy(() => import("./pages/Cartas.tsx"));
 
 function PageFallback() {
     return (
@@ -83,6 +88,10 @@ function AppRoutes() {
                     <Route path="/opponents" element={<Opponents />} />
                     <Route path="/overall-evolution" element={<OverallEvolution />} />
                     <Route path="/registrar-gols" element={<RegistrarGols />} />
+                    <Route path="/noite-de-jogo" element={<NoiteDeJogo />} />
+                    <Route path="/laboratorio" element={<Laboratorio />} />
+                    <Route path="/retrospectiva" element={<Retrospectiva />} />
+                    <Route path="/cartas" element={<Cartas />} />
                     <Route path="/admin" element={<Admin />} />
                 </Routes>
             </Suspense>
@@ -100,8 +109,12 @@ export default function App() {
                             <GameVersionsProvider>
                                 <ClubProvider>
                                     <div className="min-h-screen bg-bg text-fg">
+                                        <SkipLink />
+                                        <RouteEffects />
                                         <Navbar />
-                                        <AppRoutes />
+                                        <main id="conteudo" tabIndex={-1} className="outline-none">
+                                            <AppRoutes />
+                                        </main>
                                     </div>
                                 </ClubProvider>
                             </GameVersionsProvider>

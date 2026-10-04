@@ -38,14 +38,26 @@ function fmtYYYYMMDD(d: Date) {
 
 const dayFmt = new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short" });
 
-function labelForDate(iso: string): string {
-    if (!iso || iso.length < 10) return iso ?? "—";
-    const today = fmtYYYYMMDD(new Date());
-    const key = iso.slice(0, 10);
-    if (key === today) return "Hoje";
+function formatDay(key: string): string {
     const [y, m, d] = key.split("-").map(Number);
     const date = new Date(y, m - 1, d);
     return Number.isFinite(date.getTime()) ? dayFmt.format(date) : key;
+}
+
+/**
+ * Rótulo do dia/noite, derivado só da DATA devolvida pelo backend (em modo noite = data do INÍCIO da sessão,
+ * no fuso do clube): "Hoje", "Ontem" ou dia da semana + data. Sem corte fixo de horário: o que é uma noite
+ * vem da parametrização administrativa do clube (intervalo, fuso e fronteiras manuais), já aplicada no backend.
+ */
+function labelForDate(iso: string): string {
+    if (!iso || iso.length < 10) return iso ?? "—";
+    const now = new Date();
+    const key = iso.slice(0, 10);
+    if (key === fmtYYYYMMDD(now)) return "Hoje";
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (key === fmtYYYYMMDD(yesterday)) return "Ontem";
+    return formatDay(key);
 }
 
 /**
@@ -59,6 +71,9 @@ export default function LatestDayPanel({ clubIds, showAllVersions = false }: { c
     const [open, setOpen] = useState(false);
 
     const clubIdsKey = clubIds.join(",");
+    // Com um clube só, agrupa por noite de jogo (sessão): 22:00–01:00 é UMA noite, não dois dias.
+    // O backend exige um único clube para isso; com vários, cai no dia do calendário.
+    const bySession = clubIds.length === 1;
     // "Atualizar" / modo ao vivo do cabeçalho: relê o dia sem recarregar a página
     const { refreshKey } = useRefresh();
 
@@ -78,12 +93,13 @@ export default function LatestDayPanel({ clubIds, showAllVersions = false }: { c
             try {
                 const now = new Date();
                 const start = new Date();
-                start.setDate(now.getDate() - 120);
+                start.setDate(now.getDate() - 45);
                 const end = new Date(now.getFullYear(), now.getMonth() + 1, 0); // fim do mês atual
                 const params = {
                     clubIds: clubIdsKey,
                     start: fmtYYYYMMDD(start),
                     end: fmtYYYYMMDD(end),
+                    sessions: String(bySession),
                 };
                 const { data } = await api.get<DayDto[]>(API_ENDPOINTS.MATCHES_STATS_BY_DATE, { params, signal });
                 if (signal.aborted) return;
@@ -100,7 +116,7 @@ export default function LatestDayPanel({ clubIds, showAllVersions = false }: { c
 
         run();
         return () => controller.abort();
-    }, [clubIdsKey, refreshKey]);
+    }, [clubIdsKey, bySession, refreshKey]);
 
     if (!clubIds.length) return null;
     if (loading && !day) {
@@ -144,10 +160,16 @@ export default function LatestDayPanel({ clubIds, showAllVersions = false }: { c
 
                 <div className="min-w-0">
                     <div className="text-[11px] font-semibold uppercase tracking-widest text-fg-subtle">
-                        Acompanhamento do dia{showAllVersions ? " · todas as versões" : ""}
+                        {bySession ? "Acompanhamento da noite" : "Acompanhamento do dia"}
+                        {showAllVersions ? " · todas as versões" : ""}
                     </div>
                     <div className="font-display font-bold text-lg uppercase tracking-wide leading-none text-fg">
                         {labelForDate(day.date)}
+                        {labelForDate(day.date) !== formatDay(day.date.slice(0, 10)) && (
+                            <span className="ml-2 font-sans text-xs font-medium normal-case tracking-normal text-fg-muted">
+                                {formatDay(day.date.slice(0, 10))}
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -173,7 +195,7 @@ export default function LatestDayPanel({ clubIds, showAllVersions = false }: { c
             </button>
 
             {open && (
-                <div className="border-t border-border p-3 sm:p-4">
+                <div className="border-t border-border p-2 sm:p-2.5">
                     {/* resumo V/E/D visível no mobile (onde fica escondido no cabeçalho) */}
                     <div className="sm:hidden flex items-center gap-3 text-sm font-semibold tabular-nums mb-3">
                         <span className="text-positive">{wins}V</span>
@@ -193,10 +215,18 @@ export default function LatestDayPanel({ clubIds, showAllVersions = false }: { c
                             hiddenColumns={["totalSecondsPlayed"]}
                         />
                     ) : (
-                        <div className="text-sm text-fg-muted py-2">Sem partidas registradas neste dia.</div>
+                        <div className="text-sm text-fg-muted py-2">Sem partidas registradas {bySession ? "nesta noite" : "neste dia"}.</div>
                     )}
 
-                    <div className="mt-3 flex justify-end">
+                    <div className="mt-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+                        {bySession && (
+                            <Link
+                                to="/noite-de-jogo"
+                                className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline"
+                            >
+                                Ver noite completa <ArrowUpRight size={15} />
+                            </Link>
+                        )}
                         <Link
                             to={statsHref}
                             className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline"

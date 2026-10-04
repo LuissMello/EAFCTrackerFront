@@ -56,7 +56,7 @@ export function RadarSVG({ data }: { data: { group: string; value: number }[] })
               y={y}
               textAnchor="middle"
               dominantBaseline="middle"
-              className="fill-fg-muted text-[10px]"
+              className="fill-fg-muted text-[11px]"
             >
               {d.group}
             </text>

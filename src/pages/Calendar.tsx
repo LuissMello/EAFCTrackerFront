@@ -6,6 +6,8 @@ import { useRefresh } from "../hooks/useRefresh.tsx";
 import { API_ENDPOINTS, crestUrl, onImgError } from "../config/urls.ts";
 import { parseTimestamp, toYmd } from "../utils/date.ts";
 import { useAuth } from "../hooks/useAuth.tsx";
+import { clearApiResourceCache } from "../hooks/useApiResource.ts";
+import { PageHeader, PageShell } from "../components/ui.tsx";
 
 // ===== Tipos =====
 export interface CalendarDaySummaryDto {
@@ -146,6 +148,12 @@ export default function CalendarPage() {
 
     const [lastActiveButton, setLastActiveButton] = useState<HTMLButtonElement | null>(null);
     const dialogTitleId = useId();
+    const drawerRef = useRef<HTMLDivElement | null>(null);
+    const closeDrawer = useCallback(() => {
+        setSelectedDate(null);
+        setDayData(null);
+        lastActiveButton?.focus();
+    }, [lastActiveButton]);
 
     const monthCacheRef = useRef<Record<string, CalendarMonthDto>>({});
     const dayCacheRef = useRef<Record<string, CalendarDayDetailsDto>>({});
@@ -162,6 +170,7 @@ export default function CalendarPage() {
         if (selectedClubIds.length !== 1) return;
         try {
             await api.put(API_ENDPOINTS.ADMIN_SESSION_BOUNDARY(selectedClubIds[0], matchId), { mode });
+            clearApiResourceCache(); // noites/laboratório/retrospectiva dependem do reagrupamento
             refreshCalendar();
         } catch {
             setErrorDay("Não foi possível ajustar esta sessão.");
@@ -177,7 +186,6 @@ export default function CalendarPage() {
         refreshCalendar();
     }, [globalRefreshKey, refreshCalendar]);
 
-    const pageRef = useRef<HTMLDivElement | null>(null);
     const headerRef = useRef<HTMLDivElement | null>(null);
     const legendRef = useRef<HTMLDivElement | null>(null);
     const [gridHeight, setGridHeight] = useState<number>(520);
@@ -364,6 +372,17 @@ export default function CalendarPage() {
         return () => controller.abort();
     }, [selectedDate, clubKey, showSessions, reloadKey]);
 
+    // Foco entra no painel do dia quando ele abre; Esc fecha e devolve o foco à célula
+    useEffect(() => {
+        if (!selectedDate) return;
+        drawerRef.current?.focus();
+        const onKey = (e: globalThis.KeyboardEvent) => {
+            if (e.key === "Escape") closeDrawer();
+        };
+        document.addEventListener("keydown", onKey);
+        return () => document.removeEventListener("keydown", onKey);
+    }, [selectedDate, closeDrawer]);
+
     // Navegação por teclado
     function handleKeyNav(e: KeyboardEvent<HTMLDivElement>) {
         if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -411,32 +430,47 @@ export default function CalendarPage() {
         return "bg-accent/10";
     }
 
+    /** Cor do ponto do dia (mobile): resultado predominante, mesmo critério do fundo da célula */
+    function dayDot(summary: CalendarDaySummaryDto) {
+        const { wins, draws, losses } = summary;
+        if (wins > losses && wins > draws) return "bg-positive";
+        if (losses > wins && losses > draws) return "bg-negative";
+        if (draws > 0 && draws >= wins && draws >= losses) return "bg-warning";
+        return "bg-accent";
+    }
+
     const ROWS = viewMode === "monthly" ? 6 : 1;
     const rowGapPx = (ROWS - 1) * 8;
     const minRow = viewMode === "monthly" ? 56 : 88;
     const rowHeight = Math.max(minRow, Math.floor((gridHeight - rowGapPx) / ROWS));
 
     return (
-        <div ref={pageRef} className="p-4 max-w-6xl mx-auto min-h-[100dvh]" onKeyDown={handleKeyNav} aria-live="polite">
+        <PageShell className="min-h-[100dvh]" onKeyDown={handleKeyNav}>
+            {/* Anúncio para leitores de tela (só o período e o carregamento, não a página inteira) */}
+            <p className="sr-only" role="status" aria-live="polite">
+                {viewMode === "monthly" ? `${ptMonth.format(referenceMonth)} de ${referenceMonth.getFullYear()}` : `Semana: ${weekTitle}`}
+                {loadingMonth ? " — carregando…" : ""}
+            </p>
             {/* Header */}
-            <div ref={headerRef} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-                <div className="flex items-center gap-2">
+            <div ref={headerRef}>
+                <PageHeader
+                    eyebrow="Partidas"
+                    title="Calendário"
+                    subtitle={<>Clube atual: <span className="font-semibold">{headerLabel}</span></>}
+                    className="mb-3"
+                    actions={
+                        <div role="tablist" aria-label="Modo de visualização" className="inline-flex rounded-lg border overflow-hidden">
+                            <button role="tab" aria-selected={viewMode === "monthly"} onClick={() => setViewMode("monthly")} className={`px-3 py-1.5 text-sm ${viewMode === "monthly" ? "bg-accent text-accent-fg" : "bg-surface text-fg-secondary hover:bg-surface-raised"}`}>Mensal</button>
+                            <button role="tab" aria-selected={viewMode === "weekly"} onClick={() => setViewMode("weekly")} className={`px-3 py-1.5 text-sm border-l ${viewMode === "weekly" ? "bg-accent text-accent-fg" : "bg-surface text-fg-secondary hover:bg-surface-raised"}`}>Semanal</button>
+                        </div>
+                    }
+                />
+                <div className="flex flex-wrap items-center gap-2 mb-3">
                     <button onClick={() => { if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, -1)); else { const newStart = addDays(referenceWeekStart, -7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); } }} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised" aria-label={viewMode === "monthly" ? "Mês anterior" : "Semana anterior"}>◀</button>
                     <button onClick={() => { const today = new Date(); setReferenceMonth(startOfMonth(today)); setReferenceWeekStart(getWeekStart(today)); }} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised">Hoje</button>
-                    <button type="button" onClick={refreshCalendar} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised" title="Recarregar dados (ignora o cache)">Atualizar</button>
                     <button onClick={() => { if (viewMode === "monthly") setReferenceMonth(addMonths(referenceMonth, 1)); else { const newStart = addDays(referenceWeekStart, 7); setReferenceWeekStart(newStart); setReferenceMonth(startOfMonth(newStart)); } }} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised" aria-label={viewMode === "monthly" ? "Próximo mês" : "Próxima semana"}>▶</button>
-
-                    <h1 className="text-2xl font-display font-bold uppercase tracking-wide text-fg ml-2">{viewMode === "monthly" ? `${ptMonth.format(referenceMonth)} de ${referenceMonth.getFullYear()}` : `Semana: ${weekTitle}`}</h1>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <div className="text-sm text-fg-muted">
-                        Clube atual: <span className="font-semibold">{headerLabel}</span>
-                    </div>
-                    <div role="tablist" aria-label="Modo de visualização" className="inline-flex rounded-lg border overflow-hidden">
-                        <button role="tab" aria-selected={viewMode === "monthly"} onClick={() => setViewMode("monthly")} className={`px-3 py-1.5 text-sm ${viewMode === "monthly" ? "bg-accent text-accent-fg" : "bg-surface text-fg-secondary hover:bg-surface-raised"}`}>Mensal</button>
-                        <button role="tab" aria-selected={viewMode === "weekly"} onClick={() => setViewMode("weekly")} className={`px-3 py-1.5 text-sm border-l ${viewMode === "weekly" ? "bg-accent text-accent-fg" : "bg-surface text-fg-secondary hover:bg-surface-raised"}`}>Semanal</button>
-                    </div>
+                    <button type="button" onClick={refreshCalendar} className="px-3 py-2 rounded-lg border bg-surface hover:bg-surface-raised" title="Recarregar dados (ignora o cache)">Atualizar</button>
+                    <h2 className="ml-1 text-xl font-display font-bold uppercase tracking-wide text-fg">{viewMode === "monthly" ? `${ptMonth.format(referenceMonth)} de ${referenceMonth.getFullYear()}` : `Semana: ${weekTitle}`}</h2>
                 </div>
             </div>
 
@@ -510,7 +544,7 @@ export default function CalendarPage() {
                                         {ptDay.format(d)}
                                     </span>
                                     {isToday && (
-                                        <span className="text-[8px] sm:text-[9px] font-bold text-accent leading-none uppercase tracking-wide">Hoje</span>
+                                        <span className="text-[11px] sm:text-[11px] font-bold text-accent leading-none uppercase tracking-wide">Hoje</span>
                                     )}
                                 </div>
                                 {loadingMonth && !monthData && <Skeleton className="w-6 sm:w-8 h-3 sm:h-4" />}
@@ -518,16 +552,20 @@ export default function CalendarPage() {
 
                             {summary && hasAnyClub && (
                                 <div className="flex-1 flex flex-col justify-center gap-0.5 px-0.5 mt-1">
-                                    <div className="flex items-center justify-center gap-1">
-                                        <span className="px-1 rounded bg-positive-soft text-positive-fg text-[9px] sm:text-[10px]">V {summary.wins}</span>
-                                        <span className="px-1 rounded bg-warning-soft text-warning-fg text-[9px] sm:text-[10px]">E {summary.draws}</span>
-                                        <span className="px-1 rounded bg-negative-soft text-negative-fg text-[9px] sm:text-[10px]">D {summary.losses}</span>
+                                    <div className="sm:hidden flex items-center justify-center gap-1 text-xs font-semibold text-fg-secondary tabular-nums">
+                                        <span aria-hidden="true" className={`inline-block w-2.5 h-2.5 rounded-full ${dayDot(summary)}`} />
+                                        {summary.matchesCount}
                                     </div>
-                                    <div className={`text-[8px] sm:text-[9px] text-fg-muted text-center ${viewMode === "weekly" ? "block" : "hidden sm:block"}`}>
+                                    <div className="hidden sm:flex items-center justify-center gap-1">
+                                        <span className="px-1 rounded bg-positive-soft text-positive-fg text-[11px] sm:text-[11px]">V {summary.wins}</span>
+                                        <span className="px-1 rounded bg-warning-soft text-warning-fg text-[11px] sm:text-[11px]">E {summary.draws}</span>
+                                        <span className="px-1 rounded bg-negative-soft text-negative-fg text-[11px] sm:text-[11px]">D {summary.losses}</span>
+                                    </div>
+                                    <div className={`text-[11px] sm:text-[11px] text-fg-muted text-center ${viewMode === "weekly" ? "block" : "hidden sm:block"}`}>
                                         GP {summary.goalsFor} · GC {summary.goalsAgainst}
                                     </div>
                                     {viewMode === "weekly" && (
-                                        <div className="text-[9px] sm:text-[10px] text-center font-semibold">
+                                        <div className="text-[11px] sm:text-[11px] text-center font-semibold">
                                             <span className={summary.goalsFor >= summary.goalsAgainst ? "text-positive" : "text-negative"}>
                                                 {summary.goalsFor - summary.goalsAgainst >= 0 ? "+" : ""}{summary.goalsFor - summary.goalsAgainst}
                                             </span>
@@ -556,8 +594,8 @@ export default function CalendarPage() {
             {/* Drawer do dia */}
             {selectedDate && (
                 <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-labelledby={dialogTitleId}>
-                    <div className="absolute inset-0 bg-black/30" onClick={() => { setSelectedDate(null); setDayData(null); lastActiveButton?.focus(); }} />
-                    <div className="absolute right-0 top-0 h-full w-full sm:w-[560px] bg-surface shadow-xl p-4 overflow-y-auto">
+                    <div className="absolute inset-0 bg-black/30" onClick={closeDrawer} />
+                    <div ref={drawerRef} tabIndex={-1} className="absolute right-0 top-0 h-full w-full sm:w-[560px] bg-surface shadow-xl p-4 overflow-y-auto outline-none">
                         <div className="flex items-center justify-between mb-3">
                             <div>
                                 <h2 id={dialogTitleId} className="text-xl font-semibold">{showSessions ? "Sessões de " : ""}{ptDay.format(fromYmd(selectedDate))} {ptMonth.format(fromYmd(selectedDate))}</h2>
@@ -573,7 +611,7 @@ export default function CalendarPage() {
                                     </div>
                                 )}
                             </div>
-                            <button className="px-3 py-2 rounded-lg border hover:bg-surface-raised" onClick={() => { setSelectedDate(null); setDayData(null); lastActiveButton?.focus(); }}>Fechar</button>
+                            <button className="px-3 py-2 rounded-lg border hover:bg-surface-raised" onClick={closeDrawer}>Fechar</button>
                         </div>
 
                         {loadingDay && (<div className="space-y-3" aria-live="polite"><Skeleton className="h-16" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div>)}
@@ -607,14 +645,14 @@ export default function CalendarPage() {
                                         <div key={m.matchId}>
                                         {session && <div className="text-sm font-semibold text-fg mt-4 mb-2">Sessão {new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone }).format(parseTimestamp(session.startedAt) ?? new Date(session.startedAt))} – {new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone }).format(parseTimestamp(session.endedAt) ?? new Date(session.endedAt))}</div>}
                                         <div className={`border rounded-xl p-3 hover:shadow ${resultBorder}`}>
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center gap-2 min-w-0">
+                                            <div className="flex items-start justify-between gap-2 mb-2">
+                                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                                                     <Crest id={m.clubACrestAssetId} alt={m.clubAName} />
-                                                    <span className="font-medium truncate max-w-[34%]" title={m.clubAName}>{m.clubAName}</span>
+                                                    <span className="font-medium [overflow-wrap:anywhere]">{m.clubAName}</span>
                                                     <span className={`font-semibold ${aWon ? "text-positive" : bWon ? "text-negative" : ""}`}>{m.clubAGoals}</span>
                                                     <span className="text-fg-subtle">–</span>
                                                     <span className={`font-semibold ${bWon ? "text-positive" : aWon ? "text-negative" : ""}`}>{m.clubBGoals}</span>
-                                                    <span className="font-medium truncate max-w-[34%]" title={m.clubBName}>{m.clubBName}</span>
+                                                    <span className="font-medium [overflow-wrap:anywhere]">{m.clubBName}</span>
                                                     <Crest id={m.clubBCrestAssetId} alt={m.clubBName} />
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
@@ -655,6 +693,6 @@ export default function CalendarPage() {
                     </div>
                 </div>
             )}
-        </div>
+        </PageShell>
     );
 }

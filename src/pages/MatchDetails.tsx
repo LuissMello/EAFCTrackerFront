@@ -6,12 +6,15 @@ import { useRefresh } from "../hooks/useRefresh.tsx";
 import OverallSummaryCard, { ClubOverallRow, PlayoffAchievementDto } from "../components/OverallSummaryCard.tsx";
 import { TeamStatsSection } from "../components/TeamStatsSection.tsx";
 import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
-import { GoalLinkingSection } from "../components/GoalLinkingSection.tsx";
+import { GoalLinkingSection, type ApiGoalsResponse } from "../components/GoalLinkingSection.tsx";
+import { ScoreboardHero } from "../components/match/ScoreboardHero.tsx";
+import type { MatchResultDto } from "../types/match.ts";
+import { recallMatch } from "../utils/matchHandoff.ts";
 import { MatchEaPostGameStats } from "../components/MatchEaPostGameStats.tsx";
 import { ClubStats, PlayerStats } from "../types/stats.ts";
 import { MatchEventAggregatesResponseDto } from "../types/matchEventAggregates.ts";
 import { crestUrl, API_ENDPOINTS } from "../config/urls.ts";
-import { Crest, ResultPill } from "../components/ui.tsx";
+import { Crest, EmptyState, PageHeader, PageShell, ResultPill } from "../components/ui.tsx";
 
 // ======================
 // Tipos (espelham /api/Matches/{matchId}/statistics)
@@ -221,6 +224,32 @@ export default function MatchDetails() {
     return () => controller.abort();
   }, [matchId, reloadKey, refreshKey]);
 
+  // ====== Buscar vínculos de gol (uma única vez; repassado ao GoalLinkingSection) ======
+  const [goalsData, setGoalsData] = useState<ApiGoalsResponse | null>(null);
+  const [goalsLoading, setGoalsLoading] = useState(true);
+  const [goalsError, setGoalsError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!matchId) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    (async () => {
+      try {
+        setGoalsLoading(true);
+        setGoalsError(null);
+        const { data } = await api.get<ApiGoalsResponse>(API_ENDPOINTS.MATCH_GOALS(matchId), { signal });
+        if (signal.aborted) return;
+        setGoalsData(data ?? null);
+      } catch (e) {
+        if (signal.aborted || isCanceled(e)) return;
+        setGoalsData(null);
+        setGoalsError("Não foi possível carregar os vínculos. Tente abrir a partida novamente antes de editar.");
+      } finally {
+        if (!signal.aborted) setGoalsLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [matchId, reloadKey, refreshKey]);
+
   const players = stats?.players ?? [];
   const clubs = stats?.clubs ?? [];
 
@@ -246,6 +275,12 @@ export default function MatchDetails() {
   }, [clubs, selectedClubId]);
 
   const haveTwoClubs = orderedClubs.length >= 2;
+
+  // Referência estável (o GoalLinkingSection não deve ser reinicializado a cada render da página)
+  const selectedClubPlayers = useMemo(
+    () => players.filter((p) => p.clubId === selectedClubId),
+    [players, selectedClubId]
+  );
 
   // Transform clubs to include totalGoalsConceded
   const clubsWithGoalsConceded = useMemo(() => {
@@ -340,6 +375,30 @@ export default function MatchDetails() {
     return () => controller.abort();
   }, [fetchOverallIfNeeded]);
 
+  // Placar em destaque: monta o MatchResultDto a partir das estatísticas e, quando a página foi aberta
+  // pela lista, aproveita data/divisão/versão/estádio guardados no clique (utils/matchHandoff).
+  const listed = useMemo(() => recallMatch(matchId), [matchId]);
+  const heroMatch = useMemo<MatchResultDto | null>(() => {
+    if (!haveTwoClubs || !matchId) return null;
+    const [a, b] = orderedClubs;
+    const base = listed && String(listed.matchId) === String(matchId) ? listed : null;
+    const detailsOf = (clubId: number, crest?: string | null) => {
+      const d = [base?.clubADetails, base?.clubBDetails].find((x) => x?.clubId === clubId) ?? null;
+      return { ...(d ?? {}), clubId, team: d?.team ?? crest ?? null };
+    };
+    return {
+      matchId: Number(matchId),
+      timestamp: base?.timestamp ?? null,
+      gameVersion: base?.gameVersion ?? null,
+      clubAName: a.clubName,
+      clubAGoals: a.totalGoals,
+      clubADetails: detailsOf(a.clubId, a.clubCrestAssetId),
+      clubBName: b.clubName,
+      clubBGoals: b.totalGoals,
+      clubBDetails: detailsOf(b.clubId, b.clubCrestAssetId),
+    };
+  }, [haveTwoClubs, matchId, orderedClubs, listed]);
+
   // Auxiliares do placar
   const haveScore = haveTwoClubs;
   const goalsA = haveScore ? orderedClubs[0].totalGoals : undefined;
@@ -394,11 +453,8 @@ export default function MatchDetails() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6" aria-busy>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <Skeleton className="h-7 w-52" />
-          <Skeleton className="h-5 w-24" />
-        </div>
+      <PageShell className="space-y-6" aria-busy>
+        <PageHeader eyebrow="Detalhes" title="Partida" subtitle="Carregando…" className="mb-0" />
         <div className="bg-surface shadow-sm rounded-xl p-4 border space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <Skeleton className="h-10 w-64" />
@@ -409,13 +465,14 @@ export default function MatchDetails() {
         </div>
         <Skeleton className="h-48" />
         <Skeleton className="h-72" />
-      </div>
+      </PageShell>
     );
   }
 
   if (error) {
     return (
-      <div className="p-4">
+      <PageShell>
+        <PageHeader eyebrow="Detalhes" title="Partida" />
         <div className="max-w-xl rounded-lg border border-negative/40 p-4 bg-negative-soft text-negative-fg">
           <div className="font-semibold">Ocorreu um erro</div>
           <div className="text-sm mt-1">{error}</div>
@@ -423,33 +480,55 @@ export default function MatchDetails() {
             <Button onClick={reloadStats}>Tentar novamente</Button>
           </div>
         </div>
-      </div>
+      </PageShell>
     );
   }
 
   if (!stats || orderedClubs.length === 0) {
-    return <div className="p-4">Dados indisponíveis.</div>;
+    return (
+      <PageShell>
+        <PageHeader eyebrow="Detalhes" title="Partida" />
+        <EmptyState title="Dados indisponíveis">Não foi possível carregar os dados desta partida.</EmptyState>
+      </PageShell>
+    );
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+    <PageShell className="space-y-6">
       {/* Topo */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-surface hover:bg-surface-raised"
-        >
-          ← Voltar
-        </Link>
-        <span className="text-fg-subtle text-sm">Detalhes da Partida</span>
-        <div className="flex-1" />
-        <Link
-          to={`/match/${matchId}/goals`}
-          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-surface hover:bg-surface-raised font-medium"
-        >
-          ⚽ Análise de Gols
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow="Detalhes"
+        title="Partida"
+        subtitle={haveTwoClubs ? `${orderedClubs[0]?.clubName ?? "Clube A"} x ${orderedClubs[1]?.clubName ?? "Clube B"}` : orderedClubs[0]?.clubName}
+        className="mb-0"
+        actions={
+          <>
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-surface hover:bg-surface-raised"
+            >
+              ← Voltar
+            </Link>
+            <Link
+              to={`/match/${matchId}/goals`}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm shadow-sm bg-surface hover:bg-surface-raised font-medium"
+            >
+              ⚽ Análise de gols
+            </Link>
+          </>
+        }
+      />
+
+      {/* Placar em destaque (clube selecionado à esquerda) */}
+      {heroMatch && (
+        <ScoreboardHero
+          m={heroMatch}
+          matchType="All"
+          selectedClubIds={selectedClubId ? [selectedClubId] : []}
+          asLink={false}
+          label="Placar final"
+        />
+      )}
 
       {/* Painel Overall (toggle) */}
       <div className="bg-surface shadow-sm rounded-xl p-4 border">
@@ -538,63 +617,8 @@ export default function MatchDetails() {
       <div className={`bg-surface shadow-sm rounded-xl p-4 border ${heroBorderClass} ${heroBg}`}>
         {haveTwoClubs ? (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
-              {/* Esquerda */}
-              <div className="flex items-center gap-3 px-2 py-1 justify-center sm:justify-start">
-                <Crest
-                  src={crestUrl(orderedClubs[0]?.clubCrestAssetId)}
-                  alt={`Escudo ${orderedClubs[0]?.clubName ?? "Clube A"}`}
-                  size={48}
-                  rounded="rounded-full"
-                />
-                <div className="min-w-0">
-                  <div className="font-semibold leading-tight truncate">
-                    {orderedClubs[0]?.clubName ?? "Clube A"}
-                  </div>
-                  {leftIsSelected && (
-                    <span className="text-[11px] text-accent font-medium">Clube selecionado</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Placar */}
-              <div className="flex items-center justify-center gap-3">
-                {haveScore && (
-                  <ResultPill outcome={leftWon ? "W" : rightWon ? "L" : "D"} variant="solid" />
-                )}
-                <span className={`font-display text-4xl sm:text-5xl font-bold tabular-nums leading-none ${leftWon ? "text-positive" : rightWon ? "text-negative" : "text-fg-secondary"}`}>
-                  {goalsA}
-                </span>
-                <span className="text-fg-subtle text-xl font-light">–</span>
-                <span className={`font-display text-4xl sm:text-5xl font-bold tabular-nums leading-none ${rightWon ? "text-positive" : leftWon ? "text-negative" : "text-fg-secondary"}`}>
-                  {goalsB}
-                </span>
-                {haveScore && (
-                  <ResultPill outcome={rightWon ? "W" : leftWon ? "L" : "D"} variant="solid" />
-                )}
-              </div>
-
-              {/* Direita */}
-              <div className="flex items-center gap-3 px-2 py-1 justify-center sm:justify-end">
-                <div className="min-w-0 text-right">
-                  <div className="font-semibold leading-tight truncate">
-                    {orderedClubs[1]?.clubName ?? "Clube B"}
-                  </div>
-                  {rightIsSelected && (
-                    <span className="text-[11px] text-accent font-medium">Clube selecionado</span>
-                  )}
-                </div>
-                <Crest
-                  src={crestUrl(orderedClubs[1]?.clubCrestAssetId)}
-                  alt={`Escudo ${orderedClubs[1]?.clubName ?? "Clube B"}`}
-                  size={48}
-                  rounded="rounded-full"
-                />
-              </div>
-            </div>
-
             {/* Tabela comparativa com heat */}
-            <div className="overflow-x-auto mt-4">
+            <div className="overflow-x-auto">
               <table className="w-full table-fixed text-xs sm:text-sm border text-center">
                 <thead>
                   <tr className="bg-surface-raised">
@@ -743,9 +767,12 @@ export default function MatchDetails() {
           clubId={selectedClubId}
           clubName={orderedClubs.find((c) => c.clubId === selectedClubId)?.clubName ?? ""}
           clubCrestAssetId={orderedClubs.find((c) => c.clubId === selectedClubId)?.clubCrestAssetId}
-          players={players.filter((p) => p.clubId === selectedClubId)}
+          players={selectedClubPlayers}
+          goalsData={goalsData}
+          goalsLoading={goalsLoading}
+          goalsError={goalsError}
         />
       )}
-    </div>
+    </PageShell>
   );
 }

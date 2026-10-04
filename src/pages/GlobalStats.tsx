@@ -7,6 +7,10 @@ import { TeamStatsSection } from "../components/TeamStatsSection.tsx";
 import { PlayerStatsTable } from "../components/PlayerStatsTable.tsx";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { useRefresh } from "../hooks/useRefresh.tsx";
+import { Card, Field, FIELD_CLASS, PageHeader, PageShell } from "../components/ui.tsx";
+import { useUrlEnum, useUrlParams, useUrlState, type UrlPatch } from "../hooks/useUrlState.ts";
+
+const SORT_ORDERS = ["asc", "desc"] as const;
 
 export default function PlayerStatisticsPage() {
   const { refreshKey } = useRefresh();
@@ -40,52 +44,75 @@ export default function PlayerStatisticsPage() {
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // preferências
-  const [matchCount, setMatchCount] = useState<number>(() => Number(localStorage.getItem("psp.matchCount")) || 10);
-  const [minMatches, setMinMatches] = useState<number>(() => Number(localStorage.getItem("psp.minMatches")) || 1);
-  const [search, setSearch] = useState<string>("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("psp.pageSize")) || 20);
-
-  // filtro por quantidade de jogadores do adversário
-  const initialOpp = (() => {
-    const raw = localStorage.getItem("psp.opp");
-    if (!raw || raw === "all") return "all" as const;
-    const n = parseInt(raw, 10);
-    return !Number.isNaN(n) && n >= 2 && n <= 11 ? (n as number) : ("all" as const);
+  // Filtros na URL (?last=&opp=&size=&sort=&dir=&q=&min=). Valores padrão não aparecem na URL,
+  // então o link copiado reproduz exatamente a tela.
+  const [urlParams, patchUrl] = useUrlParams();
+  const [matchCount, setMatchCount] = useUrlState("last", 10, { validate: (n) => n >= 1 });
+  const [minMatches] = useUrlState("min", 1, { validate: (n) => n >= 0 });
+  const [search, setSearch] = useUrlState("q", "");
+  const [pageSize, setPageSize] = useUrlState("size", 20, { validate: (n) => n >= 5 });
+  const [oppRaw, setOppRaw] = useUrlState("opp", "all");
+  const oppPlayers: number | "all" = (() => {
+    if (oppRaw === "all") return "all";
+    const n = parseInt(oppRaw, 10);
+    return !Number.isNaN(n) && n >= 2 && n <= 11 ? n : "all";
   })();
-  const [oppPlayers, setOppPlayers] = useState<number | "all">(initialOpp);
+  const setOppPlayers = (v: number | "all") => setOppRaw(v === "all" ? "all" : String(v));
 
   type SortKey = keyof PlayerStats;
   type SortOrder = "asc" | "desc";
-  const [sortKey, setSortKey] = useState<SortKey>(
-    () => (localStorage.getItem("psp.sortKey") as SortKey) || "totalGoals"
-  );
-  const [sortOrder, setSortOrder] = useState<SortOrder>(
-    () => (localStorage.getItem("psp.sortOrder") as SortOrder) || "desc"
-  );
+  const [sortKeyRaw, setSortKeyRaw] = useUrlState("sort", "totalGoals");
+  const sortKey = sortKeyRaw as SortKey;
+  const setSortKey = (k: SortKey) => setSortKeyRaw(String(k));
+  const [sortOrder, setSortOrder] = useUrlEnum<SortOrder>("dir", "desc", SORT_ORDERS);
+
+  // "Últimas partidas": texto livre (pode ficar vazio enquanto se digita) com commit após uma pausa
+  const [countText, setCountText] = useState(String(matchCount));
+  const countOk = /^\d+$/.test(countText.trim()) && parseInt(countText, 10) >= 1;
+  useEffect(() => {
+    if (!countOk) return;
+    const n = parseInt(countText, 10);
+    if (n === matchCount) return;
+    const t = window.setTimeout(() => setMatchCount(n), 450);
+    return () => window.clearTimeout(t);
+  }, [countText, countOk, matchCount, setMatchCount]);
+  // mudanças vindas da URL (voltar/avançar, link) refletem no campo
+  useEffect(() => {
+    setCountText((prev) => (parseInt(prev, 10) === matchCount ? prev : String(matchCount)));
+  }, [matchCount]);
+
+  const [page, setPage] = useState(1);
 
   const abortRef = useRef<AbortController | null>(null);
 
-  // Persistência leve
+  // Migração única: preferências antigas (localStorage "psp.*") viram parâmetros da URL e são removidas.
+  const migratedRef = useRef(false);
   useEffect(() => {
-    localStorage.setItem("psp.matchCount", String(matchCount));
-  }, [matchCount]);
-  useEffect(() => {
-    localStorage.setItem("psp.minMatches", String(minMatches));
-  }, [minMatches]);
-  useEffect(() => {
-    localStorage.setItem("psp.pageSize", String(pageSize));
-  }, [pageSize]);
-  useEffect(() => {
-    localStorage.setItem("psp.sortKey", sortKey);
-  }, [sortKey]);
-  useEffect(() => {
-    localStorage.setItem("psp.sortOrder", sortOrder);
-  }, [sortOrder]);
-  useEffect(() => {
-    localStorage.setItem("psp.opp", oppPlayers === "all" ? "all" : String(oppPlayers));
-  }, [oppPlayers]);
+    if (migratedRef.current) return;
+    migratedRef.current = true;
+    try {
+      const legacyKeys = ["psp.matchCount", "psp.minMatches", "psp.pageSize", "psp.sortKey", "psp.sortOrder", "psp.opp"];
+      if (!legacyKeys.some((k) => localStorage.getItem(k) !== null)) return;
+      const patch: UrlPatch = {};
+      const num = (k: string) => Number(localStorage.getItem(k));
+      if (!urlParams.has("last") && num("psp.matchCount") >= 1 && num("psp.matchCount") !== 10) patch.last = num("psp.matchCount");
+      if (!urlParams.has("min") && num("psp.minMatches") >= 0 && num("psp.minMatches") !== 1 && localStorage.getItem("psp.minMatches")) patch.min = num("psp.minMatches");
+      if (!urlParams.has("size") && num("psp.pageSize") >= 5 && num("psp.pageSize") !== 20) patch.size = num("psp.pageSize");
+      const sk = localStorage.getItem("psp.sortKey");
+      if (!urlParams.has("sort") && sk && sk !== "totalGoals") patch.sort = sk;
+      const so = localStorage.getItem("psp.sortOrder");
+      if (!urlParams.has("dir") && (so === "asc" || so === "desc") && so !== "desc") patch.dir = so;
+      const opp = localStorage.getItem("psp.opp");
+      if (!urlParams.has("opp") && opp && opp !== "all") {
+        const n = parseInt(opp, 10);
+        if (n >= 2 && n <= 11) patch.opp = n;
+      }
+      legacyKeys.forEach((k) => localStorage.removeItem(k));
+      if (Object.keys(patch).length > 0) patchUrl(patch);
+    } catch {
+      /* storage indisponível */
+    }
+  }, [urlParams, patchUrl]);
 
   // Atualiza URL quando o usuário muda a seleção via picker local da página (opcional)
   const handleClubIdsChange = (ids: number[]) => {
@@ -164,19 +191,12 @@ export default function PlayerStatisticsPage() {
   }, [fetchStats, matchCount, refreshKey]);
 
   return (
-    <div className="p-4 sm:p-6 max-w-[98vw] mx-auto">
-      {/* Cabeçalho */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl sm:text-3xl font-display font-bold uppercase tracking-wide text-fg">Estatísticas</h1>
-          {fetching && (
-            <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-accent/10 text-accent border border-accent/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" /> Atualizando…
-            </span>
-          )}
-        </div>
-        <div className="text-sm text-fg-muted">
-          {groupClubIds.length > 1 ? (
+    <PageShell size="full">
+      <PageHeader
+        eyebrow="Clube"
+        title="Estatísticas"
+        subtitle={
+          groupClubIds.length > 1 ? (
             <>
               Agrupando clubes: <span className="font-semibold">{groupClubIds.map((id) => selectedClubs.find((c) => c.clubId === id)?.clubName || id).join(", ")}</span>
             </>
@@ -184,58 +204,56 @@ export default function PlayerStatisticsPage() {
             <>
               Clube atual: <span className="font-semibold">{club?.clubName || (groupClubIds[0] ?? "-")}</span>
             </>
-          )}
-        </div>
-      </div>
+          )
+        }
+        actions={
+          fetching ? (
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-accent/10 text-accent border border-accent/30" role="status">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" /> Atualizando…
+            </span>
+          ) : undefined
+        }
+      />
 
-      {/* Toolbar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-4">
-        <div className="flex gap-2 flex-wrap items-end">
-          <div className="flex flex-col">
-            <label htmlFor="matchCount" className="text-sm text-fg-muted">
-              Últimas partidas
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                id="matchCount"
-                type="number"
-                min={1}
-                value={matchCount}
-                onChange={(e) => setMatchCount(Math.max(1, Number(e.target.value) || 1))}
-                className="border rounded-lg px-3 py-2 w-28"
-              />
-              <button
-                type="button"
-                onClick={() => fetchStats(matchCount)}
-                className="btn btn-primary"
-              >
-                Atualizar
-              </button>
-            </div>
-          </div>
+      {/* Filtros */}
+      <Card className="mb-4 p-3 sm:p-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-[9rem_minmax(0,1fr)_11rem_9rem]">
+          <Field
+            label="Últimas partidas"
+            htmlFor="matchCount"
+            error={!countOk ? "Informe um número a partir de 1." : undefined}
+          >
+            <input
+              id="matchCount"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              value={countText}
+              aria-invalid={!countOk}
+              onChange={(e) => setCountText(e.target.value.replace(/[^\d]/g, ""))}
+              onBlur={() => {
+                if (!countOk) setCountText(String(matchCount));
+              }}
+              className={FIELD_CLASS}
+            />
+          </Field>
 
-          <div className="flex flex-col">
-            <label htmlFor="search" className="text-sm text-fg-muted">
-              Buscar jogador
-            </label>
+          <Field label="Buscar jogador" htmlFor="search" className="col-span-2 sm:col-span-1">
             <input
               id="search"
-              type="text"
+              type="search"
               placeholder="Nome do jogador"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="border rounded-lg px-3 py-2 w-56"
+              className={FIELD_CLASS}
             />
-          </div>
+          </Field>
 
           {/* Filtro por jogadores do adversário */}
-          <div className="flex flex-col">
-            <label htmlFor="oppPlayers" className="text-sm text-fg-muted">
-              Adversário (jogadores)
-            </label>
+          <Field label="Jogadores do adversário" htmlFor="oppPlayers">
             <select
               id="oppPlayers"
-              className="border rounded-lg px-3 py-2 w-40"
+              className={FIELD_CLASS}
               value={oppPlayers}
               onChange={(e) => {
                 const v = e.target.value;
@@ -254,15 +272,12 @@ export default function PlayerStatisticsPage() {
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
 
-          <div className="flex flex-col">
-            <label htmlFor="pageSize" className="text-sm text-fg-muted">
-              Itens por página
-            </label>
+          <Field label="Itens por página" htmlFor="pageSize">
             <select
               id="pageSize"
-              className="border rounded-lg px-3 py-2 w-36"
+              className={FIELD_CLASS}
               value={pageSize}
               onChange={(e) => setPageSize(Math.max(5, Number(e.target.value) || 20))}
             >
@@ -272,9 +287,9 @@ export default function PlayerStatisticsPage() {
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
         </div>
-      </div>
+      </Card>
 
       <TeamStatsSection clubStats={clubStats} loading={loading} error={error} />
 
@@ -293,6 +308,6 @@ export default function PlayerStatisticsPage() {
           setSortOrder(order);
         }}
       />
-    </div>
+    </PageShell>
   );
 }

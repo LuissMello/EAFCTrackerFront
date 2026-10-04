@@ -31,6 +31,7 @@ export function SectionHeader({
     className = "",
     titleId,
     as: Heading = "h2",
+    wrap = false,
 }: {
     eyebrow?: React.ReactNode;
     title: React.ReactNode;
@@ -40,6 +41,8 @@ export function SectionHeader({
     titleId?: string;
     /** Nível do título (padrão h2) */
     as?: "h1" | "h2" | "h3";
+    /** Permite quebrar o título em várias linhas (em vez de truncar com reticências) */
+    wrap?: boolean;
 }) {
     return (
         <div className={`flex items-end justify-between gap-3 ${className}`}>
@@ -51,13 +54,127 @@ export function SectionHeader({
                             {eyebrow}
                         </div>
                     )}
-                    <Heading id={titleId} className="font-display font-bold text-xl sm:text-2xl uppercase tracking-wide leading-none text-fg truncate">
+                    <Heading id={titleId} className={`font-display font-bold text-xl sm:text-2xl uppercase tracking-wide text-fg ${wrap ? "leading-tight" : "leading-none truncate"}`}>
                         {title}
                     </Heading>
                 </div>
             </div>
             {right && <div className="flex-shrink-0">{right}</div>}
         </div>
+    );
+}
+
+/* ---- Page scaffolding (shared by every route) --------------------------- */
+
+const SHELL_WIDTHS = {
+    /** formulários estreitos (login) */
+    sm: "max-w-md",
+    /** formulários / telas de registro */
+    md: "max-w-3xl",
+    lg: "max-w-5xl",
+    /** largura padrão das páginas */
+    xl: "max-w-6xl",
+    /** páginas muito densas (tabelas largas) */
+    "2xl": "max-w-7xl",
+    /** tabelas com muitas colunas (Estatísticas) */
+    full: "max-w-[1600px]",
+} as const;
+
+/**
+ * Contêiner padrão de página: largura máxima + respiro lateral/vertical.
+ * O landmark <main id="conteudo"> vem do App (um só por página); aqui é só layout.
+ */
+export function PageShell({
+    size = "xl",
+    className = "",
+    children,
+    ...rest
+}: React.HTMLAttributes<HTMLDivElement> & { size?: keyof typeof SHELL_WIDTHS }) {
+    return (
+        <div className={`mx-auto w-full ${SHELL_WIDTHS[size]} px-4 py-4 md:px-6 md:py-6 ${className}`} {...rest}>
+            {children}
+        </div>
+    );
+}
+
+/** Cabeçalho padrão: eyebrow, <h1>, subtítulo e ações à direita. Todas as páginas têm exatamente um. */
+export function PageHeader({
+    eyebrow,
+    title,
+    subtitle,
+    actions,
+    className = "mb-4",
+}: {
+    eyebrow?: React.ReactNode;
+    title: React.ReactNode;
+    subtitle?: React.ReactNode;
+    actions?: React.ReactNode;
+    className?: string;
+}) {
+    return (
+        <header className={`flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between ${className}`}>
+            <div className="min-w-0">
+                <SectionHeader as="h1" eyebrow={eyebrow} title={title} wrap />
+                {subtitle && <p className="mt-1.5 pl-[14px] text-sm text-fg-muted">{subtitle}</p>}
+            </div>
+            {actions && <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:flex-shrink-0">{actions}</div>}
+        </header>
+    );
+}
+
+/** Classe padrão de campos de formulário (input/select) no tema Broadcast. */
+export const FIELD_CLASS =
+    "h-10 w-full rounded-lg border border-border bg-surface-sunken px-3 text-sm text-fg outline-none transition placeholder:text-fg-subtle focus:border-accent focus:ring-2 focus:ring-accent/40 aria-[invalid=true]:border-negative";
+
+/** Campo de formulário: rótulo + controle + dica/erro. */
+export function Field({
+    label,
+    htmlFor,
+    hint,
+    error,
+    className = "",
+    children,
+}: {
+    label: React.ReactNode;
+    htmlFor: string;
+    hint?: React.ReactNode;
+    error?: React.ReactNode;
+    className?: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <div className={`flex min-w-0 flex-col gap-1 ${className}`}>
+            <label htmlFor={htmlFor} className="text-xs font-medium uppercase tracking-wide text-fg-muted">
+                {label}
+            </label>
+            {children}
+            {error ? (
+                <p role="alert" className="text-xs text-negative-fg">{error}</p>
+            ) : hint ? (
+                <p className="text-xs text-fg-muted">{hint}</p>
+            ) : null}
+        </div>
+    );
+}
+
+/** Estado vazio padrão (ex.: "nenhum clube selecionado"). */
+export function EmptyState({
+    icon,
+    title,
+    children,
+    className = "",
+}: {
+    icon?: React.ReactNode;
+    title: React.ReactNode;
+    children?: React.ReactNode;
+    className?: string;
+}) {
+    return (
+        <Card className={`p-8 text-center text-fg-muted ${className}`}>
+            {icon && <div className="text-4xl mb-3" aria-hidden="true">{icon}</div>}
+            <div className="font-semibold text-fg-secondary">{title}</div>
+            {children && <div className="text-sm mt-1">{children}</div>}
+        </Card>
     );
 }
 

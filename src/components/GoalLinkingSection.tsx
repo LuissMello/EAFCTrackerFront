@@ -19,6 +19,10 @@ interface GoalLinkingSectionProps {
   clubName: string;
   clubCrestAssetId?: string | null;
   players: PlayerRow[];
+  /** Vínculos já gravados (GET /api/Matches/{id}/goals) — buscados uma única vez pela página */
+  goalsData: ApiGoalsResponse | null;
+  goalsLoading: boolean;
+  goalsError: string | null;
 }
 
 interface GoalLink {
@@ -32,7 +36,7 @@ interface GoalLink {
   preAssistName?: string;
 }
 
-interface ApiGoal {
+export interface ApiGoal {
   matchGoalLinkId: number;
   matchId: number;
   clubId: number;
@@ -44,7 +48,7 @@ interface ApiGoal {
   preAssistName: string | null;
 }
 
-interface ApiGoalsResponse {
+export interface ApiGoalsResponse {
   matchId: number;
   totalGoals: number;
   goals: ApiGoal[];
@@ -56,12 +60,16 @@ export function GoalLinkingSection({
   clubName,
   clubCrestAssetId,
   players,
+  goalsData,
+  goalsLoading,
+  goalsError,
 }: GoalLinkingSectionProps) {
   const [goalLinks, setGoalLinks] = useState<GoalLink[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const loading = goalsLoading;
+  const error = saveError ?? goalsError;
 
   // Helper to get display name (proName with fallback to playerName)
   const getDisplayName = (player: PlayerRow): string => {
@@ -74,6 +82,8 @@ export function GoalLinkingSection({
     if (!player) return "-";
     return getDisplayName(player);
   };
+
+  const playersKey = players.map((p) => `${p.playerId}:${p.totalGoals}`).join(",");
 
   // Generate goal rows from players with goals
   const initialGoalLinks = useMemo(() => {
@@ -92,61 +102,41 @@ export function GoalLinkingSection({
     });
 
     return rows;
-  }, [players]);
+    // chave por conteúdo: a página repassa um array novo a cada render e isso não pode refazer a carga
+  }, [playersKey]);
 
-  // Fetch existing goal links or initialize from player data
+  // Inicializa a partir dos vínculos gravados (ou, na falta deles, das estatísticas dos jogadores)
   useEffect(() => {
-    let cancelled = false;
+    if (goalsLoading) return;
+    if (goalsError || !goalsData) {
+      // Falha de leitura não significa que não existam vínculos gravados.
+      setGoalLinks([]);
+      return;
+    }
+    setSaveError(null);
 
-    const fetchExistingGoals = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { data } = await api.get<ApiGoalsResponse>(`/api/Matches/${matchId}/goals`);
+    // Filter goals for this club only (use Number() to ensure type match)
+    const numericClubId = Number(clubId);
+    const clubGoals = goalsData.goals.filter((g) => Number(g.clubId) === numericClubId);
 
-        if (cancelled) return;
-
-        // Filter goals for this club only (use Number() to ensure type match)
-        const numericClubId = Number(clubId);
-        const clubGoals = data.goals.filter((g) => Number(g.clubId) === numericClubId);
-
-        if (clubGoals.length > 0) {
-          // Map API response to GoalLink format
-          const existingLinks: GoalLink[] = clubGoals.map((g, index) => ({
-            scorerPlayerId: g.scorerPlayerEntityId,
-            goalIndex: index + 1,
-            assistPlayerId: g.assistPlayerEntityId,
-            preAssistPlayerId: g.preAssistPlayerEntityId,
-            scorerName: g.scorerName,
-            assistName: g.assistName ?? undefined,
-            preAssistName: g.preAssistName ?? undefined,
-          }));
-          setGoalLinks(existingLinks);
-          setSaved(true);
-        } else {
-          // No existing data, use initial links from player stats
-          setGoalLinks(initialGoalLinks);
-          setSaved(false);
-        }
-      } catch {
-        // Falha de leitura não significa que não existam vínculos gravados.
-        if (!cancelled) {
-          setGoalLinks([]);
-          setError("Não foi possível carregar os vínculos. Tente abrir a partida novamente antes de editar.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchExistingGoals();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [matchId, clubId, initialGoalLinks]);
+    if (clubGoals.length > 0) {
+      const existingLinks: GoalLink[] = clubGoals.map((g, index) => ({
+        scorerPlayerId: g.scorerPlayerEntityId,
+        goalIndex: index + 1,
+        assistPlayerId: g.assistPlayerEntityId,
+        preAssistPlayerId: g.preAssistPlayerEntityId,
+        scorerName: g.scorerName,
+        assistName: g.assistName ?? undefined,
+        preAssistName: g.preAssistName ?? undefined,
+      }));
+      setGoalLinks(existingLinks);
+      setSaved(true);
+    } else {
+      // No existing data, use initial links from player stats
+      setGoalLinks(initialGoalLinks);
+      setSaved(false);
+    }
+  }, [goalsData, goalsLoading, goalsError, clubId, initialGoalLinks]);
 
   // Players with at least one assist (base list, will be filtered per row)
   const playersWithAssists = useMemo(
@@ -214,7 +204,7 @@ export function GoalLinkingSection({
   const handleSubmit = async () => {
     // Vínculo manual de gols é PÚBLICO (sem login; o backend limita por IP e devolve 429 quando excede)
     setSaving(true);
-    setError(null);
+    setSaveError(null);
     try {
       await api.post(API_ENDPOINTS.MATCH_GOALS(matchId), {
         goals: goalLinks.map((g) => ({
@@ -225,7 +215,7 @@ export function GoalLinkingSection({
       });
       setSaved(true);
     } catch (err: any) {
-      setError(describeApiError(err, "Erro ao salvar vínculos").message);
+      setSaveError(describeApiError(err, "Erro ao salvar vínculos").message);
     } finally {
       setSaving(false);
     }
@@ -319,11 +309,11 @@ export function GoalLinkingSection({
         <table className="w-full table-auto text-sm border">
           <thead>
             <tr className="bg-surface-raised">
-              <th className="p-2 text-left font-medium">Gol</th>
-              <th className="p-2 text-center text-fg-subtle w-8"></th>
-              <th className="p-2 text-left font-medium">Assistência</th>
-              <th className="p-2 text-center text-fg-subtle w-8"></th>
-              <th className="p-2 text-left font-medium">Pré-Assistência</th>
+              <th scope="col" className="p-2 text-left font-medium">Gol</th>
+              <th scope="col" className="p-2 text-center text-fg-subtle w-8"><span className="sr-only">assistido por</span></th>
+              <th scope="col" className="p-2 text-left font-medium">Assistência</th>
+              <th scope="col" className="p-2 text-center text-fg-subtle w-8"><span className="sr-only">pré-assistido por</span></th>
+              <th scope="col" className="p-2 text-left font-medium">Pré-Assistência</th>
             </tr>
           </thead>
           <tbody>
@@ -340,6 +330,7 @@ export function GoalLinkingSection({
                       <span>{getAssistDisplayName(goal, "assist")}</span>
                     ) : (
                       <select
+                        aria-label={`Assistência do gol de ${formatScorerName(goal)}`}
                         value={goal.assistPlayerId ?? ""}
                         onChange={(e) =>
                           handleAssistChange(
@@ -364,6 +355,7 @@ export function GoalLinkingSection({
                       <span>{getAssistDisplayName(goal, "preAssist")}</span>
                     ) : (
                       <select
+                        aria-label={`Pré-assistência do gol de ${formatScorerName(goal)}`}
                         value={goal.preAssistPlayerId ?? ""}
                         onChange={(e) =>
                           handlePreAssistChange(

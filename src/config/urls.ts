@@ -8,6 +8,24 @@ if (!ENV_API_BASE_URL && process.env.NODE_ENV === 'production') {
 }
 export const API_BASE_URL = ENV_API_BASE_URL || 'http://localhost:5000';
 
+/** Filtros do Laboratório (from/to = yyyy-MM-dd locais; omitidos quando vazios). */
+export interface LabQuery {
+  from?: string | null;
+  to?: string | null;
+  gameVersion?: number | null;
+  minMatches?: number | null;
+}
+
+function labQueryString(q: LabQuery): string {
+  const p = new URLSearchParams();
+  if (q.from) p.set('from', q.from);
+  if (q.to) p.set('to', q.to);
+  if (q.gameVersion != null) p.set('gameVersion', String(q.gameVersion));
+  if (q.minMatches != null) p.set('minMatches', String(q.minMatches));
+  const s = p.toString();
+  return s ? `?${s}` : '';
+}
+
 // API Endpoints
 export const API_ENDPOINTS = {
   // Clubs
@@ -43,6 +61,23 @@ export const API_ENDPOINTS = {
   CLUB_RECORDS: (clubIds: string) => `/api/Clubs/records?clubIds=${clubIds}`,
   CLUB_OPPONENTS: (clubIds: string) => `/api/Clubs/opponents?clubIds=${clubIds}`,
   PLAYER_PROFILE: (playerEntityId: number) => `/api/Players/${playerEntityId}/profile`,
+
+  // Noite de jogo / Laboratório / Retrospectiva (públicos, somente leitura)
+  GAME_NIGHTS: (clubId: number, gameVersion?: number | null) =>
+    `/api/clubs/${clubId}/game-nights${gameVersion != null ? `?gameVersion=${gameVersion}` : ''}`,
+  GAME_NIGHT: (clubId: number, sessionId: number) => `/api/clubs/${clubId}/game-nights/${sessionId}`,
+  LAB_PLAYER_IMPACT: (clubId: number, q: LabQuery) => `/api/clubs/${clubId}/lab/player-impact${labQueryString(q)}`,
+  LAB_CONTEXT: (clubId: number, q: LabQuery) => `/api/clubs/${clubId}/lab/context${labQueryString(q)}`,
+  LAB_DUOS: (clubId: number, q: LabQuery) => `/api/clubs/${clubId}/lab/duos${labQueryString(q)}`,
+  WRAPPED: (clubId: number, gameVersion?: number | null) =>
+    `/api/clubs/${clubId}/wrapped${gameVersion != null ? `?gameVersion=${gameVersion}` : ''}`,
+
+  // Cartas de jogador + comparador (públicos, somente leitura)
+  PLAYER_CARDS: (clubId: number, q: LabQuery) => `/api/clubs/${clubId}/player-cards${labQueryString(q)}`,
+  PLAYER_COMPARE: (clubId: number, a: number, b: number, q: LabQuery) => {
+    const base = labQueryString({ from: q.from, to: q.to, gameVersion: q.gameVersion });
+    return `/api/clubs/${clubId}/player-compare?a=${a}&b=${b}${base ? `&${base.slice(1)}` : ''}`;
+  },
 
   // System
   FETCH_LAST_RUN: '/api/fetch/last-run',

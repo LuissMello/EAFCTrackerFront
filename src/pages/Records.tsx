@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../services/api.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { useClub } from "../hooks/useClub.tsx";
-import { Card, SectionHeader, RatingPill } from "../components/ui.tsx";
+import { Card, EmptyState, PageHeader, PageShell, RatingPill } from "../components/ui.tsx";
 import { fmtDateBR } from "../utils/date.ts";
 import { useClubIds } from "../hooks/useClubIds.ts";
 import { useAbortableFetch } from "../hooks/useAbortableFetch.ts";
@@ -141,19 +141,18 @@ export default function Records() {
 
     if (activeClubIds.length === 0) {
         return (
-            <div className="p-6 max-w-5xl mx-auto">
-                <Card className="p-10 text-center text-fg-muted">
-                    <div className="text-4xl mb-3">🏆</div>
-                    <div className="font-semibold">Nenhum clube selecionado</div>
-                    <div className="text-sm mt-1">Selecione um clube no menu superior para ver os recordes.</div>
-                </Card>
-            </div>
+            <PageShell>
+                <PageHeader eyebrow="Clube" title="Recordes e curiosidades" subtitle="Marcas históricas do clube e dos jogadores" />
+                <EmptyState icon="🏆" title="Nenhum clube selecionado">
+                    Selecione um clube no menu superior para ver os recordes.
+                </EmptyState>
+            </PageShell>
         );
     }
 
     return (
-        <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
-            <SectionHeader eyebrow="Clube" title="Recordes & Curiosidades" />
+        <PageShell className="space-y-6">
+            <PageHeader eyebrow="Clube" title="Recordes e curiosidades" subtitle="Marcas históricas do clube e dos jogadores" className="mb-0" />
 
             {error && (
                 <div className="bg-negative-soft border border-negative/30 rounded-xl p-4 text-sm text-negative-fg">{error}</div>
@@ -264,6 +263,6 @@ export default function Records() {
                     <div className="font-semibold">Sem dados para exibir</div>
                 </Card>
             )}
-        </div>
+        </PageShell>
     );
 }

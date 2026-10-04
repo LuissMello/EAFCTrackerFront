@@ -30,6 +30,24 @@ interface PlayerStatsTableProps {
 
 const clamp = (v: number, min = 0, max = 100) => Math.max(min, Math.min(max, v));
 
+/** Peso de largura por coluna (table-layout: fixed): a tabela cabe no container em vez de rolar. */
+const COLUMN_WEIGHT: Record<string, number> = {
+    proName: 15,
+    matchesPlayed: 7,
+    totalSecondsPlayed: 6.5,
+    participations: 6.5,
+    totalGoals: 5.5,
+    totalAssists: 7,
+    totalPreAssists: 5,
+    totalShots: 13,
+    totalSaves: 18,
+    totalPassesMade: 13,
+    totalTacklesMade: 12.5,
+    vedBars: 10,
+    totalMom: 5.5,
+    avgRating: 6.5,
+};
+
 const STICKY_PLAYER_HEADER =
     "sticky left-0 z-20 border-r border-border shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]";
 const STICKY_PLAYER_CELL =
@@ -56,7 +74,7 @@ function RedCardBadge({ count }: { count: number }) {
         <Tooltip content={label}>
             <span
                 aria-label={label}
-                className="inline-flex items-center justify-center min-w-[1rem] h-[1.15rem] px-0.5 rounded-[2px] bg-red-600 text-white text-[10px] font-bold leading-none tabular-nums"
+                className="inline-flex items-center justify-center min-w-[1rem] h-[1.15rem] px-0.5 rounded-[2px] bg-red-600 text-white text-[11px] font-bold leading-none tabular-nums"
             >
                 {count}
             </span>
@@ -98,7 +116,7 @@ function CellBar({
     const cellBarContent = (
         <div className="relative w-full h-6 rounded-md border border-border overflow-hidden bg-surface-sunken">
             <div className={`h-full ${barColor}`} style={{ width: `${width}%` }} />
-            <div className="absolute inset-0 grid place-items-center text-xs font-medium whitespace-nowrap tabular-nums">
+            <div className="absolute inset-0 grid place-items-center text-[11px] xl:text-xs font-medium whitespace-nowrap tabular-nums">
                 {label}
             </div>
         </div>
@@ -140,13 +158,13 @@ function HorizontalRecordBar({
 
     return (
         <Tooltip content={tooltip} wrapperClassName="block">
-            <div className="min-w-[72px]">
+            <div className="min-w-0">
                 <div className="flex h-3 rounded overflow-hidden gap-px">
                     {v > 0 && <div className="bg-positive" style={{ width: `${vPct}%` }} />}
                     {e > 0 && <div className="bg-warning" style={{ width: `${ePct}%` }} />}
                     {d > 0 && <div className="bg-negative" style={{ width: `${dPct}%` }} />}
                 </div>
-                <div className="flex justify-between text-[10px] mt-0.5 font-semibold tabular-nums">
+                <div className="flex justify-between text-[11px] mt-0.5 font-semibold tabular-nums">
                     <span className="text-positive">{v}V</span>
                     <span className="text-warning">{e}E</span>
                     <span className="text-negative">{d}D</span>
@@ -297,14 +315,14 @@ export function PlayerStatsTable({
         });
     }, [filtered]);
 
-    const allColumns = [
+    const allColumns: { key: string; label: string; full?: string; tooltip?: string }[] = [
         { key: "proName", label: "Jogador", tooltip: "Nome do jogador" },
         { key: "matchesPlayed", label: "Partidas" },
-        { key: "totalSecondsPlayed", label: "Min.", tooltip: "Minutos em campo no total" },
+        { key: "totalSecondsPlayed", label: "Min.", full: "Minutos", tooltip: "Tempo em campo no total (h:mm ou mm:ss)" },
         { key: "participations", label: "Partic.", tooltip: "Participações em gols (Gols + Assistências + Pré-Assistências)" },
         { key: "totalGoals", label: "Gols" },
-        { key: "totalAssists", label: "Assistências" },
-        { key: "totalPreAssists", label: "Pré-Assist", tooltip: "Passes que resultaram em assistências" },
+        { key: "totalAssists", label: "Assist.", full: "Assistências" },
+        { key: "totalPreAssists", label: "Pré", full: "Pré-Assistências", tooltip: "Passes que resultaram em assistências" },
         { key: "totalShots", label: "Chutes", tooltip: "Gols / Tentativas totais e % de conversão" },
         ...(hasGoalkeeperStats
             ? [
@@ -316,7 +334,7 @@ export function PlayerStatsTable({
               ]
             : []),
         { key: "totalPassesMade", label: "Passes", tooltip: "Completos / Tentados e %" },
-        { key: "totalTacklesMade", label: "Desarmes", tooltip: "Desarmes certos / tentados e %" },
+        { key: "totalTacklesMade", label: "Desarm.", full: "Desarmes", tooltip: "Desarmes certos / tentados e %" },
 
         { key: "vedBars", label: "V/E/D", tooltip: "3 barras verticais: Vitórias / Empates / Derrotas (valor e %)" },
 
@@ -335,6 +353,7 @@ export function PlayerStatsTable({
     }, [filtered, hiddenColumns]);
 
     const columns = allColumns.filter((col) => !effectiveHiddenColumns.includes(col.key));
+    const totalWeight = columns.reduce((a, c) => a + (COLUMN_WEIGHT[c.key] ?? 8), 0) || 1;
 
     return (
         <section>
@@ -342,13 +361,18 @@ export function PlayerStatsTable({
 
             <div className="rounded-lg border bg-surface shadow overflow-hidden">
                 <div className="scroll-touch-x overflow-x-auto">
-                <table className="table-auto w-full text-sm text-center">
+                <table className="table-fixed w-full text-xs xl:text-sm text-center" style={{ minWidth: columns.length * 68 }}>
+                    <colgroup>
+                        {columns.map((c) => (
+                            <col key={c.key} style={{ width: `${(((COLUMN_WEIGHT[c.key] ?? 8) / totalWeight) * 100).toFixed(2)}%` }} />
+                        ))}
+                    </colgroup>
                     <thead className="bg-surface-raised">
                         <tr>
                             {columns.map((c) => {
                                 const headerContent = (
-                                    <div className="flex items-center justify-center gap-1">
-                                        <span>{c.label}</span>
+                                    <div className="flex items-center justify-center gap-0.5 leading-tight">
+                                        <span title={c.full ?? c.label}>{c.label}</span>
                                         <SortIcon active={sortKey === (c.key as keyof PlayerStats)} order={sortOrder} />
                                     </div>
                                 );
@@ -367,7 +391,7 @@ export function PlayerStatsTable({
                                             }
                                         }}
                                         tabIndex={0}
-                                        className={`px-3 py-2 cursor-pointer select-none hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent group${
+                                        className={`px-1 py-2 xl:px-2 cursor-pointer select-none font-semibold hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent group${
                                             isActiveSort ? " bg-accent/10 text-accent" : isProNameCol ? " bg-surface-raised" : ""
                                         }${isProNameCol ? ` ${STICKY_PLAYER_HEADER}` : ""}`}
                                         aria-sort={
@@ -461,7 +485,7 @@ export function PlayerStatsTable({
                                             return (
                                                 <td
                                                     key={col.key}
-                                                    className={`px-3 py-2 font-medium text-left whitespace-nowrap ${STICKY_PLAYER_CELL} ${rowBgClass}`}
+                                                    className={`px-1 py-1.5 xl:px-2 font-medium text-left [overflow-wrap:anywhere] ${STICKY_PLAYER_CELL} ${rowBgClass}`}
                                                 >
                                                     {Icons}
                                                     {p.playerEntityId ? (
@@ -483,35 +507,38 @@ export function PlayerStatsTable({
                                             );
                                         case "matchesPlayed":
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     <CellBar value={p.matchesPlayed} max={maxByKey.get("matchesPlayed") || 1} format={(v) => int.format(v)} />
                                                 </td>
                                             );
                                         case "totalSecondsPlayed": {
                                             const mins = Math.floor(p.totalSecondsPlayed / 60);
                                             const secs = p.totalSecondsPlayed % 60;
-                                            const label = `${mins}:${String(secs).padStart(2, "0")}`;
+                                            const label =
+                                                mins >= 60
+                                                    ? `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, "0")}`
+                                                    : `${mins}:${String(secs).padStart(2, "0")}`;
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     <CellBar value={p.totalSecondsPlayed} max={maxByKey.get("totalSecondsPlayed") || 1} format={() => label} />
                                                 </td>
                                             );
                                         }
                                         case "totalGoals":
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     <CellBar value={p.totalGoals} max={maxByKey.get("totalGoals") || 1} format={(v) => int.format(v)} />
                                                 </td>
                                             );
                                         case "totalAssists":
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     <CellBar value={p.totalAssists} max={maxByKey.get("totalAssists") || 1} format={(v) => int.format(v)} />
                                                 </td>
                                             );
                                         case "totalPreAssists":
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     <CellBar
                                                         value={p.totalPreAssists}
                                                         max={maxByKey.get("totalPreAssists") || 1}
@@ -523,14 +550,14 @@ export function PlayerStatsTable({
                                             const participations =
                                                 (Number(p.totalGoals) || 0) + (Number(p.totalAssists) || 0) + (Number(p.totalPreAssists) || 0);
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     <CellBar value={participations} max={maxByKey.get("participations") || 1} format={(v) => int.format(v)} />
                                                 </td>
                                             );
                                         }
                                         case "totalShots":
                                             return (
-                                                <td key={col.key} className="px-3 py-2 min-w-[140px]">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     <CellBar
                                                         value={p.goalAccuracyPercent}
                                                         max={100}
@@ -542,8 +569,8 @@ export function PlayerStatsTable({
                                             );
                                         case "totalSaves":
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
-                                                    {int.format(saves)} defesas / {int.format(conceded)} gols sofridos
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
+                                                    <span title={`${int.format(saves)} defesas / ${int.format(conceded)} gols sofridos`}>{int.format(saves)} def. / {int.format(conceded)} sofr.</span>
                                                     <div className="mt-1">
                                                         {savePct === null ? <span className="text-fg-subtle">Taxa: —</span> : (
                                                             <CellBar
@@ -560,7 +587,7 @@ export function PlayerStatsTable({
                                             );
                                         case "totalPassesMade":
                                             return (
-                                                <td key={col.key} className="px-3 py-2 min-w-[168px]">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     <CellBar
                                                         value={pct(p.totalPassesMade, p.totalPassAttempts)}
                                                         max={100}
@@ -573,7 +600,7 @@ export function PlayerStatsTable({
                                         case "totalTacklesMade": {
                                             const tacklePct = pct(p.totalTacklesMade, p.totalTackleAttempts);
                                             return (
-                                                <td key={col.key} className="px-3 py-2 min-w-[148px]">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     <CellBar
                                                         value={tacklePct}
                                                         max={100}
@@ -587,7 +614,7 @@ export function PlayerStatsTable({
 
                                         case "vedBars":
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     <HorizontalRecordBar
                                                         wins={Number(p.totalWins || 0)}
                                                         ties={Number(p.totalDraws || 0)}
@@ -600,13 +627,13 @@ export function PlayerStatsTable({
 
                                         case "totalMom":
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     {p.totalMom > 0 ? int.format(p.totalMom) : "—"}
                                                 </td>
                                             );
                                         case "avgRating":
                                             return (
-                                                <td key={col.key} className="px-3 py-2">
+                                                <td key={col.key} className="px-1 py-1.5 xl:px-2">
                                                     {Number(p.avgRating) > 0 ? (
                                                         <RatingPill value={Number(p.avgRating)} />
                                                     ) : (

@@ -191,6 +191,17 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
         });
     }, [allClubs]);
 
+    // Só existe um clube rastreado e nada selecionado: seleciona esse clube (uma única vez por sessão da página)
+    const autoSelectedRef = useRef(false);
+    useEffect(() => {
+        if (autoSelectedRef.current || clubsLoading || allClubs.length === 0) return;
+        autoSelectedRef.current = true;
+        if (allClubs.length === 1 && selectedClubs.length === 0) {
+            const only = allClubs[0];
+            setSelectedClubsState([{ clubId: only.clubId, clubName: only.name ?? null, crestAssetId: only.crestAssetId ?? null }]);
+        }
+    }, [allClubs, clubsLoading, selectedClubs.length]);
+
     // ===== Sincronização com localStorage e URL (único dono das chaves clubIds/clubId) =====
     const searchString = searchParams.toString();
     useEffect(() => {

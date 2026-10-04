@@ -14,14 +14,15 @@ import {
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 import { useClub } from "../hooks/useClub.tsx";
+import { PageHeader, PageShell } from "../components/ui.tsx";
 import { useClubIds } from "../hooks/useClubIds.ts";
 import { useAbortableFetch } from "../hooks/useAbortableFetch.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { parseTimestamp, fmtDateBRShort } from "../utils/date.ts";
-import { withAlpha, colorFromId } from "../utils/chart.ts";
+import { withAlpha } from "../utils/chart.ts";
 import OverallSummaryCard, { ClubOverallRow } from "../components/OverallSummaryCard.tsx";
 import { useTheme } from "../hooks/useTheme.tsx";
-import { chartTheme, cssVar } from "../utils/themeColors.ts";
+import { chartTheme, cssVar, seriesColor } from "../utils/themeColors.ts";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
@@ -132,9 +133,12 @@ const resultMarkersPlugin = {
       if (!markers) return;
       const meta = chart.getDatasetMeta(di);
       if (meta.hidden) return;
+      // Pontos muito próximos (celular): desenha só 1 a cada N rótulos para não sobrepor
+      const step = chart.chartArea.width / Math.max(1, meta.data.length);
+      const every = Math.max(1, Math.ceil(30 / Math.max(step, 1)));
       meta.data.forEach((pt: any, i: number) => {
         const m = markers[i];
-        if (!m) return;
+        if (!m || i % every !== 0) return;
         ctx.save();
         ctx.font = "bold 11px sans-serif";
         ctx.fillStyle = m.color;
@@ -218,15 +222,16 @@ const dayZonesPlugin = {
           ? chartArea.right
           : (x.getPixelForValue(g.end) + x.getPixelForValue(g.end + 1)) / 2;
       const cx = (left + right) / 2;
-      if (right - left < 26) return; // estreito demais p/ rótulo
-      ctx.font = "600 10px sans-serif";
+      if (right - left < 34) return; // estreito demais p/ rótulo
+      ctx.font = "600 11px sans-serif";
       ctx.fillStyle = t.fgMuted;
       ctx.textBaseline = "top";
       ctx.fillText(g.label, cx, chartArea.top + 3);
       const deltaText = g.delta === null ? "—" : g.delta > 0 ? `+${g.delta}` : `${g.delta}`;
       ctx.font = "bold 11px sans-serif";
       ctx.fillStyle = g.delta !== null && g.delta > 0 ? t.positive : g.delta !== null && g.delta < 0 ? t.negative : t.fgMuted;
-      ctx.fillText(g.delta === null ? deltaText : `${deltaText} SR`, cx, chartArea.top + 15);
+      // faixa estreita (celular): só o número, sem o sufixo "SR" (explicado na legenda)
+      ctx.fillText(g.delta === null || right - left < 62 ? deltaText : `${deltaText} SR`, cx, chartArea.top + 15);
     });
     ctx.restore();
   },
@@ -259,9 +264,9 @@ function MatchHistoryTable({ series, showClubName }: { series: ClubSeries; showC
               <th scope="col" className="px-3 py-2 text-left">Adversário</th>
               <th scope="col" className="px-3 py-2 text-center">Placar</th>
               <th scope="col" className="px-3 py-2 text-center">Res.</th>
-              <th scope="col" className="px-3 py-2 text-right">SR</th>
-              <th scope="col" className="px-3 py-2 text-right">SR Adv.</th>
-              <th scope="col" className="px-3 py-2 text-right">Δ SR</th>
+              <th scope="col" className="px-3 py-2 text-right"><abbr title="Skill Rating" className="no-underline">SR</abbr></th>
+              <th scope="col" className="px-3 py-2 text-right"><abbr title="Skill Rating do adversário" className="no-underline">SR Adv.</abbr></th>
+              <th scope="col" className="px-3 py-2 text-right"><abbr title="Variação de Skill Rating" className="no-underline">Δ SR</abbr></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -326,7 +331,7 @@ type Metric = "sr" | "division";
 type ChartKind = "line" | "area";
 
 export default function OverallEvolution() {
-  const { club, selectedClubs } = useClub();
+  const { selectedClubs } = useClub();
   const { resolvedTheme } = useTheme();
 
   // ids efetivos (multi). Se nenhum selecionado, tenta o single legacy.
@@ -423,8 +428,6 @@ export default function OverallEvolution() {
 
   const singleClub = clubsWithData.length === 1 ? clubsWithData[0] : null;
 
-  const headerTitle =
-    clubsWithData.length <= 1 ? singleClub?.clubName ?? club?.clubName ?? "" : "Vários clubes selecionados";
 
   // X labels: se multi, força índice; se single, respeita xMode
   const effectiveXMode: XMode = clubsWithData.length > 1 ? "index" : xMode;
@@ -482,7 +485,7 @@ export default function OverallEvolution() {
         metric === "sr" ? knownNumber(p.ourStats?.skillRating) : knownNumber(p.ourStats?.currentDivision)
       );
       const vals = metric === "sr" && smooth ? movingAvgWithGaps(raw, 5) : raw;
-      const hex = colorFromId(c.clubId);
+      const hex = seriesColor(Math.max(0, clubsWithData.findIndex((x) => x.clubId === c.clubId)));
       // Variação de SR vs. jogo anterior (sempre a partir do SR real, não suavizado)
       const markers: SrMarker[] =
         metric === "sr"
@@ -591,23 +594,29 @@ export default function OverallEvolution() {
   const quickSizes = [20, 50, 100];
   const forceReload = () => setReloadNonce((n) => n + 1);
 
+  const clubNamesLabel =
+    idsToUse.length > 0 ? (
+      <>
+        Clubes ativos:{" "}
+        <span className="font-medium">
+          {idsToUse.map((id) => selectedClubs.find((c) => c.clubId === id)?.clubName ?? seriesByClub[id]?.clubName ?? `Clube ${id}`).join(", ")}
+        </span>
+      </>
+    ) : undefined;
+
   // =========================
   // Render
   // =========================
 
   return (
-    <div className="p-4 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display font-bold uppercase tracking-wide text-2xl sm:text-3xl text-fg">Evolução do Overall — {headerTitle}</h1>
-          {idsToUse.length > 0 && (
-            <div className="text-xs text-fg-muted mt-1">
-              Clubes ativos: <span className="font-mono">{idsToUse.join(", ")}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+    <PageShell size="2xl" className="space-y-6">
+      <PageHeader
+        eyebrow="Clube"
+        title="Evolução do overall"
+        subtitle={clubNamesLabel}
+        className="mb-0"
+        actions={
+          <>
           <span className="text-sm text-fg-secondary">Últimas</span>
           <div className="flex items-center gap-1">
             {quickSizes.map((n) => (
@@ -638,8 +647,9 @@ export default function OverallEvolution() {
           >
             Recarregar
           </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {idsToUse.length === 0 && (
         <div className="p-3 bg-warning-soft border border-warning/40 text-warning-fg rounded">
@@ -737,12 +747,17 @@ export default function OverallEvolution() {
             </div>
 
             {/* GRÁFICO PRINCIPAL */}
+            {metric === "sr" && (
+              <p className="mt-3 text-xs text-fg-muted">
+                <strong>SR = Skill Rating</strong>, a pontuação de habilidade do clube no Pro Clubs. Em telas pequenas alguns rótulos de Δ SR ficam ocultos para não se sobrepor; toque no ponto para ver o valor.
+              </p>
+            )}
             <div className="mt-4 h-[360px]">
               <Line key={resolvedTheme} data={chartData as any} options={baseOptions} plugins={[dayZonesPlugin, resultMarkersPlugin]} />
             </div>
             {showResults && metric === "sr" && (
               <div className="mt-2 flex items-center gap-3 text-xs text-fg-muted">
-                <span>Δ SR vs. jogo anterior:</span>
+                <span><abbr title="Skill Rating" className="no-underline font-semibold">SR</abbr> = Skill Rating · Δ SR vs. jogo anterior:</span>
                 <span className="font-semibold text-positive">vitória</span>
                 <span className="font-semibold text-warning">empate</span>
                 <span className="font-semibold text-negative">derrota</span>
@@ -788,6 +803,6 @@ export default function OverallEvolution() {
           </div>
         </>
       )}
-    </div>
+    </PageShell>
   );
 }

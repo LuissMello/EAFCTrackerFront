@@ -14,14 +14,15 @@ import {
 } from "chart.js";
 import { Line, Bar } from "react-chartjs-2";
 import { useClub } from "../hooks/useClub.tsx";
+import { PageHeader, PageShell } from "../components/ui.tsx";
 import { useClubIds } from "../hooks/useClubIds.ts";
 import { useAbortableFetch } from "../hooks/useAbortableFetch.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { useTheme } from "../hooks/useTheme.tsx";
-import { chartTheme, cssVar } from "../utils/themeColors.ts";
+import { chartTheme, cssVar, seriesColor } from "../utils/themeColors.ts";
 import { RatingPill } from "../components/ui.tsx";
 import { fmtDateBRShort } from "../utils/date.ts";
-import { withAlpha, colorFromId, movingAvg } from "../utils/chart.ts";
+import { withAlpha, movingAvg } from "../utils/chart.ts";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
@@ -97,7 +98,7 @@ function FormPills({ form }: { form: string }) {
         return (
           <span
             key={i}
-            className={`inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold border ${cls}`}
+            className={`inline-flex items-center justify-center w-5 h-5 rounded text-[11px] font-bold border ${cls}`}
           >
             {ch}
           </span>
@@ -112,7 +113,7 @@ function FormPills({ form }: { form: string }) {
 // =========================
 
 export default function TrendsPage() {
-  const { club, selectedClubs } = useClub();
+  const { selectedClubs } = useClub();
   const { resolvedTheme } = useTheme();
 
   // ids efetivos (multi). Se nenhum selecionado, tenta o single legacy.
@@ -169,9 +170,9 @@ export default function TrendsPage() {
 
   const singleClub = clubsWithData.length === 1 ? clubsWithData[0] : null;
 
-  // rótulo do topo
-  const headerTitle =
-    clubsWithData.length <= 1 ? singleClub?.clubName ?? club?.clubName ?? "" : "Vários clubes selecionados";
+  // Cor da linha/destaque de cada clube: tokens do tema (1º clube = accent), não um hash do id
+  const clubHex = (clubId: number) => seriesColor(Math.max(0, clubsWithData.findIndex((x) => x.clubId === clubId)));
+
 
   // X labels: se multi, força índice; se single, respeita xMode
   const effectiveXMode: XMode = clubsWithData.length > 1 ? "index" : xMode;
@@ -214,7 +215,7 @@ export default function TrendsPage() {
       const datasets = clubsWithData.map((c) => {
         const baseVals = valuesFor(c.series, metric) as number[];
         const vals = smooth ? movingAvg(baseVals, 5) : baseVals;
-        const hex = colorFromId(c.clubId);
+        const hex = clubHex(c.clubId);
         return {
           type: chartKind === "bar" ? "bar" : "line",
           label: c.clubName,
@@ -244,7 +245,7 @@ export default function TrendsPage() {
         const base = valuesFor(c.series, "gfga") as { gf: number[]; ga: number[] };
         const gfVals = smooth ? movingAvg(base.gf, 5) : base.gf;
         const gaVals = smooth ? movingAvg(base.ga, 5) : base.ga;
-        const hex = colorFromId(c.clubId);
+        const hex = clubHex(c.clubId);
 
         datasets.push({
           type: chartKind === "bar" ? "bar" : "line",
@@ -278,7 +279,7 @@ export default function TrendsPage() {
       const datasets = clubsWithData.map((c) => {
         const base = valuesFor(c.series, "gdiff") as number[];
         const vals = smooth ? movingAvg(base, 5) : base;
-        const hex = colorFromId(c.clubId);
+        const hex = clubHex(c.clubId);
         const negFill = cssVar("--color-negative", 0.45);
         const fillColor =
           chartKind === "bar"
@@ -371,23 +372,29 @@ export default function TrendsPage() {
   const quickLasts = [5, 10, 20, 50];
   const forceReload = () => setReloadNonce(Date.now());
 
+  const clubNamesLabel =
+    idsToUse.length > 0 ? (
+      <>
+        Clubes ativos:{" "}
+        <span className="font-medium">
+          {idsToUse.map((id) => selectedClubs.find((c) => c.clubId === id)?.clubName ?? trendsByClub[id]?.clubName ?? `Clube ${id}`).join(", ")}
+        </span>
+      </>
+    ) : undefined;
+
   // =========================
   // Render
   // =========================
 
   return (
-    <div className="p-4 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display font-bold uppercase tracking-wide text-2xl sm:text-3xl text-fg">Tendências &amp; Streaks — {headerTitle}</h1>
-          {idsToUse.length > 0 && (
-            <div className="text-xs text-fg-muted mt-1">
-              Clubes ativos: <span className="font-mono">{idsToUse.join(", ")}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+    <PageShell size="2xl" className="space-y-6">
+      <PageHeader
+        eyebrow="Clube"
+        title="Tendências e sequências"
+        subtitle={clubNamesLabel}
+        className="mb-0"
+        actions={
+          <>
           <span className="text-sm text-fg-secondary">Últimos</span>
           <div className="flex items-center gap-1">
             {quickLasts.map((n) => (
@@ -418,8 +425,9 @@ export default function TrendsPage() {
           >
             Recarregar
           </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {idsToUse.length === 0 && (
         <div className="p-3 bg-warning-soft border border-warning/40 text-warning-fg rounded">
@@ -453,7 +461,7 @@ export default function TrendsPage() {
               <div
                 key={c.clubId}
                 className="bg-surface border border-l-4 rounded-xl p-4"
-                style={{ borderLeftColor: colorFromId(c.clubId) }}
+                style={{ borderLeftColor: clubHex(c.clubId) }}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-base font-semibold">{c.clubName}</div>
@@ -563,7 +571,7 @@ export default function TrendsPage() {
                             title={`${fmtDateBRShort(s.timestamp)} • vs ${s.opponentName} • ${s.goalsFor}-${s.goalsAgainst}`}
                             className={`inline-flex items-center justify-center w-8 h-8 rounded text-white flex-shrink-0 ${pillColor(s.result as Result)}`}
                           >
-                            <span className="text-[9px] font-bold leading-none">{s.goalsFor}-{s.goalsAgainst}</span>
+                            <span className="text-[11px] font-bold leading-none">{s.goalsFor}-{s.goalsAgainst}</span>
                           </span>
                         ))}
                       </div>
@@ -611,7 +619,7 @@ export default function TrendsPage() {
                     .slice(0, 30)
                     .map((t, idx) => {
                       const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : null;
-                      const clr = colorFromId(t._clubId);
+                      const clr = clubHex(t._clubId);
                       return (
                         <tr
                           key={`${t._clubId}-${t.playerEntityId}`}
@@ -639,6 +647,6 @@ export default function TrendsPage() {
           </div>
         </>
       )}
-    </div>
+    </PageShell>
   );
 }

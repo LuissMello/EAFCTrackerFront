@@ -50,22 +50,22 @@ export function PlayerSingleStatsTable({
 
     return (
         <div className="scroll-touch-x overflow-x-auto rounded-lg border bg-surface">
-            <table className="table-auto w-full text-sm">
+            <table className="table-auto w-full text-xs xl:text-sm">
                 <thead className="bg-surface-raised">
                     <tr>
-                        <th scope="col" className="px-3 py-2 text-left">Horário</th>
-                        <th scope="col" className="px-3 py-2 text-right">Partic.</th>
-                        <th scope="col" className="px-3 py-2 text-right">Gols</th>
-                        <th scope="col" className="px-3 py-2 text-right">Assist.</th>
-                        <th scope="col" className="px-3 py-2 text-right">Pré-Assist.</th>
-                        <th scope="col" className="px-3 py-2 text-right">Chutes</th>
-                        <th scope="col" className="px-3 py-2 text-right">Passes (C/T)</th>
-                        <th scope="col" className="px-3 py-2 text-right">% Passes</th>
-                        <th scope="col" className="px-3 py-2 text-right">Desarmes (C/T)</th>
-                        <th scope="col" className="px-3 py-2 text-right">% Desarmes</th>
-                        <th scope="col" className="px-3 py-2 text-right">Defesas</th>
-                        <th scope="col" className="px-3 py-2 text-right">Nota</th>
-                        <th scope="col" className="px-3 py-2 text-right">Min.</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-left">Horário</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">Partic.</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">Gols</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">Assist.</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">Pré-Assist.</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">Chutes</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">Passes (C/T)</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">% Passes</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">Desarmes (C/T)</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">% Desarmes</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">Defesas</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">Nota</th>
+                        <th scope="col" className="px-1.5 py-1.5 xl:px-2 text-right">Min.</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -102,7 +102,7 @@ export function PlayerSingleStatsTable({
 
                         return (
                             <tr key={String(rowKey)} className="hover:bg-surface-raised">
-                                <td className="px-3 py-2 text-left">
+                                <td className="px-1.5 py-1.5 xl:px-2 text-left">
                                     {d ? (
                                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium tabular-nums bg-surface-sunken text-fg-secondary border border-border">
                                             {timeLabel}
@@ -111,34 +111,34 @@ export function PlayerSingleStatsTable({
                                         "—"
                                     )}
                                 </td>
-                                <td className="px-3 py-2 text-right font-medium tabular-nums">{int.format(participations)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums">{int.format(goals)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums">{int.format(assists)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums">{int.format(preAssists)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums">{int.format(shots)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums">
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right font-medium tabular-nums">{int.format(participations)}</td>
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right tabular-nums">{int.format(goals)}</td>
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right tabular-nums">{int.format(assists)}</td>
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right tabular-nums">{int.format(preAssists)}</td>
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right tabular-nums">{int.format(shots)}</td>
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right tabular-nums">
                                     {int.format(passesMade)} / {int.format(passesAttempted)}
                                 </td>
-                                <td className="px-3 py-2 text-right tabular-nums">
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right tabular-nums">
                                     {p1.format(passPct)}%
                                 </td>
-                                <td className="px-3 py-2 text-right tabular-nums">
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right tabular-nums">
                                     {int.format(tacklesMade)} / {int.format(tacklesAttempted)}
                                 </td>
-                                <td className="px-3 py-2 text-right tabular-nums">
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right tabular-nums">
                                     {p1.format(tacklePct)}%
                                 </td>
-                                <td className="px-3 py-2 text-right tabular-nums">
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right tabular-nums">
                                     {int.format(saves)}
                                 </td>
-                                <td className="px-3 py-2 text-right">
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right">
                                     {rating > 0 ? (
                                         <RatingPill value={rating} size="sm" />
                                     ) : (
                                         <span className="text-fg-subtle">{p2.format(rating)}</span>
                                     )}
                                 </td>
-                                <td className="px-3 py-2 text-right tabular-nums">
+                                <td className="px-1.5 py-1.5 xl:px-2 text-right tabular-nums">
                                     {(() => {
                                         const secondsPlayed = Number(p.totalSecondsPlayed ?? 0);
                                         return `${Math.floor(secondsPlayed / 60)}:${String(secondsPlayed % 60).padStart(2, "0")}`;

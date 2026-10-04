@@ -6,6 +6,7 @@ import { compactWhen, perspectiveForSelected } from "../../utils/matchResults.ts
 import { Crest, ResultPill } from "../ui.tsx";
 import type { Outcome } from "../ui.tsx";
 import { GameVersionBadge } from "../GameVersionBadge.tsx";
+import { rememberMatch } from "../../utils/matchHandoff.ts";
 
 /** Linha densa de partida ("Broadcast"): data, confronto lado a lado, placar e resultado na perspectiva do clube. */
 export const MatchCard = React.memo(function MatchCard({
@@ -37,12 +38,44 @@ export const MatchCard = React.memo(function MatchCard({
   const stadiumName = m.clubADetails?.stadName ?? m.clubADetails?.StadName ?? null;
   const players = `${m.clubAPlayerCount ?? "-"}v${m.clubBPlayerCount ?? "-"}`;
 
+  // Mobile: meu clube na primeira linha
+  const rowA = { key: "a", name: m.clubAName, goals: m.clubAGoals, crest: crestA, div: divA, won: aWin };
+  const rowB = { key: "b", name: m.clubBName, goals: m.clubBGoals, crest: crestB, div: divB, won: bWin };
+  const rows = p.isMineA ? [rowA, rowB] : [rowB, rowA];
+
   return (
     <Link
       to={`/match/${m.matchId}?matchType=${matchType}`}
+      onClick={() => rememberMatch(m)}
       className={`block border-l-4 ${leftBorder} transition hover:bg-surface-raised`}
       title="Ver detalhes da partida"
     >
+      {/* Mobile (< sm): duas linhas empilhadas, meu clube primeiro — nomes nunca são cortados */}
+      <div className="sm:hidden px-3 py-2.5">
+        <div className="mb-1.5 flex items-center gap-2 text-[11px] tabular-nums text-fg-muted">
+          <span className="font-medium text-fg-secondary">{when.date}</span>
+          <span>{when.time}</span>
+          <GameVersionBadge version={m.gameVersion} />
+          <span className="font-semibold text-fg-secondary">{players}</span>
+          {stadiumName && <span className="min-w-0 flex-1 truncate">· {stadiumName}</span>}
+          <ResultPill outcome={pillOutcome} variant="soft" className="ml-auto shrink-0" />
+        </div>
+        {rows.map((r) => (
+          <div key={r.key} className="flex items-center gap-2 py-0.5">
+            <Crest src={crestUrl(r.crest)} size={24} rounded="rounded-md" />
+            <span className={`min-w-0 flex-1 text-sm leading-tight [overflow-wrap:anywhere] ${r.won ? "font-bold text-fg" : "text-fg-secondary"}`}>
+              {r.name}
+              {r.div != null && <span className="ml-1.5 whitespace-nowrap text-[11px] font-normal text-fg-subtle">Div. {r.div}</span>}
+            </span>
+            <span className={`w-7 shrink-0 text-right font-display text-xl font-bold leading-none tabular-nums ${r.won ? "text-fg" : "text-fg-muted"}`}>
+              {r.goals}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop (>= sm): confronto lado a lado */}
+      <div className="hidden sm:block">
       <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 pt-2.5 pb-1.5">
         {/* Data */}
         <div className="w-11 sm:w-12 shrink-0 leading-tight text-[11px] tabular-nums">
@@ -60,7 +93,7 @@ export const MatchCard = React.memo(function MatchCard({
               >
                 {m.clubAName}
               </span>
-              {divA != null && <span className="text-[10px] text-fg-subtle">Divisão {divA}</span>}
+              {divA != null && <span className="text-[11px] text-fg-subtle">Divisão {divA}</span>}
             </div>
             <Crest src={crestUrl(crestA)} size={24} rounded="rounded-md" />
           </div>
@@ -80,7 +113,7 @@ export const MatchCard = React.memo(function MatchCard({
               >
                 {m.clubBName}
               </span>
-              {divB != null && <span className="text-[10px] text-fg-subtle">Divisão {divB}</span>}
+              {divB != null && <span className="text-[11px] text-fg-subtle">Divisão {divB}</span>}
             </div>
           </div>
         </div>
@@ -106,6 +139,7 @@ export const MatchCard = React.memo(function MatchCard({
           </span>
         </div>
         <div className="w-6 shrink-0" aria-hidden />
+      </div>
       </div>
     </Link>
   );

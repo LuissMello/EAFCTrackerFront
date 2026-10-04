@@ -8,7 +8,7 @@ import { mapAttr, pick } from "../utils/playerAttributes.ts";
 import type { PlayerMatchStats } from "../types/playerAttributes.ts";
 import { ATTR_LABELS } from "../utils/playerAttributes.ts";
 import { Card, ProgressBar, ErrorState } from "../components/AttributeUi.tsx";
-import { Skeleton } from "../components/ui.tsx";
+import { EmptyState, PageHeader, PageShell, Skeleton } from "../components/ui.tsx";
 
 /******** Helpers ********/
 function isAbort(err: any) {
@@ -28,6 +28,11 @@ type PlayerAttrRow = {
     pos?: string | null;
     statistics: PlayerMatchStats | null;
 };
+
+/** O jogador tem algum atributo coletado (valores todos zerados/ausentes = sem dados). */
+function hasAttrData(r: PlayerAttrRow): boolean {
+    return !!r.statistics && Object.values(r.statistics).some((v) => !!v && v !== 0);
+}
 
 function isGk(pos?: string | null) {
     if (!pos) return false;
@@ -78,10 +83,9 @@ export default function PlayerAttributesPage() {
                 }));
 
                 setRows(mapped);
-                // default: primeiro jogador da lista como base
-                if (mapped.length > 0) {
-                    setBasePlayerId(mapped[0].playerId);
-                }
+                // default: primeiro jogador COM dados de atributos (não um que apareça vazio)
+                const firstWithData = mapped.find(hasAttrData);
+                setBasePlayerId(firstWithData ? firstWithData.playerId : "");
             } catch (e: any) {
                 if (controller.signal.aborted || isAbort(e)) return;
                 setError(e?.message ?? "Erro ao buscar atributos do clube");
@@ -128,28 +132,57 @@ export default function PlayerAttributesPage() {
     /******** Render ********/
     if (loading) {
         return (
-            <div className="p-4 max-w-6xl mx-auto">
-                <div className="flex items-center justify-between mb-4">
-                    <Skeleton className="h-8 w-64" />
-                    <Skeleton className="h-6 w-40" />
-                </div>
+            <PageShell aria-busy>
+                <PageHeader eyebrow="Clube" title="Atributos" subtitle="Carregando…" />
                 <Skeleton className="h-24 w-full mb-6" />
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                     {Array.from({ length: 12 }).map((_, i) => (
                         <Skeleton key={i} className="h-14" />
                     ))}
                 </div>
-            </div>
+            </PageShell>
+        );
+    }
+    if (!clubId) {
+        return (
+            <PageShell>
+                <PageHeader eyebrow="Clube" title="Atributos" />
+                <EmptyState icon="📊" title="Nenhum clube selecionado">
+                    Selecione um clube no menu superior para ver os atributos.
+                </EmptyState>
+            </PageShell>
         );
     }
     if (error) {
-        return <ErrorState message={error} onRetry={() => window.location.reload()} />;
-    }
-    if (!clubId) {
-        return <div className="p-4">Nenhum clube selecionado.</div>;
+        return (
+            <PageShell>
+                <PageHeader eyebrow="Clube" title="Atributos" subtitle={clubName ?? undefined} />
+                <ErrorState message={error} onRetry={() => window.location.reload()} />
+            </PageShell>
+        );
     }
     if (rows.length === 0) {
-        return <div className="p-4">Nenhum atributo encontrado para o clube {clubName ?? clubId}.</div>;
+        return (
+            <PageShell>
+                <PageHeader eyebrow="Clube" title="Atributos" subtitle={clubName ?? undefined} />
+                <EmptyState icon="📊" title="Nenhum atributo encontrado">
+                    Ainda não há dados de atributos para o clube {clubName ?? clubId}.
+                </EmptyState>
+            </PageShell>
+        );
+    }
+
+    if (!rows.some(hasAttrData)) {
+        return (
+            <PageShell>
+                <PageHeader eyebrow="Clube" title="Atributos" subtitle={clubName ?? undefined} />
+                <EmptyState icon="📊" title="Ainda não há atributos coletados">
+                    Os atributos dos jogadores (ritmo, finalização, passe, etc.) vêm da última partida em que cada um jogou.
+                    Nenhum jogador de {clubName ?? `clube ${clubId}`} tem esses dados no momento — eles aparecem aqui
+                    automaticamente depois da próxima busca de partidas.
+                </EmptyState>
+            </PageShell>
+        );
     }
 
     const allPlayersForSelect = rows
@@ -157,13 +190,8 @@ export default function PlayerAttributesPage() {
         .sort((a, b) => a.name.localeCompare(b.name));
 
     return (
-        <div className="p-4 max-w-6xl mx-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-                <h1 className="text-2xl sm:text-3xl font-display font-bold uppercase tracking-wide text-fg">
-                    Atributos do Clube {clubName ? `— ${clubName}` : `#${clubId}`}
-                </h1>
-            </div>
+        <PageShell>
+            <PageHeader eyebrow="Clube" title="Atributos" subtitle={clubName ?? `Clube ${clubId}`} />
 
             <Card>
                 {/* Seleções */}
@@ -321,6 +349,6 @@ export default function PlayerAttributesPage() {
                     </Card>
                 </div>
             </Card>
-        </div>
+        </PageShell>
     );
 }

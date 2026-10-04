@@ -6,7 +6,7 @@ import { crestUrl, onImgError } from "../config/urls.ts";
 import { gameVersionLabel } from "../hooks/useGameVersions.tsx";
 import { GameVersionBadge } from "./GameVersionBadge.tsx";
 
-export default function MultiClubPicker() {
+export default function MultiClubPicker({ compact = false, dense = false }: { compact?: boolean; dense?: boolean }) {
     const { selectedClubs, setSelectedClubs, allClubs, clubsLoading, clubsError, reloadClubs } = useClub();
     const clubs = allClubs;
 
@@ -28,12 +28,12 @@ export default function MultiClubPicker() {
     // fecha ao clicar fora (só enquanto aberto)
     useEffect(() => {
         if (!open) return;
-        function onDocClick(e: MouseEvent) {
+        function onDocClick(e: PointerEvent) {
             if (!containerRef.current) return;
             if (!containerRef.current.contains(e.target as Node)) setOpen(false);
         }
-        document.addEventListener("mousedown", onDocClick);
-        return () => document.removeEventListener("mousedown", onDocClick);
+        document.addEventListener("pointerdown", onDocClick);
+        return () => document.removeEventListener("pointerdown", onDocClick);
     }, [open]);
 
     // fecha com Escape (só enquanto aberto)
@@ -147,7 +147,9 @@ export default function MultiClubPicker() {
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 aria-controls={panelId}
-                className="flex items-center gap-2 bg-white/10 hover:bg-white/15 text-slate-200 px-2 py-1 rounded border border-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                className={`flex items-center gap-2 bg-white/10 hover:bg-white/15 text-slate-200 px-2 rounded border border-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+                    compact ? "w-full min-w-0 h-11 text-sm" : dense ? "h-7 py-0 text-[13px]" : "py-1"
+                }`}
                 title={
                     selectedClubs.length > 0
                         ? selectedClubs.map((c) => c.clubName ?? c.clubId).join(", ")
@@ -163,18 +165,18 @@ export default function MultiClubPicker() {
                                     src={crestUrl(c.crestAssetId)}
                                     onError={onImgError}
                                     alt=""
-                                    className="w-6 h-6 rounded-full border bg-surface"
+                                    className={`${dense ? "w-5 h-5" : "w-6 h-6"} rounded-full border bg-surface`}
                                 />
                             ))}
                         </div>
-                        <span className="font-semibold truncate max-w-[180px]">
+                        <span className={`font-semibold truncate ${compact ? "min-w-0 flex-1 text-left" : "max-w-[180px]"}`}>
                             {selectedClubs.length === 1
                                 ? selectedClubs[0].clubName ?? selectedClubs[0].clubId
                                 : `${selectedClubs.length} clubes`}
                         </span>
                     </>
                 ) : (
-                    <span className="font-semibold">Selecionar clubes</span>
+                    <span className={`font-semibold ${compact ? "min-w-0 flex-1 truncate text-left" : ""}`}>Selecionar clubes</span>
                 )}
                 <svg
                     width="16" height="16" viewBox="0 0 20 20" fill="none"
@@ -190,7 +192,11 @@ export default function MultiClubPicker() {
             <div
                 id={panelId}
                 aria-hidden={!open}
-                className={`absolute left-0 mt-2 w-full sm:w-96 max-w-[24rem] bg-surface text-fg rounded-xl shadow-raised border z-50 origin-top transition-all duration-150 ${
+                className={`${
+                    compact
+                        ? "fixed inset-x-2 top-[calc(var(--nav-h,56px)+4px)] w-auto max-w-none sm:left-auto sm:right-2 sm:w-96"
+                        : "absolute left-0 mt-2 w-full sm:w-96 max-w-[24rem]"
+                } bg-surface text-fg rounded-xl shadow-raised border z-50 origin-top transition-all duration-150 ${
                     open ? "opacity-100 scale-100 pointer-events-auto visible" : "opacity-0 scale-95 pointer-events-none invisible"
                 }`}
             >
@@ -258,7 +264,7 @@ export default function MultiClubPicker() {
                             role="listbox"
                             aria-multiselectable="true"
                             aria-label="Clubes"
-                            className="max-h-80 overflow-auto"
+                            className={compact ? "max-h-[min(20rem,calc(100dvh-14rem))] overflow-auto" : "max-h-80 overflow-auto"}
                         >
                             {filtered.length === 0 && (
                                 <li role="presentation" className="p-3 text-sm text-fg-muted">Nenhum clube encontrado.</li>

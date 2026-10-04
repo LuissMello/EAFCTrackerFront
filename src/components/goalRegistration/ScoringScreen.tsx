@@ -243,12 +243,12 @@ export function ScoringScreen({ initial, clubId, opponentCrestAssetId, opponentC
             />
           ) : null}
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-semibold uppercase leading-none tracking-widest text-fg-subtle">Contra</div>
+            <div className="text-[11px] font-semibold uppercase leading-none tracking-widest text-fg-subtle">Contra</div>
             <h2 className="truncate font-display text-lg font-bold uppercase leading-tight tracking-wide text-fg">{reg.opponentName}</h2>
           </div>
           <div className="flex flex-shrink-0 items-baseline gap-1" aria-label={goalsLabel(goals.length)}>
             <span className="font-display text-2xl font-black leading-none tabular-nums text-fg">{goals.length}</span>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">{goals.length === 1 ? "gol" : "gols"}</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{goals.length === 1 ? "gol" : "gols"}</span>
           </div>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">

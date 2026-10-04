@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../services/api.ts";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { useClub } from "../hooks/useClub.tsx";
-import { Card, SectionHeader } from "../components/ui.tsx";
+import { Card, EmptyState, PageHeader, PageShell } from "../components/ui.tsx";
 import { fmtDateBR } from "../utils/date.ts";
 import { useClubIds } from "../hooks/useClubIds.ts";
 import { useAbortableFetch } from "../hooks/useAbortableFetch.ts";
@@ -45,6 +45,9 @@ const KpiCard: React.FC<{ label: string; value: number | string; sub?: string }>
     </Card>
 );
 
+/** "Nunca perdeu/venceu" só faz sentido com amostra mínima contra o adversário */
+const MIN_MATCHES_FOR_STREAK_CHIP = 3;
+
 const SkeletonBlock: React.FC<{ h?: string }> = ({ h = "h-20" }) => (
     <div className={`rounded-xl border bg-surface-sunken animate-pulse ${h}`} />
 );
@@ -61,7 +64,7 @@ function SortTh({
     const active = col === sortKey;
     return (
         <th scope="col"
-            className="text-center px-3 py-2.5 font-medium cursor-pointer select-none hover:bg-surface-sunken transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+            className="text-center px-3 py-3 min-h-[44px] font-medium cursor-pointer select-none hover:bg-surface-sunken transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
             aria-sort={active ? (dir === "desc" ? "descending" : "ascending") : "none"}
             tabIndex={0}
             onClick={() => onChange(col)}
@@ -128,8 +131,8 @@ export default function Opponents() {
         return [...data.opponents].filter(o => o.matches >= 2).sort((a, b) => a.winRate - b.winRate)[0] ?? null;
     }, [data]);
 
-    const neverWon = useMemo(() => data?.opponents.filter(o => o.wins === 0 && o.matches > 0) ?? [], [data]);
-    const neverLost = useMemo(() => data?.opponents.filter(o => o.losses === 0 && o.matches > 0) ?? [], [data]);
+    const neverWon = useMemo(() => data?.opponents.filter(o => o.wins === 0 && o.matches >= MIN_MATCHES_FOR_STREAK_CHIP) ?? [], [data]);
+    const neverLost = useMemo(() => data?.opponents.filter(o => o.losses === 0 && o.matches >= MIN_MATCHES_FOR_STREAK_CHIP) ?? [], [data]);
     const rival = useMemo(() => sorted[0] ?? null, [sorted]);
     const favVictim = useMemo(() => {
         if (!data) return null;
@@ -158,19 +161,18 @@ export default function Opponents() {
 
     if (activeClubIds.length === 0) {
         return (
-            <div className="p-6 max-w-5xl mx-auto">
-                <Card className="p-10 text-center text-fg-muted">
-                    <div className="text-4xl mb-3">🎯</div>
-                    <div className="font-semibold">Nenhum clube selecionado</div>
-                    <div className="text-sm mt-1">Selecione um clube no menu superior para ver a análise de adversários.</div>
-                </Card>
-            </div>
+            <PageShell>
+                <PageHeader eyebrow="Clube" title="Adversários" subtitle="Retrospecto contra cada adversário enfrentado" />
+                <EmptyState icon="🎯" title="Nenhum clube selecionado">
+                    Selecione um clube no menu superior para ver a análise de adversários.
+                </EmptyState>
+            </PageShell>
         );
     }
 
     return (
-        <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
-            <SectionHeader eyebrow="Clube" title="Análise de Adversários" />
+        <PageShell className="space-y-6">
+            <PageHeader eyebrow="Clube" title="Adversários" subtitle="Retrospecto contra cada adversário enfrentado" className="mb-0" />
 
             {error && (
                 <div className="bg-negative-soft border border-negative/30 rounded-xl p-4 text-sm text-negative-fg">{error}</div>
@@ -247,10 +249,10 @@ export default function Opponents() {
                             <span className="text-xs bg-surface-sunken text-fg-muted px-2 py-0.5 rounded-full">{data.opponents.length}</span>
                         </div>
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                            <table className="w-full min-w-[640px] text-sm">
                                 <thead>
                                     <tr className="border-b bg-surface-raised/50 text-fg-muted text-xs uppercase tracking-wide">
-                                        <th scope="col" className="text-left px-4 py-2.5 font-medium">Adversário</th>
+                                        <th scope="col" className="sticky left-0 z-10 bg-surface-raised text-left px-4 py-3 font-medium border-r border-border">Adversário</th>
                                         <SortTh col="matches" label="Partidas" sortKey={sortKey} dir={sortDir} onChange={handleSort} />
                                         <SortTh col="wins" label="V" sortKey={sortKey} dir={sortDir} onChange={handleSort} />
                                         <SortTh col="draws" label="E" sortKey={sortKey} dir={sortDir} onChange={handleSort} />
@@ -265,7 +267,7 @@ export default function Opponents() {
                                 <tbody>
                                     {sorted.map((opp) => (
                                         <tr key={opp.clubId} className="border-b last:border-0 hover:bg-surface-raised transition-colors">
-                                            <td className="px-4 py-3 font-medium text-fg">{opp.name}</td>
+                                            <td className="sticky left-0 z-10 bg-surface px-4 py-3 font-medium text-fg border-r border-border max-w-[10rem] sm:max-w-none [overflow-wrap:anywhere]">{opp.name}</td>
                                             <td className="px-3 py-3 text-center text-fg-secondary">{opp.matches}</td>
                                             <td className="px-3 py-3 text-center font-semibold text-positive">{opp.wins}</td>
                                             <td className="px-3 py-3 text-center text-fg-muted">{opp.draws}</td>
@@ -357,6 +359,6 @@ export default function Opponents() {
                     <div className="font-semibold">Sem dados para exibir</div>
                 </Card>
             )}
-        </div>
+        </PageShell>
     );
 }

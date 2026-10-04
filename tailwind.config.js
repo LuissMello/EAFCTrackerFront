@@ -30,6 +30,7 @@ module.exports = {
         accent: {
           DEFAULT: withAlpha("--color-accent"),
           fg: withAlpha("--color-accent-fg"),
+          bright: withAlpha("--color-accent-bright"),
         },
         positive: {
           DEFAULT: withAlpha("--color-positive"),

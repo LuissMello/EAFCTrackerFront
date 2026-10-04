@@ -13,7 +13,7 @@ export const GameVersionBadge = React.memo(function GameVersionBadge({
   return (
     <span
       title={`Versão do jogo: ${gameVersionLabel(version)}`}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded border border-accent/30 bg-accent/10 text-accent text-[10px] font-semibold leading-none tabular-nums ${className}`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded border border-accent/30 bg-accent/10 text-accent text-[11px] font-semibold leading-none tabular-nums ${className}`}
     >
       {gameVersionLabel(version)}
     </span>
