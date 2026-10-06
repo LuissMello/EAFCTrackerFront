@@ -3,9 +3,12 @@ import { Star } from "lucide-react";
 import { Crest } from "../ui.tsx";
 import { crestUrl } from "../../config/urls.ts";
 import type { PlayerCard as PlayerCardData } from "../../types/playerCards";
-import { cardAriaLabel, cardAxes, fmtScore, initialsOf, positionChipText, tierStyle } from "../../utils/playerCards.ts";
+import { cardAriaLabel, cardAxes, cardKey, fmtScore, initialsOf, overallByPositionDiff, overallTitle, positionChipText, tierStyle } from "../../utils/playerCards.ts";
 import { plural } from "../../utils/analyticsFormat.ts";
 import { FormDots } from "./FormDots.tsx";
+import { archetypeShortLabel, archetypeGroupLabel } from "../archetypes/ArchetypeBadge.tsx";
+import { ArchetypeIcon } from "../archetypes/ArchetypeIcon.tsx";
+import { usagesTitle } from "../../utils/archetypeFilters.ts";
 
 export type CardSlot = "A" | "B" | null;
 
@@ -20,6 +23,7 @@ const SIZES = {
     value: "text-[1.1rem]",
     label: "text-[10px]",
     foot: "text-[11px]",
+    arch: "text-[10px] px-1.5 py-[3px]",
     gap: "gap-1.5",
   },
   lg: {
@@ -32,9 +36,55 @@ const SIZES = {
     value: "text-2xl",
     label: "text-xs",
     foot: "text-sm",
+    arch: "text-xs px-2 py-[3px]",
     gap: "gap-2.5",
   },
 } as const;
+
+/**
+ * Selo do arquétipo principal na carta. Usa as cores do tier (tinta + borda), não cores de resultado.
+ * Sem arquétipo (id 0) mostra "—" para a altura das cartas ficar uniforme na grade.
+ */
+function CardArchetype({ card, size }: { card: PlayerCardData; size: keyof typeof SIZES }) {
+  const t = tierStyle(card.tier);
+  const s = SIZES[size];
+  const a = card.archetype ?? null;
+  // na visão por arquétipo a carta é de UM arquétipo: sem "+N" nem lista de outros
+  // (o comparador devolve cartas de um arquétipo sem segmentKey: scoring "archetype" também indica isso)
+  const many = !card.segmentKey && card.scoring !== "archetype" && card.archetypes && card.archetypes.length > 1 ? card.archetypes : null;
+  if (!a) {
+    return (
+      <span
+        className={`inline-flex items-center rounded-full border border-dashed font-semibold leading-none ${s.arch}`}
+        style={{ borderColor: t.line, color: t.inkMuted }}
+        title="Sem arquétipo registrado nas partidas deste recorte"
+        aria-label="Sem arquétipo registrado"
+      >
+        —
+      </span>
+    );
+  }
+  const group = archetypeGroupLabel(a.positionGroup);
+  const lines = [`${a.label}${group ? ` · ${group}` : ""}`];
+  if (many) lines.push(`Usou ${many.length} arquétipos:`, usagesTitle(many));
+  const full = lines.join("\n");
+  return (
+    <span
+      className={`inline-flex max-w-full flex-col items-center gap-0.5 rounded-xl border font-semibold leading-none sm:flex-row sm:gap-1 sm:rounded-full ${s.arch}`}
+      style={{ borderColor: t.line, color: t.ink, background: "rgba(255,255,255,0.14)" }}
+      title={full}
+      aria-label={`Arquétipo: ${lines.join(". ")}`}
+    >
+      <ArchetypeIcon archetype={a} size={size === "lg" ? 16 : 13} />
+      <span className="max-w-full truncate">{archetypeShortLabel(a)}</span>
+      {many && (
+        <span aria-hidden="true" className="flex-shrink-0 rounded-full px-1 font-bold" style={{ background: t.chipBg, color: t.chipFg }}>
+          +{many.length - 1}
+        </span>
+      )}
+    </span>
+  );
+}
 
 /**
  * Face da carta (apenas visual). Não imita nenhuma arte licenciada: gradiente do tier, feixes de luz,
@@ -94,7 +144,14 @@ export const CardFace = React.memo(function CardFace({
 
       <div className="relative grid grid-cols-[auto_1fr] items-start gap-1">
         <div className="flex flex-col items-start gap-1.5">
-          <div className={`font-display font-black leading-[0.85] tabular-nums ${s.overall}`}>{card.overall}</div>
+          <div className={`font-display font-black leading-[0.85] tabular-nums ${s.overall}`} title={overallTitle(card)}>
+            {card.overall}
+            {overallByPositionDiff(card) !== null && (
+              <span aria-hidden="true" className="ml-0.5 align-top text-[0.28em] font-bold" style={{ color: t.inkMuted }}>
+                ◆
+              </span>
+            )}
+          </div>
           <span
             className={`rounded font-display font-bold uppercase tracking-wider leading-none ${s.chip}`}
             style={{ background: t.chipBg, color: t.chipFg }}
@@ -136,6 +193,11 @@ export const CardFace = React.memo(function CardFace({
       >
         {card.name}
       </div>
+      {card.archetype !== undefined && (
+        <div className="relative flex min-w-0 justify-center">
+          <CardArchetype card={card} size={size} />
+        </div>
+      )}
       <div aria-hidden="true" className="h-px" style={{ background: t.line }} />
 
       <div className="grid grid-cols-3 gap-y-1">
@@ -193,7 +255,7 @@ export const PlayerCardButton = React.memo(function PlayerCardButton({
       ? `${base}. Ativar para escolher na comparação`
       : `${base}. Ativar para ver o detalhe`;
   return (
-    <div className="relative">
+    <div className="relative" data-card-key={cardKey(card)}>
       <button
         type="button"
         aria-label={label}

@@ -7,14 +7,17 @@ import LabFiltersBar, { type LabPreset } from "../components/lab/LabFiltersBar.t
 import PlayersTab from "../components/lab/PlayersTab.tsx";
 import { FormationTab, OpponentTab, WhenTab } from "../components/lab/ContextTabs.tsx";
 import DuosTab from "../components/lab/DuosTab.tsx";
+import ArchetypesTab from "../components/lab/ArchetypesTab.tsx";
 import { METRIC_OPTIONS, type LabMetric } from "../components/lab/labShared.tsx";
 import { useAnalyticsClub } from "../hooks/useAnalyticsClub.ts";
+import { useArchetypeSummary } from "../hooks/useArchetypeSummary.ts";
+import { useArchetypeFilter } from "../hooks/useArchetypeFilter.ts";
 import { useGameVersions } from "../hooks/useGameVersions.tsx";
 import { useLabContext, useLabDuos, useLabPlayerImpact } from "../hooks/useLab.ts";
 import type { LabFilters } from "../types/lab";
 import { daysAgoYmd } from "../utils/date.ts";
 
-type TabId = "players" | "when" | "formation" | "opponent" | "duos";
+type TabId = "players" | "when" | "formation" | "opponent" | "duos" | "archetypes";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "players", label: "Jogadores" },
@@ -22,6 +25,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "formation", label: "Formação" },
   { id: "opponent", label: "Adversário" },
   { id: "duos", label: "Duplas" },
+  { id: "archetypes", label: "Por arquétipo" },
 ];
 
 const DEFAULT_FILTERS: LabFilters = { from: "", to: "", gameVersion: null, minMatches: 3 };
@@ -43,6 +47,8 @@ export default function Laboratorio() {
   const ctxEnabled = tab === "when" || tab === "formation" || tab === "opponent";
   const context = useLabContext(fetchClubId, filters, ctxEnabled);
   const duos = useLabDuos(fetchClubId, filters, tab === "duos");
+  const [archFilter, setArchFilter] = useArchetypeFilter();
+  const archetypes = useArchetypeSummary(fetchClubId, filters, tab === "archetypes", archFilter);
 
   // Rótulo do preset derivado dos filtros (sem estado duplicado)
   const preset = useMemo<LabPreset>(() => {
@@ -192,6 +198,16 @@ export default function Laboratorio() {
               <OpponentTab data={context.data} loading={context.loading} error={context.error} onRetry={context.reload} metric={ctxMetric} />
             )}
             {tab === "duos" && <DuosTab data={duos.data} loading={duos.loading} error={duos.error} onRetry={duos.reload} />}
+            {tab === "archetypes" && (
+              <ArchetypesTab
+                data={archetypes.data}
+                loading={archetypes.loading}
+                error={archetypes.error}
+                onRetry={archetypes.reload}
+                filter={archFilter}
+                onFilter={setArchFilter}
+              />
+            )}
           </>
         )}
       </div>

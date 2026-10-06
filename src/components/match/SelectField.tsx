@@ -20,7 +20,7 @@ export function SelectField({
   return (
     <label
       title={title}
-      className={`inline-flex items-center gap-1.5 h-9 pl-3 pr-2 rounded-lg border text-sm cursor-pointer transition ${
+      className={`inline-flex items-center gap-1.5 h-9 pl-3 pr-2 rounded-lg border text-sm cursor-pointer transition focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1 focus-within:ring-offset-bg ${
         active ? "border-accent/60 bg-accent/5" : "border-border bg-surface-sunken hover:border-border-strong"
       }`}
     >

@@ -7,17 +7,20 @@ import CardDetail from "../components/cards/CardDetail.tsx";
 import { CardsFiltersBar } from "../components/cards/CardsFiltersBar.tsx";
 import { CompareView, ComparePickers, type PlayerOption } from "../components/cards/CompareView.tsx";
 import type { CardsMode } from "../components/cards/ModeToggle.tsx";
+import type { CardsView } from "../components/cards/ViewToggle.tsx";
 import type { CardSlot } from "../components/cards/PlayerCard.tsx";
 import { useAnalyticsClub } from "../hooks/useAnalyticsClub.ts";
 import { useGameVersions } from "../hooks/useGameVersions.tsx";
 import { usePlayerCards } from "../hooks/usePlayerCards.ts";
-import { usePlayerCompare } from "../hooks/usePlayerCompare.ts";
+import { usePlayerCompare, type CompareSide } from "../hooks/usePlayerCompare.ts";
 import { useUrlDateRange } from "../hooks/useUrlDateRange.ts";
 import { useUrlEnum, useUrlParams, useUrlState } from "../hooks/useUrlState.ts";
-import type { CardFilters, PlayerCard } from "../types/playerCards";
+import type { AvailablePlayer, CardFilters, PlayerCard } from "../types/playerCards";
 import { plural } from "../utils/analyticsFormat.ts";
 import { rangeForPreset } from "../utils/dateRanges.ts";
-import { SORT_VALUES, sortCards } from "../utils/playerCards.ts";
+import { SORT_VALUES, cardKey, sortCards } from "../utils/playerCards.ts";
+import { fallbackArchetypeLabel, POSITION_FILTER_OPTIONS, type ArchetypeOption } from "../utils/archetypeFilters.ts";
+import { useArchetypeFilter, type ArchetypeFilterValue } from "../hooks/useArchetypeFilter.ts";
 
 /** Padrão: últimos 365 dias (uma temporada inteira costuma caber; o período aparece na URL). */
 const defaultCardsRange = () => rangeForPreset("365d");
@@ -29,6 +32,22 @@ function parseId(raw: string): number | null {
   return n > 0 && Number.isSafeInteger(n) ? n : null;
 }
 
+/** Arquetipo de um lado na URL (?aa= / ?ab=): inteiro >= 0 (0 = segmento sem arquetipo) ou null. */
+function parseArq(raw: string | null): number | null {
+  if (raw === null || !/^\d+$/.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/** Um lado da comparacao: jogador + (na visao por arquetipo) o arquetipo; arq null e 0 sao equivalentes. */
+interface Sel {
+  id: number;
+  arq: number | null;
+}
+const selKey = (s: Sel) => `${s.id}-${s.arq ?? 0}`;
+const sameSel = (x: Sel | null, y: Sel | null) => x !== null && y !== null && selKey(x) === selKey(y);
+const sideOf = (s: Sel | null): CompareSide | null => (s === null ? null : { id: s.id, arq: s.arq !== null && s.arq > 0 ? s.arq : null });
+
 export default function Cartas() {
   const { options, active, pick, clubsLoading } = useAnalyticsClub();
   const { versions, currentVersion, loading: versionsLoading } = useGameVersions();
@@ -39,11 +58,24 @@ export default function Cartas() {
   const [versionRaw, setVersionRaw] = useUrlState("versao", ""); // "" = versão atual, "todas", ou o número
   const [minMatches, setMinMatches] = useUrlState("min", 3, { validate: (n) => Number.isInteger(n) && n >= 1 && n <= 30 });
   const [sort, setSort] = useUrlEnum("ordem", "overall", SORT_VALUES);
+  // Posição + arquétipo (?pos=<grupo>&arq=<id>): o backend recalcula as cartas só com os jogos nessa posição/arquétipo
+  const [archFilter, setArchFilter] = useArchetypeFilter();
+  const { positionGroup, archetypeId } = archFilter;
+  // Jogador (?jog=<id>): so as cartas dele; no comparador (que tem o proprio A/B) o filtro nao vale
+  const [jogRaw, setJogRaw] = useUrlState("jog", "");
+  const jogId = parseId(jogRaw);
 
   // modo/a/b mudam juntos (ex.: "Comparar" + jogador A): uma única escrita na URL evita que uma atualização apague a outra
   const [params, patchUrl] = useUrlParams();
+  // Padrão: uma carta por jogador+arquétipo. ?ver=jog agrupa todos os jogos numa carta por jogador (?ver=arq antigo = padrão)
+  const view: CardsView = params.get("ver") === "jog" ? "player" : "archetype";
+  const segView = view === "archetype";
   const aId = parseId(params.get("a") ?? "");
   const bId = parseId(params.get("b") ?? "");
+  const aArqRaw = params.get("aa");
+  const bArqRaw = params.get("ab");
+  const aSel = useMemo<Sel | null>(() => (aId === null ? null : { id: aId, arq: segView ? parseArq(aArqRaw) : null }), [aId, segView, aArqRaw]);
+  const bSel = useMemo<Sel | null>(() => (bId === null ? null : { id: bId, arq: segView ? parseArq(bArqRaw) : null }), [bId, segView, bArqRaw]);
   const comparing = params.get("modo") === "comparar" || aId !== null || bId !== null;
   const mode: CardsMode = comparing ? "comparar" : "cartas";
 
@@ -58,71 +90,144 @@ export default function Cartas() {
     [setVersionRaw, currentVersion]
   );
 
+  const playerEntityId = comparing ? null : jogId;
   const filters = useMemo<CardFilters>(
-    () => ({ from: range.from, to: range.to, gameVersion, minMatches }),
-    [range.from, range.to, gameVersion, minMatches]
+    () => ({ from: range.from, to: range.to, gameVersion, minMatches, archetypeId, positionGroup, view, playerEntityId }),
+    [range.from, range.to, gameVersion, minMatches, archetypeId, positionGroup, view, playerEntityId]
   );
 
   const cardsRes = usePlayerCards(clubId, filters, !versionsLoading);
-  const compareRes = usePlayerCompare(clubId, aId, bId, filters, !versionsLoading);
+  const compareA = useMemo(() => sideOf(aSel), [aSel]);
+  const compareB = useMemo(() => sideOf(bSel), [bSel]);
+  const compareRes = usePlayerCompare(clubId, compareA, compareB, filters, !versionsLoading);
 
   const data = cardsRes.data;
+
+  // Opções do filtro: `availableArchetypes` vem SEM o filtro aplicado; guardamos a última lista para o select
+  // não piscar/sumir enquanto uma nova resposta carrega (ex.: ao escolher um arquétipo).
+  const [lastAvailable, setLastAvailable] = useState<ArchetypeOption[]>([]);
+  useEffect(() => {
+    if (!data || !data.availableArchetypes) return;
+    setLastAvailable(
+      data.availableArchetypes
+        .filter((x) => x.archetype && x.archetype.id > 0)
+        .map((x) => ({ id: x.archetype.id, label: x.archetype.label, count: x.players }))
+        .sort((x, y) => x.label.localeCompare(y.label, "pt-BR", { numeric: true }))
+    );
+  }, [data]);
+
+  // Jogadores e posicoes do filtro: guardamos a ultima lista para os selects nao piscarem enquanto uma nova resposta carrega
+  const [lastPlayers, setLastPlayers] = useState<AvailablePlayer[]>([]);
+  const [lastPositions, setLastPositions] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    if (data.availablePlayers) setLastPlayers([...data.availablePlayers].sort((x, y) => x.name.localeCompare(y.name, "pt-BR")));
+    if (data.availablePositionGroups) setLastPositions(data.availablePositionGroups.map((g) => g.positionGroup));
+  }, [data]);
+
+  // Combinacao impossivel (ex.: trocou de jogador e a posicao/arquetipo escolhidos nao existem para ele): limpa so o que sobrou.
+  // So vale quando a resposta e do jogador escolhido (eco `playerEntityId`), para nao limpar com dados do jogador anterior.
+  useEffect(() => {
+    if (playerEntityId === null || !data || data.playerEntityId !== playerEntityId) return;
+    const posOk = positionGroup === null || !data.availablePositionGroups || data.availablePositionGroups.some((g) => g.positionGroup === positionGroup);
+    const arqOk =
+      archetypeId === null || !data.availableArchetypes || data.availableArchetypes.some((a) => a.archetype.id === archetypeId);
+    if (posOk && arqOk) return;
+    setArchFilter({ positionGroup: posOk ? positionGroup : null, archetypeId: posOk && arqOk ? archetypeId : null });
+  }, [data, playerEntityId, positionGroup, archetypeId, setArchFilter]);
+
+  const onPlayer = useCallback((id: number | null) => setJogRaw(id === null ? "" : String(id)), [setJogRaw]);
+  const onClearFilters = useCallback(() => {
+    setJogRaw("");
+    setArchFilter({ positionGroup: null, archetypeId: null });
+  }, [setJogRaw, setArchFilter]);
+  const playerName = jogId === null ? null : lastPlayers.find((p) => p.playerEntityId === jogId)?.name ?? `Jogador #${jogId}`;
+  const positionLabel = positionGroup === null ? null : POSITION_FILTER_OPTIONS.find((o) => o.value === positionGroup)?.label ?? positionGroup;
+  const archetypeName = archetypeId === null ? null : lastAvailable.find((o) => o.id === archetypeId)?.label ?? fallbackArchetypeLabel(archetypeId);
+  const archetypeLabel = [positionLabel, archetypeName].filter(Boolean).join(" · ") || null;
+  const showingPlayer = !comparing ? playerName : null;
   const sorted = useMemo(() => (data ? sortCards(data.cards, sort) : []), [data, sort]);
 
-  // Selects A/B: jogadores da grade + (se vierem pela URL e não estiverem na grade) os nomes da resposta da comparação
+  // Selects A/B: jogadores da grade (na visão por arquétipo: "Jogador · Arquétipo") + os da URL que não estão na grade
   const playerOptions = useMemo<PlayerOption[]>(() => {
-    const map = new Map<number, string>();
-    for (const c of data?.cards ?? []) map.set(c.playerEntityId, c.name);
+    const map = new Map<string, PlayerOption>();
+    const add = (c: Pick<PlayerCard, "playerEntityId" | "name" | "archetype">) => {
+      const arq = segView ? c.archetype?.id ?? 0 : null;
+      const sel = { id: c.playerEntityId, arq };
+      const name = segView ? `${c.name} · ${c.archetype?.label ?? "sem arquétipo"}` : c.name;
+      map.set(selKey(sel), { key: selKey(sel), id: sel.id, arq, name });
+    };
+    for (const c of data?.cards ?? []) add(c);
     if (compareRes.data) {
-      map.set(compareRes.data.a.playerEntityId, compareRes.data.a.name);
-      map.set(compareRes.data.b.playerEntityId, compareRes.data.b.name);
+      add(compareRes.data.a);
+      add(compareRes.data.b);
     }
-    for (const id of [aId, bId]) if (id !== null && !map.has(id)) map.set(id, `Jogador #${id}`);
-    return Array.from(map, ([id, name]) => ({ id, name })).sort((x, y) => x.name.localeCompare(y.name, "pt-BR"));
-  }, [data, compareRes.data, aId, bId]);
+    for (const sel of [aSel, bSel]) {
+      if (sel !== null && !map.has(selKey(sel))) {
+        const name = `Jogador #${sel.id}${segView ? ` · ${sel.arq ? fallbackArchetypeLabel(sel.arq) : "sem arquétipo"}` : ""}`;
+        map.set(selKey(sel), { key: selKey(sel), id: sel.id, arq: sel.arq, name });
+      }
+    }
+    return Array.from(map.values()).sort((x, y) => x.name.localeCompare(y.name, "pt-BR"));
+  }, [data, compareRes.data, aSel, bSel, segView]);
 
   // ---- detalhe (diálogo) ----
-  const [detailId, setDetailId] = useState<number | null>(null);
-  const detail = useMemo(() => sorted.find((c) => c.playerEntityId === detailId) ?? null, [sorted, detailId]);
-  const closeDetail = useCallback(() => setDetailId(null), []);
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+  const detail = useMemo(() => sorted.find((c) => cardKey(c) === detailKey) ?? null, [sorted, detailKey]);
+  const closeDetail = useCallback(() => setDetailKey(null), []);
 
   // ---- escolha A/B (grade e selects) ----
   const setPair = useCallback(
-    (a: number | null, b: number | null, modo?: CardsMode) =>
-      patchUrl({ a, b, ...(modo ? { modo: modo === "comparar" ? "comparar" : null } : {}) }),
-    [patchUrl]
+    (a: Sel | null, b: Sel | null, modo?: CardsMode) =>
+      patchUrl({
+        a: a?.id ?? null,
+        b: b?.id ?? null,
+        aa: segView && a ? a.arq ?? 0 : null,
+        ab: segView && b ? b.arq ?? 0 : null,
+        ...(modo ? { modo: modo === "comparar" ? "comparar" : null } : {}),
+      }),
+    [patchUrl, segView]
   );
 
-  const latest = useRef({ comparing, aId, bId });
-  latest.current = { comparing, aId, bId };
+  const latest = useRef({ comparing, aSel, bSel });
+  latest.current = { comparing, aSel, bSel };
+
+  const selOfCard = useCallback((card: PlayerCard): Sel => ({ id: card.playerEntityId, arq: segView ? card.archetype?.id ?? 0 : null }), [segView]);
 
   const onSelectCard = useCallback(
     (card: PlayerCard) => {
-      const id = card.playerEntityId;
-      const { comparing: on, aId: a, bId: b } = latest.current;
+      const sel = selOfCard(card);
+      const { comparing: on, aSel: a, bSel: b } = latest.current;
       if (!on) {
-        setDetailId(id);
+        setDetailKey(cardKey(card));
         return;
       }
-      if (id === a) setPair(null, b);
-      else if (id === b) setPair(a, null);
-      else if (a === null) setPair(id, b);
-      else if (b === null) setPair(a, id);
-      else setPair(a, id); // A e B já escolhidos: o novo clique substitui o B
+      if (sameSel(sel, a)) setPair(null, b);
+      else if (sameSel(sel, b)) setPair(a, null);
+      else if (a === null) setPair(sel, b);
+      else if (b === null) setPair(a, sel);
+      else setPair(a, sel); // A e B já escolhidos: o novo clique substitui o B
     },
-    [setPair]
+    [setPair, selOfCard]
   );
 
-  const slotOf = useCallback((id: number): CardSlot => (id === aId ? "A" : id === bId ? "B" : null), [aId, bId]);
+  const slotOf = useCallback(
+    (card: PlayerCard): CardSlot => {
+      const sel = selOfCard(card);
+      return sameSel(sel, aSel) ? "A" : sameSel(sel, bSel) ? "B" : null;
+    },
+    [aSel, bSel, selOfCard]
+  );
 
   const focusBAfterCompare = useRef(false);
   const onCompareFromDetail = useCallback(
     (card: PlayerCard) => {
-      setDetailId(null);
-      setPair(card.playerEntityId, latest.current.bId === card.playerEntityId ? null : latest.current.bId, "comparar");
+      setDetailKey(null);
+      const sel = selOfCard(card);
+      setPair(sel, sameSel(latest.current.bSel, sel) ? null : latest.current.bSel, "comparar");
       focusBAfterCompare.current = true;
     },
-    [setPair]
+    [setPair, selOfCard]
   );
   useEffect(() => {
     if (!focusBAfterCompare.current || !comparing) return;
@@ -132,25 +237,29 @@ export default function Cartas() {
 
   const onMode = useCallback(
     (m: CardsMode) => {
-      if (m === "comparar") setPair(latest.current.aId, latest.current.bId, "comparar");
+      if (m === "comparar") setPair(latest.current.aSel, latest.current.bSel, "comparar");
       else setPair(null, null, "cartas");
     },
     [setPair]
   );
+  // trocar a visão limpa os arquétipos escolhidos nos lados (os jogadores A/B continuam)
+  const onView = useCallback((v: CardsView) => patchUrl({ ver: v === "player" ? "jog" : null, aa: null, ab: null }), [patchUrl]);
 
-  const onSwap = useCallback(() => setPair(latest.current.bId, latest.current.aId), [setPair]);
+  const onSwap = useCallback(() => setPair(latest.current.bSel, latest.current.aSel), [setPair]);
   const onClearCompare = useCallback(() => setPair(null, null), [setPair]);
   const changeA = useCallback(
-    (id: number | null) => {
-      if (id !== null && id === latest.current.bId) return;
-      setPair(id, latest.current.bId);
+    (opt: PlayerOption | null) => {
+      const sel = opt ? { id: opt.id, arq: opt.arq } : null;
+      if (sel && sameSel(sel, latest.current.bSel)) return;
+      setPair(sel, latest.current.bSel);
     },
     [setPair]
   );
   const changeB = useCallback(
-    (id: number | null) => {
-      if (id !== null && id === latest.current.aId) return;
-      setPair(latest.current.aId, id);
+    (opt: PlayerOption | null) => {
+      const sel = opt ? { id: opt.id, arq: opt.arq } : null;
+      if (sel && sameSel(sel, latest.current.aSel)) return;
+      setPair(latest.current.aSel, sel);
     },
     [setPair]
   );
@@ -168,10 +277,12 @@ export default function Cartas() {
   }
 
   const loading = cardsRes.loading || versionsLoading;
-  const compareReady = aId !== null && bId !== null && aId !== bId;
+  const compareReady = aSel !== null && bSel !== null && !sameSel(aSel, bSel);
   const compareHint =
-    aId === bId && aId !== null
-      ? "Escolha dois jogadores diferentes para comparar."
+    sameSel(aSel, bSel)
+      ? segView
+        ? "Escolha dois lados diferentes: outro jogador ou outro arquétipo."
+        : "Escolha dois jogadores diferentes para comparar."
       : aId === null && bId === null
         ? "Escolha o jogador A e o jogador B nos campos acima ou tocando nas cartas abaixo."
         : aId === null
@@ -183,7 +294,7 @@ export default function Cartas() {
     : cardsRes.error
       ? ""
       : data
-        ? `${data.cards.length} ${plural(data.cards.length, "carta", "cartas")} no período.`
+        ? `${data.cards.length} ${plural(data.cards.length, "carta", "cartas")}${segView ? " por jogador e arquétipo" : ""} no período.`
         : "";
 
   return (
@@ -203,7 +314,39 @@ export default function Cartas() {
         <Info size={18} aria-hidden="true" className="mt-0.5 flex-shrink-0 text-accent" />
         <p>
           <strong className="text-fg">Notas relativas a escalas fixas; poucos jogos distorcem.</strong> Menos de 10 jogos = carta
-          provisória (nota puxada para o meio).
+          provisória (nota puxada para o meio).{" "}
+          {segView ? (
+            <>
+              <strong className="text-fg">Por arquétipo:</strong> cada jogador aparece uma vez por arquétipo usado, e o overall usa os pesos do
+              arquétipo (o ◆ marca quando difere da nota pela posição; passe o mouse ou abra a carta). Escolha{" "}
+              <strong className="text-fg">Ver por: Jogador</strong> para agrupar todos os jogos numa carta só.
+            </>
+          ) : (
+            <>
+              <strong className="text-fg">Por jogador:</strong> uma carta por jogador com todos os jogos juntos, usando os pesos da posição.
+              Volte para <strong className="text-fg">Ver por: Arquétipo</strong> para uma carta por arquétipo usado.
+            </>
+          )}
+          {showingPlayer && (
+            <>
+              {" "}
+              <strong className="text-fg">Jogador:</strong> mostrando só {showingPlayer}; Posição e Arquétipo listam só o que ele jogou.
+            </>
+          )}
+          {archetypeLabel ? (
+            <>
+              {" "}
+              <strong className="text-fg">Filtro ({archetypeLabel}):</strong> cada carta é recalculada só com os jogos do jogador nessa
+              posição/arquétipo, então ele pode ter menos jogos (e uma carta provisória).
+            </>
+          ) : segView ? null : (
+            <>
+              {" "}
+              Sem filtro, a carta mistura todas as posições e arquétipos que o jogador usou; os filtros{" "}
+              <strong className="text-fg">Posição</strong> e <strong className="text-fg">Arquétipo</strong> recalculam a carta só com os
+              jogos naquela posição/arquétipo.
+            </>
+          )}
         </p>
       </div>
 
@@ -219,6 +362,16 @@ export default function Cartas() {
         onSort={setSort}
         mode={mode}
         onMode={onMode}
+        archetypeOptions={lastAvailable}
+        archetypeFilter={archFilter}
+        onArchetypeFilter={setArchFilter}
+        players={lastPlayers}
+        playerId={jogId}
+        onPlayer={comparing ? undefined : onPlayer}
+        positionValues={lastPositions}
+        onClearFilters={onClearFilters}
+        view={view}
+        onView={onView}
       />
 
       <div role="status" aria-live="polite" className="sr-only">
@@ -233,8 +386,8 @@ export default function Cartas() {
           <Card className="p-3 sm:p-4">
             <ComparePickers
               options={playerOptions}
-              a={aId}
-              b={bId}
+              a={aSel ? selKey(aSel) : null}
+              b={bSel ? selKey(bSel) : null}
               onChangeA={changeA}
               onChangeB={changeB}
               onSwap={onSwap}
@@ -251,6 +404,8 @@ export default function Cartas() {
             onClear={onClearCompare}
             crestAssetId={active.crestAssetId}
             clubName={active.name}
+            archetypeFilterId={archetypeId}
+            positionFilterLabel={positionLabel}
           />
         </section>
       )}
@@ -258,11 +413,12 @@ export default function Cartas() {
       <section aria-labelledby="cartas-grade" className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h2 id="cartas-grade" className="font-display text-lg font-bold uppercase tracking-wide text-fg">
-            {comparing ? "Escolha pela grade" : "Jogadores"}
+            {comparing ? "Escolha pela grade" : segView ? "Jogadores por arquétipo" : "Jogadores"}
           </h2>
           {data && data.cards.length > 0 && (
             <p className="text-sm text-fg-muted">
-              {data.cards.length} {plural(data.cards.length, "carta", "cartas")} · {data.totalMatches}{" "}
+              {data.cards.length} {plural(data.cards.length, "carta", "cartas")}
+              {segView ? " (jogador + arquétipo)" : ""} · {data.totalMatches}{" "}
               {plural(data.totalMatches, "partida", "partidas")} no período
             </p>
           )}
@@ -280,7 +436,7 @@ export default function Cartas() {
             title={
               data.totalMatches === 0
                 ? "Nenhuma partida neste recorte"
-                : `Nenhum jogador com ${minMatches} ${plural(minMatches, "jogo", "jogos")} no período`
+                : `${segView ? "Nenhuma carta" : "Nenhum jogador"} com ${minMatches} ${plural(minMatches, "jogo", "jogos")} no período`
             }
             message={
               data.totalMatches === 0
@@ -298,7 +454,7 @@ export default function Cartas() {
             compareMode={comparing}
             slotOf={slotOf}
             onSelect={onSelectCard}
-            label="Cartas dos jogadores"
+            label={segView ? "Cartas por jogador e arquétipo" : "Cartas dos jogadores"}
           />
         )}
       </section>
@@ -310,6 +466,11 @@ export default function Cartas() {
           clubName={active.name}
           onClose={closeDetail}
           onCompare={onCompareFromDetail}
+          archetypeFilterId={archetypeId}
+          onFilterArchetype={(id) => {
+            setDetailKey(null);
+            setArchFilter({ positionGroup, archetypeId: id });
+          }}
         />
       )}
     </PageShell>

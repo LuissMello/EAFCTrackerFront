@@ -16,6 +16,10 @@ import { getPassPct, getTacklePct, getMatchesPlayed, getSuccessfulTackles } from
 import { DateBadge } from "../components/DateBadge.tsx";
 import { DateRangeBar } from "../components/DateRangeBar.tsx";
 import { useUrlDateRange } from "../hooks/useUrlDateRange.ts";
+import { useArchetypeFilter } from "../hooks/useArchetypeFilter.ts";
+import { ArchetypeFilterNote } from "../components/archetypes/ArchetypeFilterSelect.tsx";
+import { PositionArchetypeFilter } from "../components/archetypes/PositionArchetypeFilter.tsx";
+import { archetypeOptionsForItems, archetypeOptionsOf, filterByPositionArchetype, matchesPositionArchetype, positionArchetypeLabel } from "../utils/archetypeFilters.ts";
 import type { FullMatchStatisticsByDayDto, DayBlock } from "../types/statsByDate.ts";
 
 /** Barra horizontal V/E/D para resumos */
@@ -158,6 +162,23 @@ export default function PlayerStatisticsByDatePage() {
         return () => controller.abort();
     }, [dateFrom, dateTo, clubIds, groupSessions, refreshKey]);
 
+    // ===== Filtro Posição + Arquétipo (?pos=&arq=) =====
+    // Cada jogador de cada dia traz a posição e o arquétipo principal DAQUELE dia/noite; o filtro mantém só os jogadores
+    // que batem nos dois (melhor/pior dia por jogador passam a considerar só esses dias).
+    // Os números do clube (jogos, V/E/D, gols) não mudam.
+    const [archFilter, setArchFilter] = useArchetypeFilter();
+    const allDayPlayers = useMemo(() => days.flatMap((d) => d.players), [days]);
+    const archetypeOptions = useMemo(
+        () => archetypeOptionsForItems(allDayPlayers, archFilter.positionGroup),
+        [allDayPlayers, archFilter.positionGroup]
+    );
+    const filterActive = archFilter.positionGroup !== null || archFilter.archetypeId !== null;
+    const viewDays = useMemo(
+        () => (filterActive ? days.map((d) => ({ ...d, players: filterByPositionArchetype(d.players, archFilter) })) : days),
+        [days, archFilter, filterActive]
+    );
+    const showArchetypeFilter = filterActive || archetypeOptionsOf(allDayPlayers).length > 0;
+
     // ===== Mapa de cores por data =====
     const dateColorMap = useMemo(() => {
         const datesDesc = days.map(d => d.date);
@@ -287,7 +308,7 @@ export default function PlayerStatisticsByDatePage() {
         const bestMap = new Map<number, PlayerBestDays>();
         const worstMap = new Map<number, PlayerWorstDays>();
 
-        for (const d of days) {
+        for (const d of viewDays) {
             for (const p of d.players) {
                 const pid = toNum((p as any).playerId ?? (p as any).PlayerId);
                 if (!pid) continue;
@@ -363,7 +384,7 @@ export default function PlayerStatisticsByDatePage() {
             bestDayPerPlayer: Array.from(bestMap.values()).sort((a, b) => a.playerName.localeCompare(b.playerName)),
             worstDayPerPlayer: Array.from(worstMap.values()).sort((a, b) => a.playerName.localeCompare(b.playerName)),
         };
-    }, [days]);
+    }, [viewDays]);
 
     // Ao carregar um novo conjunto de dias, abre só o primeiro
     const firstDayKey = days[0]?.date.slice(0, 10) ?? "";
@@ -389,6 +410,25 @@ export default function PlayerStatisticsByDatePage() {
                 <button type="button" aria-pressed={!groupSessions || clubIds.length !== 1}
                     onClick={() => setGroupSessions(false)} className={`px-3 py-1.5 rounded-lg border ${!groupSessions || clubIds.length !== 1 ? "bg-accent text-accent-fg" : "bg-surface"}`}>Dias do calendário</button>
             </div>
+
+            {showArchetypeFilter && (
+                <div className="-mt-2 flex flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <PositionArchetypeFilter
+                            value={archFilter}
+                            onChange={setArchFilter}
+                            archetypeOptions={archetypeOptions}
+                        />
+                    </div>
+                    {filterActive && !loading && (
+                        <ArchetypeFilterNote
+                            label={positionArchetypeLabel(archFilter, archetypeOptions) ?? ""}
+                            shown={viewDays.reduce((a, d) => a + d.players.length, 0)}
+                            total={days.reduce((a, d) => a + d.players.length, 0)}
+                        />
+                    )}
+                </div>
+            )}
 
             {loading && <div>Carregando…</div>}
             {error && <div className="text-negative">{error}</div>}
@@ -779,7 +819,7 @@ export default function PlayerStatisticsByDatePage() {
                     {days.length === 0 && (
                         <div className="text-fg-muted">Nenhum jogo no período selecionado.</div>
                     )}
-                    {days.map((d) => {
+                    {viewDays.map((d) => {
                         const key = d.date.slice(0, 10);
                         const dateColors = dateColorMap.get(key) ?? NEUTRAL_DATE_COLOR;
                         const isOpen = openDays.has(key);
@@ -825,6 +865,7 @@ export default function PlayerStatisticsByDatePage() {
                                 {isOpen && (
                                     <div id={panelId}>
                                         <PlayerStatsTable
+                                            segmentFilter={filterActive ? (sg) => matchesPositionArchetype(sg, archFilter) : undefined}
                                             players={d.players}
                                             loading={false}
                                             error={null}

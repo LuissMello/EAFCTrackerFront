@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { PageHeader, PageShell, Skeleton } from "../components/ui.tsx";
 import { ClubSelect, EmptyPanel, ErrorPanel, NoClubPanel, VersionSelect } from "../components/analytics/Controls.tsx";
 import {
+  ArchetypesCard,
   DuoCard,
   FunFactsCard,
   IntroCard,
@@ -105,6 +106,7 @@ export default function Retrospectiva() {
           <StreaksCard d={data} />
           <MomentsCard d={data} />
           <PlayersCard d={data} />
+          <ArchetypesCard d={data} />
           <DuoCard d={data} />
           <OpponentsCard d={data} />
           <RhythmCard d={data} />

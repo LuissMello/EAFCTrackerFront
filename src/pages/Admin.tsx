@@ -10,6 +10,7 @@ import type { GameVersion } from "../hooks/useGameVersions.tsx";
 import { fmtBRFromISO } from "../utils/date.ts";
 import { Card, PageHeader, PageShell, SectionHeader } from "../components/ui.tsx";
 import { clearApiResourceCache } from "../hooks/useApiResource.ts";
+import AdminArchetypes from "../components/archetypes/AdminArchetypes.tsx";
 
 /** Campo de texto/número no padrão "Broadcast" (claro/escuro) */
 const INPUT_CLS =
@@ -766,6 +767,9 @@ function AdminPanel({ onSignOut }: { onSignOut: () => void }) {
         </form>
         </details>
       </section>
+
+      {/* Arquétipos de jogador (catálogo id -> nome) */}
+      <AdminArchetypes showToast={showToast} />
 
       <ConfirmDialog
         open={pendingCurrent !== null}

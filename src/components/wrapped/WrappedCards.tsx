@@ -5,6 +5,7 @@ import { Card } from "../ui.tsx";
 import { GameVersionBadge } from "../GameVersionBadge.tsx";
 import { gameVersionLabel } from "../../hooks/useGameVersions.tsx";
 import { OpponentCrest, VedChip } from "../analytics/Controls.tsx";
+import ArchetypeBadge from "../archetypes/ArchetypeBadge.tsx";
 import { BigStat, CountUp, StoryCard } from "./StoryCard.tsx";
 import { MonthlyChart, SrSeriesChart } from "./WrappedCharts.tsx";
 import type {
@@ -237,6 +238,12 @@ function Award({
               {p.name}
             </Link>
             {unit ? ` · ${plural(p.value, unit[0], unit[1])}` : ""}
+            {p.archetype && (
+              <>
+                {" "}
+                <ArchetypeBadge archetype={p.archetype} compact className="align-middle" />
+              </>
+            )}
           </span>
         ) : (
           "Sem registro"
@@ -266,6 +273,60 @@ export function PlayersCard({ d }: { d: WrappedData }) {
         <span aria-hidden="true">🎩</span> <strong className="text-fg">{fmtNum(p.hatTricks)}</strong>{" "}
         {plural(p.hatTricks, "hat-trick no período", "hat-tricks no período")}. Melhor nota exige pelo menos 10 jogos.
       </p>
+    </StoryCard>
+  );
+}
+
+/* ------------------------------------------------------------- archetypes */
+export function ArchetypesCard({ d }: { d: WrappedData }) {
+  const a = d.archetypes;
+  if (!a || (!a.mostUsed && a.list.length === 0)) return null;
+  const top = a.mostUsed;
+  const max = Math.max(1, ...a.list.map((u) => u.matches));
+  return (
+    <StoryCard id="archetypes" eyebrow="Arquétipos" title="Como o time jogou">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <BigStat
+          label="Arquétipo mais usado"
+          tone="accent"
+          value={top ? <CountUp value={top.matches} /> : "—"}
+          sub={
+            top ? (
+              <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                <ArchetypeBadge archetype={top.archetype} emphasis />
+                <span>
+                  {plural(top.matches, "jogo", "jogos")} · {fmtPct(top.pct, 0)} das atuações
+                </span>
+              </span>
+            ) : (
+              "Sem registro"
+            )
+          }
+        />
+        <BigStat
+          label="Trocas de arquétipo"
+          value={<CountUp value={a.switches} />}
+          sub={a.switches === 0 ? "Ninguém trocou de arquétipo" : `${plural(a.switches, "troca", "trocas")} no período, somando os jogadores`}
+        />
+      </div>
+      {a.list.length > 0 && (
+        <ol className="space-y-2" aria-label="Arquétipos mais usados">
+          {a.list.slice(0, 5).map((u) => (
+            <li key={u.archetype.id} className="flex items-center gap-3">
+              <span className="w-32 sm:w-40 flex-shrink-0 min-w-0">
+                <ArchetypeBadge archetype={u.archetype} className="max-w-full truncate" />
+              </span>
+              <span className="flex-1 h-2 rounded-full bg-surface-sunken overflow-hidden" aria-hidden="true">
+                <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.round((u.matches / max) * 100)}%` }} />
+              </span>
+              <span className="w-24 text-right text-xs tabular-nums text-fg-muted flex-shrink-0">
+                {fmtNum(u.matches)} · {fmtPct(u.pct, 0)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <p className="text-xs text-fg-subtle">Conta atuações de jogador (um jogador por partida). Partidas antigas sem arquétipo ficam de fora.</p>
     </StoryCard>
   );
 }

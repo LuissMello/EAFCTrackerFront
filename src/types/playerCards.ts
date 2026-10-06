@@ -1,4 +1,5 @@
 // Contrato de /api/clubs/{clubId}/player-cards e /api/clubs/{clubId}/player-compare (camelCase).
+import type { ArchetypeRef, ArchetypeUsage } from "./archetypes.ts";
 
 export type CardTier = "bronze" | "prata" | "ouro" | "elite";
 export type PositionGroup = "ATAQUE" | "MEIO" | "DEFESA" | "GOLEIRO";
@@ -53,6 +54,16 @@ export interface PlayerCard {
   form: number[];
   attributes: CardAttributes | null;
   lastPlayedAt: string | null;
+  /** Arquétipo principal (mais jogos no recorte); null sem dado (id 0). */
+  archetype?: ArchetypeRef | null;
+  /** Uso de cada arquétipo no recorte, mais jogos primeiro. */
+  archetypes?: ArchetypeUsage[];
+  /** Só em view=archetype: "<playerEntityId>-<archetypeId>" (id 0 = segmento sem arquétipo). */
+  segmentKey?: string | null;
+  /** "archetype" = overall com os pesos do arquétipo (carta de UM arquétipo); "position" = pesos da posição. */
+  scoring?: "archetype" | "position";
+  /** Overall pelos pesos da posição (para comparar com `overall` quando scoring = "archetype"). */
+  overallByPosition?: number;
 }
 
 export interface PlayerCardsResponse {
@@ -64,6 +75,32 @@ export interface PlayerCardsResponse {
   totalMatches: number;
   minMatches: number;
   cards: PlayerCard[];
+  /** Eco do filtro `archetypeId` (null = sem filtro). */
+  archetypeId?: number | null;
+  /** Opções do filtro, calculadas SEM o filtro de arquétipo. */
+  availableArchetypes?: AvailableArchetype[];
+  /** "player" (padrão) ou "archetype" (uma carta por jogador+arquétipo). */
+  view?: "player" | "archetype";
+  /** Eco do filtro `positionGroup` (null = todas as posições). */
+  positionGroup?: string | null;
+  /** Posições com jogos no recorte (sem nenhum dos dois filtros). */
+  availablePositionGroups?: { positionGroup: string; matches: number }[];
+  /** Eco do filtro `playerEntityId` (null = todos os jogadores). */
+  playerEntityId?: number | null;
+  /** Jogadores com cartas no recorte (calculado sem o filtro de jogador). */
+  availablePlayers?: AvailablePlayer[];
+}
+
+export interface AvailablePlayer {
+  playerEntityId: number;
+  name: string;
+  matches: number;
+}
+
+export interface AvailableArchetype {
+  archetype: ArchetypeRef;
+  players: number;
+  matches: number;
 }
 
 export interface CardFilters {
@@ -71,6 +108,14 @@ export interface CardFilters {
   to: string;
   gameVersion: number | null;
   minMatches: number;
+  /** Só as partidas deste arquétipo (null = todos). */
+  archetypeId?: number | null;
+  /** Só as partidas jogadas neste grupo de posição (null = todas). */
+  positionGroup?: string | null;
+  /** "archetype" = uma carta por (jogador, arquétipo). */
+  view?: "player" | "archetype";
+  /** Só as cartas deste jogador (null = todos). */
+  playerEntityId?: number | null;
 }
 
 export type CompareWinner = "a" | "b" | "tie" | null;
@@ -112,6 +157,9 @@ export interface PlayerCompareResponse {
   onlyA: CompareStats | null;
   onlyB: CompareStats | null;
   ratingSeries: RatingSeriesPoint[];
+  /** Arquétipo pedido para cada lado (null = sem). */
+  archetypeIdA?: number | null;
+  archetypeIdB?: number | null;
 }
 
 export type CardSortKey = "overall" | "ata" | "pas" | "cri" | "def" | "imp" | "jogos";

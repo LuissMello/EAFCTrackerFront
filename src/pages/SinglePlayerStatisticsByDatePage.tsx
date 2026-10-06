@@ -17,6 +17,10 @@ import { PageHeader, PageShell } from "../components/ui.tsx";
 import { DateRangeBar } from "../components/DateRangeBar.tsx";
 import { useUrlDateRange } from "../hooks/useUrlDateRange.ts";
 import { useUrlEnum } from "../hooks/useUrlState.ts";
+import { useArchetypeFilter } from "../hooks/useArchetypeFilter.ts";
+import { PositionArchetypeFilter } from "../components/archetypes/PositionArchetypeFilter.tsx";
+import type { ArchetypeRef, ArchetypeUsage } from "../types/archetypes.ts";
+import { archetypeOptionsForItems, archetypeOptionsOf, filterByPositionArchetype, positionArchetypeLabel, usagesTitle } from "../utils/archetypeFilters.ts";
 import { buildGameRows } from "../utils/gameRows.ts";
 import type {
   FullMatchStatisticsByDayDto,
@@ -174,7 +178,7 @@ export default function PlayerStatisticsByPlayerPage() {
   }, [dateFrom, dateTo, clubIds, groupSessions, refreshKey]);
 
   // ===== Índice de jogadores (chips) =====
-  const playerOptions: SimplePlayerOption[] = useMemo(() => {
+  const allPlayerOptions: SimplePlayerOption[] = useMemo(() => {
     const map = new Map<number, string>();
     for (const d of days) {
       for (const p of d.players) {
@@ -191,6 +195,78 @@ export default function PlayerStatisticsByPlayerPage() {
       .map(([playerId, name]) => ({ playerId, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [days]);
+
+  // ===== Arquétipo por jogador no recorte (soma os jogos de cada dia/noite) + filtro ?arq=<id> =====
+  // O backend manda, por jogador e por dia, `archetype` (principal) e `archetypes` (uso). Aqui somamos pelos dias para
+  // achar o arquétipo principal do jogador em TODO o período; o filtro mostra só os chips desses jogadores.
+  const archetypeByPlayer = useMemo(() => {
+    const acc = new Map<number, Map<number, { ref: ArchetypeRef; matches: number }>>();
+    const posAcc = new Map<number, Map<string, number>>();
+    for (const d of days) {
+      for (const p of d.players) {
+        const pid = toNum((p as any).playerId ?? (p as any).PlayerId);
+        if (!pid) continue;
+        const usages: Array<{ ref: ArchetypeRef; matches: number }> =
+          p.archetypes && p.archetypes.length > 0
+            ? p.archetypes.map((u) => ({ ref: u.archetype, matches: u.matches }))
+            : p.archetype
+            ? [{ ref: p.archetype, matches: Math.max(1, toNum(p.matchesPlayed)) }]
+            : [];
+        const rawPos = ((p as any).position ?? (p as any).pos) as string | null | undefined;
+        if (rawPos) {
+          const pm = posAcc.get(pid) ?? new Map<string, number>();
+          pm.set(rawPos, (pm.get(rawPos) ?? 0) + Math.max(1, toNum(p.matchesPlayed)));
+          posAcc.set(pid, pm);
+        }
+        if (usages.length === 0) continue;
+        const byId = acc.get(pid) ?? new Map<number, { ref: ArchetypeRef; matches: number }>();
+        for (const u of usages) {
+          const cur = byId.get(u.ref.id);
+          if (cur) cur.matches += u.matches;
+          else byId.set(u.ref.id, { ref: u.ref, matches: u.matches });
+        }
+        acc.set(pid, byId);
+      }
+    }
+    const out = new Map<number, { archetype: ArchetypeRef; archetypes: ArchetypeUsage[]; position: string | null }>();
+    acc.forEach((byId, pid) => {
+      const list = Array.from(byId.values()).sort((a, b) => b.matches - a.matches);
+      const total = list.reduce((a, u) => a + u.matches, 0) || 1;
+      const archetypes: ArchetypeUsage[] = list.map((u) => ({
+        archetype: u.ref,
+        matches: u.matches,
+        pct: (u.matches * 100) / total,
+        avgRating: null,
+        avgProOverall: null,
+        goals: 0,
+        assists: 0,
+        firstPlayedAt: null,
+        lastPlayedAt: null,
+      }));
+      const pm = posAcc.get(pid);
+      const position = pm ? Array.from(pm.entries()).sort((a, b) => b[1] - a[1])[0][0] : null;
+      out.set(pid, { archetype: list[0].ref, archetypes, position });
+    });
+    return out;
+  }, [days]);
+
+  // Filtro Posição + Arquétipo (?pos=&arq=): filtra os chips de jogador (principal do período) e as partidas do jogador
+  const [archFilter, setArchFilter] = useArchetypeFilter();
+  const filterActive = archFilter.positionGroup !== null || archFilter.archetypeId !== null;
+  const playerCarriers = useMemo(
+    () => allPlayerOptions.map((p) => ({ playerId: p.playerId, ...(archetypeByPlayer.get(p.playerId) ?? {}) })),
+    [allPlayerOptions, archetypeByPlayer]
+  );
+  const archetypeOptions = useMemo(
+    () => archetypeOptionsForItems(playerCarriers, archFilter.positionGroup),
+    [playerCarriers, archFilter.positionGroup]
+  );
+  const showArchetypeFilter = filterActive || archetypeOptionsOf(playerCarriers).length > 0;
+  const playerOptions: SimplePlayerOption[] = useMemo(() => {
+    if (!filterActive) return allPlayerOptions;
+    const ok = new Set(filterByPositionArchetype(playerCarriers, archFilter).map((c) => c.playerId));
+    return allPlayerOptions.filter((p) => ok.has(p.playerId));
+  }, [allPlayerOptions, playerCarriers, archFilter, filterActive]);
 
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
   // true quando o usuário escolheu o jogador (senão foi o padrão automático: primeiro da lista)
@@ -258,7 +334,19 @@ export default function PlayerStatisticsByPlayerPage() {
   }, [days]);
 
   // ===== Jogo a jogo via endpoint /api/Clubs/matches/statistics/player/by-date-range-grouped =====
-  const [playerMatchesByDay, setPlayerMatchesByDay] = useState<PlayerStatisticsByDayDto[]>([]);
+  const [playerMatchesRaw, setPlayerMatchesByDay] = useState<PlayerStatisticsByDayDto[]>([]);
+  // as linhas são jogos: o filtro de posição/arquétipo vale exatamente por jogo
+  const playerMatchesByDay = useMemo(
+    () =>
+      !filterActive
+        ? playerMatchesRaw
+        : playerMatchesRaw
+            .map((d) => ({ ...d, statistics: filterByPositionArchetype(Array.isArray(d.statistics) ? d.statistics : [], archFilter) }))
+            .filter((d) => d.statistics.length > 0),
+    [playerMatchesRaw, archFilter, filterActive]
+  );
+  const gamesTotalRaw = useMemo(() => playerMatchesRaw.reduce((a, d) => a + (Array.isArray(d.statistics) ? d.statistics.length : 0), 0), [playerMatchesRaw]);
+  const gamesTotalShown = useMemo(() => playerMatchesByDay.reduce((a, d) => a + (Array.isArray(d.statistics) ? d.statistics.length : 0), 0), [playerMatchesByDay]);
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matchesError, setMatchesError] = useState<string | null>(null);
 
@@ -454,7 +542,7 @@ export default function PlayerStatisticsByPlayerPage() {
 
       selectedPlayerIds.forEach((pid, idx) => {
         const playerData = perDayByPlayer[pid] ?? [];
-        const playerName = playerOptions.find((p) => p.playerId === pid)?.name ?? `Player ${pid}`;
+        const playerName = allPlayerOptions.find((p) => p.playerId === pid)?.name ?? `Player ${pid}`;
         // Use distinct colors when comparing, base color for single player
         const color = selectedPlayerIds.length > 1 ? PLAYER_COMPARE_COLORS[idx] : baseColor;
 
@@ -514,7 +602,7 @@ export default function PlayerStatisticsByPlayerPage() {
       tacklesAvg: createDatasetsForMetric("Desarmes/Jogo", (d) => d.matches > 0 ? d.tacklesMade / d.matches : 0, CHART_COLORS.tacklesAvg),
       rating: createDatasetsForMetric("Nota Média", (d) => d.rating, CHART_COLORS.rating),
     };
-  }, [selectedPlayerIds, perDayByPlayer, playerOptions]);
+  }, [selectedPlayerIds, perDayByPlayer, allPlayerOptions]);
 
   const createChartOptions = (maxY?: number, showLegend = false) => {
     const t = chartTheme();
@@ -867,9 +955,9 @@ export default function PlayerStatisticsByPlayerPage() {
   const hasRankingData = useDaysRanking ? dayRowsForRanking.length > 0 : gamesForRanking.length > 0;
 
   // ===== Render =====
-  const selectedPlayerName = playerOptions.find((p) => p.playerId === selectedPlayerId)?.name ?? "—";
+  const selectedPlayerName = allPlayerOptions.find((p) => p.playerId === selectedPlayerId)?.name ?? "—";
   const selectedPlayerNames = selectedPlayerIds
-    .map((id) => playerOptions.find((p) => p.playerId === id)?.name ?? `Player ${id}`)
+    .map((id) => allPlayerOptions.find((p) => p.playerId === id)?.name ?? `Player ${id}`)
     .join(" vs ");
 
   const modeBadgeClass =
@@ -911,8 +999,15 @@ export default function PlayerStatisticsByPlayerPage() {
                   : `Comparando: ${selectedPlayerNames}`}
               </span>
             </div>
+            {showArchetypeFilter && (
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <PositionArchetypeFilter value={archFilter} onChange={setArchFilter} archetypeOptions={archetypeOptions} showCount />
+              </div>
+            )}
             {playerOptions.length === 0 ? (
-              <div className="text-xs text-fg-muted italic">Nenhum jogador encontrado no período.</div>
+              <div className="text-xs text-fg-muted italic">
+                {filterActive ? "Nenhum jogador com essa posição/arquétipo principal no período." : "Nenhum jogador encontrado no período."}
+              </div>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {playerOptions.map((p) => {
@@ -931,6 +1026,20 @@ export default function PlayerStatisticsByPlayerPage() {
                       }
                     >
                       {p.name}
+                      {(() => {
+                        const info = archetypeByPlayer.get(p.playerId);
+                        if (!info) return null;
+                        const many = info.archetypes.length > 1;
+                        return (
+                          <span
+                            className="ml-1.5 text-[11px] opacity-80"
+                            title={["Arquétipo principal no período: " + info.archetype.label, ...(many ? [usagesTitle(info.archetypes)] : [])].join("\n")}
+                          >
+                            · {info.archetype.shortName?.trim() || info.archetype.label}
+                            {many ? ` +${info.archetypes.length - 1}` : ""}
+                          </span>
+                        );
+                      })()}
                       {isActive && selectedPlayerIds.length > 1 && (
                         <span
                           className="ml-1.5 inline-block w-2 h-2 rounded-full flex-shrink-0"
@@ -1011,6 +1120,14 @@ export default function PlayerStatisticsByPlayerPage() {
           {!playerPicked && !isComparing && (
             <span className="text-fg-muted"> (primeiro jogador do período — escolha outro nos botões acima)</span>
           )}
+        </p>
+      )}
+
+      {filterActive && selectedPlayerIds.length > 0 && !matchesLoading && (
+        <p className="text-xs text-fg-muted" role="status">
+          Filtro <strong className="text-fg-secondary">{positionArchetypeLabel(archFilter, archetypeOptions)}</strong>: resumos, rankings e
+          jogo a jogo usam só as partidas nessa posição/arquétipo ({gamesTotalShown} de {gamesTotalRaw}{" "}
+          {gamesTotalRaw === 1 ? "partida" : "partidas"} do jogador). Os chips de jogador usam a posição e o arquétipo principais do período.
         </p>
       )}
 

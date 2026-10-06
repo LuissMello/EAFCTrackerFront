@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, CalendarDays, ArrowUpRight } from "lucide-react";
 import api, { isCanceled } from "../services/api.ts";
@@ -7,6 +7,10 @@ import { useRefresh } from "../hooks/useRefresh.tsx";
 import { PlayerStatsTable } from "./PlayerStatsTable.tsx";
 import { Skeleton } from "./ui.tsx";
 import type { PlayerStats } from "../types/stats";
+import { PositionArchetypeFilter } from "./archetypes/PositionArchetypeFilter.tsx";
+import { ArchetypeFilterNote } from "./archetypes/ArchetypeFilterSelect.tsx";
+import type { ArchetypeFilterValue } from "../hooks/useArchetypeFilter.ts";
+import { archetypeOptionsForItems, archetypeOptionsOf, filterByPositionArchetype, matchesPositionArchetype, positionArchetypeLabel } from "../utils/archetypeFilters.ts";
 
 type DayDto = {
     date: string;
@@ -69,6 +73,14 @@ export default function LatestDayPanel({ clubIds, showAllVersions = false }: { c
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [open, setOpen] = useState(false);
+    // Filtro Posição + Arquétipo do painel (estado local: a Home não guarda filtros na URL)
+    const [archFilter, setArchFilter] = useState<ArchetypeFilterValue>({ positionGroup: null, archetypeId: null });
+
+    const dayPlayers = day?.statistics?.players;
+    const archetypeOptions = useMemo(() => archetypeOptionsForItems(dayPlayers ?? [], archFilter.positionGroup), [dayPlayers, archFilter.positionGroup]);
+    const hasArchetypes = useMemo(() => archetypeOptionsOf(dayPlayers ?? []).length > 0, [dayPlayers]);
+    const filterActive = archFilter.positionGroup !== null || archFilter.archetypeId !== null;
+    const visiblePlayers = useMemo(() => filterByPositionArchetype(dayPlayers ?? [], archFilter), [dayPlayers, archFilter]);
 
     const clubIdsKey = clubIds.join(",");
     // Com um clube só, agrupa por noite de jogo (sessão): 22:00–01:00 é UMA noite, não dois dias.
@@ -205,9 +217,23 @@ export default function LatestDayPanel({ clubIds, showAllVersions = false }: { c
                         <span className="text-fg-secondary">{gf}:{ga}</span>
                     </div>
 
+                    {(hasArchetypes || filterActive) && (
+                        <div className="mb-3 flex flex-col gap-1">
+                            <PositionArchetypeFilter value={archFilter} onChange={setArchFilter} archetypeOptions={archetypeOptions} />
+                            {filterActive && (
+                                <ArchetypeFilterNote
+                                    label={positionArchetypeLabel(archFilter, archetypeOptions) ?? ""}
+                                    shown={visiblePlayers.length}
+                                    total={players.length}
+                                />
+                            )}
+                        </div>
+                    )}
+
                     {players.length > 0 ? (
                         <PlayerStatsTable
-                            players={players}
+                            segmentFilter={filterActive ? (sg) => matchesPositionArchetype(sg, archFilter) : undefined}
+                            players={visiblePlayers}
                             loading={false}
                             error={null}
                             clubStats={null}

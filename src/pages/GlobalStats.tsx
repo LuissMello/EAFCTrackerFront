@@ -9,6 +9,10 @@ import { API_ENDPOINTS } from "../config/urls.ts";
 import { useRefresh } from "../hooks/useRefresh.tsx";
 import { Card, Field, FIELD_CLASS, PageHeader, PageShell } from "../components/ui.tsx";
 import { useUrlEnum, useUrlParams, useUrlState, type UrlPatch } from "../hooks/useUrlState.ts";
+import { ArchetypeFilterNote } from "../components/archetypes/ArchetypeFilterSelect.tsx";
+import { PositionArchetypeFilter } from "../components/archetypes/PositionArchetypeFilter.tsx";
+import { useArchetypeFilter } from "../hooks/useArchetypeFilter.ts";
+import { archetypeOptionsForItems, archetypeOptionsOf, filterByPositionArchetype, matchesPositionArchetype, positionArchetypeLabel } from "../utils/archetypeFilters.ts";
 
 const SORT_ORDERS = ["asc", "desc"] as const;
 
@@ -52,6 +56,11 @@ export default function PlayerStatisticsPage() {
   const [search, setSearch] = useUrlState("q", "");
   const [pageSize, setPageSize] = useUrlState("size", 20, { validate: (n) => n >= 5 });
   const [oppRaw, setOppRaw] = useUrlState("opp", "all");
+  // Posição (da linha) + arquétipo principal do jogador no recorte (?pos=&arq=); filtra as linhas no cliente
+  const [archFilter, setArchFilter] = useArchetypeFilter();
+  const archetypeOptions = useMemo(() => archetypeOptionsForItems(players, archFilter.positionGroup), [players, archFilter.positionGroup]);
+  const visiblePlayers = useMemo(() => filterByPositionArchetype(players, archFilter), [players, archFilter]);
+  const filterActive = archFilter.positionGroup !== null || archFilter.archetypeId !== null;
   const oppPlayers: number | "all" = (() => {
     if (oppRaw === "all") return "all";
     const n = parseInt(oppRaw, 10);
@@ -185,6 +194,8 @@ export default function PlayerStatisticsPage() {
     [groupClubIds, oppPlayers]
   );
 
+  const showArchetypeFilter = filterActive || archetypeOptionsOf(players).length > 0;
+
   useEffect(() => {
     fetchStats(matchCount);
     return () => abortRef.current?.abort();
@@ -217,7 +228,11 @@ export default function PlayerStatisticsPage() {
 
       {/* Filtros */}
       <Card className="mb-4 p-3 sm:p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-[9rem_minmax(0,1fr)_11rem_9rem]">
+        <div
+          className={`grid grid-cols-2 gap-3 ${
+            showArchetypeFilter ? "sm:grid-cols-[9rem_minmax(0,1fr)_11rem_minmax(0,22rem)_9rem]" : "sm:grid-cols-[9rem_minmax(0,1fr)_11rem_9rem]"
+          }`}
+        >
           <Field
             label="Últimas partidas"
             htmlFor="matchCount"
@@ -274,6 +289,17 @@ export default function PlayerStatisticsPage() {
             </select>
           </Field>
 
+          {showArchetypeFilter && (
+            <PositionArchetypeFilter
+              variant="field"
+              value={archFilter}
+              onChange={setArchFilter}
+              archetypeOptions={archetypeOptions}
+              showCount
+              className="col-span-2 sm:col-span-1 [&>*]:min-w-0 [&>*]:flex-1"
+            />
+          )}
+
           <Field label="Itens por página" htmlFor="pageSize">
             <select
               id="pageSize"
@@ -293,8 +319,18 @@ export default function PlayerStatisticsPage() {
 
       <TeamStatsSection clubStats={clubStats} loading={loading} error={error} />
 
+      {filterActive && !loading && (
+        <ArchetypeFilterNote
+          className="mb-3"
+          label={positionArchetypeLabel(archFilter, archetypeOptions) ?? ""}
+          shown={visiblePlayers.length}
+          total={players.length}
+        />
+      )}
+
       <PlayerStatsTable
-        players={players}
+        segmentFilter={filterActive ? (sg) => matchesPositionArchetype(sg, archFilter) : undefined}
+        players={visiblePlayers}
         loading={loading}
         error={error}
         clubStats={clubStats}

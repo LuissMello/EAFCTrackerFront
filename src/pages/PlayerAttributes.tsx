@@ -9,6 +9,11 @@ import type { PlayerMatchStats } from "../types/playerAttributes.ts";
 import { ATTR_LABELS } from "../utils/playerAttributes.ts";
 import { Card, ProgressBar, ErrorState } from "../components/AttributeUi.tsx";
 import { EmptyState, PageHeader, PageShell, Skeleton } from "../components/ui.tsx";
+import ArchetypeBadge, { archetypeShortLabel } from "../components/archetypes/ArchetypeBadge.tsx";
+import type { ArchetypeRef } from "../types/archetypes.ts";
+import PositionArchetypeFilter from "../components/archetypes/PositionArchetypeFilter.tsx";
+import { useArchetypeFilter } from "../hooks/useArchetypeFilter.ts";
+import { archetypeOptionsForPosition, archetypeOptionsOf, positionGroupOfPos } from "../utils/archetypeFilters.ts";
 
 /******** Helpers ********/
 function isAbort(err: any) {
@@ -26,8 +31,14 @@ type PlayerAttrRow = {
     playerName: string;
     clubId: number;
     pos?: string | null;
+    /** Arquétipo usado na partida deste snapshot (0/null = sem dado). */
+    archetypeId: number;
+    archetype: ArchetypeRef | null;
     statistics: PlayerMatchStats | null;
 };
+
+const NOTE_CLS =
+    "flex items-start gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs text-fg-secondary";
 
 /** O jogador tem algum atributo coletado (valores todos zerados/ausentes = sem dados). */
 function hasAttrData(r: PlayerAttrRow): boolean {
@@ -53,6 +64,8 @@ export default function PlayerAttributesPage() {
     const [basePlayerId, setBasePlayerId] = useState<number | "">("");
     const [compareMode, setCompareMode] = useState<"media" | "player">("media");
     const [comparePlayerId, setComparePlayerId] = useState<number | "">("");
+    const [avgScope, setAvgScope] = useState<"mesmo" | "todos">("mesmo");
+    const [filter, setFilter] = useArchetypeFilter();
 
     useEffect(() => {
         if (!clubId) {
@@ -78,7 +91,9 @@ export default function PlayerAttributesPage() {
                     playerId: Number(pick(row, "playerId", "PlayerId")),
                     playerName: String(pick(row, "playerName", "PlayerName") ?? ""),
                     clubId: Number(pick(row, "clubId", "ClubId") ?? 0),
-                    pos: pick<string>(row, "pos", "Pos") ?? null, 
+                    pos: pick<string>(row, "pos", "Pos") ?? null,
+                    archetypeId: Number(pick(row, "archetypeId", "ArchetypeId") ?? pick<ArchetypeRef | null>(row, "archetype", "Archetype")?.id ?? 0) || 0,
+                    archetype: pick<ArchetypeRef | null>(row, "archetype", "Archetype") ?? null,
                     statistics: mapAttr(pick(row, "statistics", "Statistics")),
                 }));
 
@@ -97,37 +112,77 @@ export default function PlayerAttributesPage() {
         return () => controller.abort();
     }, [clubId, refreshKey]);
 
+    // Filtro Posição → Arquétipo (client-side) sobre o snapshot mais novo de cada jogador.
+    // Posição = grupo da posição do snapshot (ou o grupo do arquétipo, se a posição faltar); arquétipo = o do snapshot.
+    const filteredRows = useMemo(
+        () =>
+            rows.filter((r) => {
+                if (filter.positionGroup && (positionGroupOfPos(r.pos) ?? r.archetype?.positionGroup ?? null) !== filter.positionGroup) return false;
+                if (filter.archetypeId !== null && r.archetypeId !== filter.archetypeId) return false;
+                return true;
+            }),
+        [rows, filter]
+    );
+    const archetypeOptions = useMemo(
+        () => archetypeOptionsForPosition(archetypeOptionsOf(rows), filter.positionGroup),
+        [rows, filter.positionGroup]
+    );
+    const filterActive = filter.positionGroup !== null || filter.archetypeId !== null;
+
+    // se o jogador base saiu do filtro, usa o primeiro (com dados) que sobrou
+    const effectiveBaseId: number | "" = useMemo(() => {
+        if (filteredRows.some((r) => String(r.playerId) === String(basePlayerId))) return basePlayerId;
+        const first = filteredRows.find(hasAttrData) ?? filteredRows[0];
+        return first ? first.playerId : "";
+    }, [filteredRows, basePlayerId]);
+
     const base = useMemo(
-        () => rows.find((r) => String(r.playerId) === String(basePlayerId)),
-        [rows, basePlayerId]
+        () => filteredRows.find((r) => String(r.playerId) === String(effectiveBaseId)),
+        [filteredRows, effectiveBaseId]
     );
 
-    const teamAverage = useMemo(() => {
-        if (rows.length === 0) return null;
+    // Médias de atributos NÃO misturam arquétipos por padrão: cada arquétipo distribui os pontos de um jeito.
+    const averages = useMemo(() => {
+        const avgOf = (list: PlayerAttrRow[]) => {
+            const statsAll = list.map((r) => r.statistics).filter(Boolean) as PlayerMatchStats[];
+            if (statsAll.length === 0) return null;
+            const keys = Object.keys(ATTR_LABELS) as (keyof PlayerMatchStats)[];
+            const avg: Record<string, number> = {};
+            keys.forEach((k) => {
+                const vals = statsAll.map((s) => Number((s as any)[k])).filter((v) => Number.isFinite(v));
+                avg[k] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+            });
+            return avg as Record<keyof PlayerMatchStats, number>;
+        };
+        // desconsidera goleiros e quem não tem atributos coletados
+        const field = filteredRows.filter((r) => (filter.positionGroup === "GOLEIRO" || !isGk(r.pos)) && hasAttrData(r));
+        const sameArch =
+            base && base.archetypeId > 0
+                ? field.filter((r) => r.archetypeId === base.archetypeId && r.playerId !== base.playerId)
+                : [];
+        const distinctArch = new Set(field.map((r) => r.archetypeId || 0));
+        return {
+            all: avgOf(field),
+            allCount: field.length,
+            mixed: distinctArch.size > 1,
+            same: avgOf(sameArch),
+            sameCount: sameArch.length,
+        };
+    }, [filteredRows, filter.positionGroup, base]);
 
-        // desconsidera goleiros por garantia
-        const fieldPlayers = rows.filter(r => !isGk(r.pos));
-        const statsAll = fieldPlayers
-            .map((r) => r.statistics)
-            .filter(Boolean) as PlayerMatchStats[];
+    // "mesmo arquétipo" só vale quando há outros jogadores com o arquétipo do jogador base
+    const effectiveScope: "mesmo" | "todos" = avgScope === "mesmo" && averages.sameCount > 0 ? "mesmo" : "todos";
+    const teamAverage = effectiveScope === "mesmo" ? averages.same : averages.all;
 
-        if (statsAll.length === 0) return null;
-
-        const keys = Object.keys(ATTR_LABELS) as (keyof PlayerMatchStats)[];
-        const avg: Record<string, number> = {};
-        keys.forEach((k) => {
-            const vals = statsAll.map((s) => Number((s as any)[k])).filter((v) => Number.isFinite(v));
-            avg[k] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-        });
-        return avg as Record<keyof PlayerMatchStats, number>;
-    }, [rows]);
+    const comparePlayer = useMemo(
+        () => (comparePlayerId ? filteredRows.find((r) => String(r.playerId) === String(comparePlayerId)) : undefined),
+        [filteredRows, comparePlayerId]
+    );
 
     const compare = useMemo(() => {
         if (compareMode === "media") return teamAverage;
-        if (!comparePlayerId) return null;
-        const pl = rows.find((r) => String(r.playerId) === String(comparePlayerId));
-        return pl?.statistics ?? null;
-    }, [compareMode, comparePlayerId, teamAverage, rows]);
+        return comparePlayer?.statistics ?? null;
+    }, [compareMode, teamAverage, comparePlayer]);
 
     /******** Render ********/
     if (loading) {
@@ -185,8 +240,12 @@ export default function PlayerAttributesPage() {
         );
     }
 
-    const allPlayersForSelect = rows
-        .map((r) => ({ id: r.playerId, name: r.playerName }))
+    const allPlayersForSelect = filteredRows
+        .map((r) => ({
+            id: r.playerId,
+            name: r.playerName,
+            label: r.archetype ? `${r.playerName} · ${archetypeShortLabel(r.archetype)}` : r.playerName,
+        }))
         .sort((a, b) => a.name.localeCompare(b.name));
 
     return (
@@ -194,18 +253,37 @@ export default function PlayerAttributesPage() {
             <PageHeader eyebrow="Clube" title="Atributos" subtitle={clubName ?? `Clube ${clubId}`} />
 
             <Card>
+                {/* Filtro Posição → Arquétipo */}
+                <div className="mb-4 space-y-2">
+                    <PositionArchetypeFilter value={filter} onChange={setFilter} archetypeOptions={archetypeOptions} showCount countUnit={["jogador", "jogadores"]} />
+                    <p role="status" className="text-xs text-fg-muted">
+                        {filterActive
+                            ? `Mostrando ${filteredRows.length} de ${rows.length} ${rows.length === 1 ? "jogador" : "jogadores"}: só quem está nesta posição/arquétipo na última partida. Lista, jogador base e médias seguem o filtro.`
+                            : "Filtra os jogadores pela posição e pelo arquétipo da última partida de cada um (a média considera só quem sobrar)."}
+                    </p>
+                </div>
+
+                {filteredRows.length === 0 ? (
+                    <div className="rounded-xl border border-border bg-surface-raised p-6 text-center text-sm text-fg-muted space-y-3">
+                        <p>Nenhum jogador com este filtro.</p>
+                        <button type="button" className="btn btn-secondary min-h-[44px]" onClick={() => setFilter({ positionGroup: null, archetypeId: null })}>
+                            Limpar filtro
+                        </button>
+                    </div>
+                ) : (
+                <>
                 {/* Seleções */}
                 <div className="flex flex-col md:flex-row md:items-end gap-3">
                     <div>
                         <label className="block text-xs font-semibold mb-1">Jogador base</label>
                         <select
                             className="border rounded px-3 py-2 text-sm min-w-[220px]"
-                            value={basePlayerId}
+                            value={effectiveBaseId}
                             onChange={(e) => setBasePlayerId(e.target.value ? Number(e.target.value) : "")}
                         >
                             {allPlayersForSelect.map((p) => (
                                 <option key={p.id} value={p.id}>
-                                    {p.name}
+                                    {p.label}
                                 </option>
                             ))}
                         </select>
@@ -227,6 +305,25 @@ export default function PlayerAttributesPage() {
                         </select>
                     </div>
 
+                    {compareMode === "media" && (
+                        <div>
+                            <label htmlFor="attr-avg-scope" className="block text-xs font-semibold mb-1">Média de</label>
+                            <select
+                                id="attr-avg-scope"
+                                className="border rounded px-3 py-2 text-sm min-w-[200px]"
+                                value={effectiveScope}
+                                onChange={(e) => setAvgScope(e.target.value as "mesmo" | "todos")}
+                            >
+                                <option value="mesmo" disabled={averages.sameCount === 0}>
+                                    {base?.archetype
+                                        ? `Mesmo arquétipo (${base.archetype.label}) · ${averages.sameCount}`
+                                        : "Mesmo arquétipo"}
+                                </option>
+                                <option value="todos">Todos os arquétipos · {averages.allCount}</option>
+                            </select>
+                        </div>
+                    )}
+
                     {compareMode === "player" && (
                         <div>
                             <label className="block text-xs font-semibold mb-1">Jogador para comparar</label>
@@ -237,10 +334,10 @@ export default function PlayerAttributesPage() {
                             >
                                 <option value="">Selecionar…</option>
                                 {allPlayersForSelect
-                                    .filter((p) => String(p.id) !== String(basePlayerId))
+                                    .filter((p) => String(p.id) !== String(effectiveBaseId))
                                     .map((p) => (
                                         <option key={p.id} value={p.id}>
-                                            {p.name}
+                                            {p.label}
                                         </option>
                                     ))}
                             </select>
@@ -252,7 +349,13 @@ export default function PlayerAttributesPage() {
                 <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Base: lista de atributos */}
                     <Card>
-                        <h3 className="text-base font-semibold mb-3">Atributos — {base?.playerName ?? "—"}</h3>
+                        <h3 className="text-base font-semibold mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span>Atributos — {base?.playerName ?? "—"}</span>
+                            {base && <ArchetypeBadge archetype={base.archetype} emphasis />}
+                        </h3>
+                        {base && !base.archetype && (
+                            <p className="text-xs text-fg-subtle mb-3">Sem arquétipo registrado na última partida deste jogador.</p>
+                        )}
                         {base?.statistics && Object.values(base.statistics).some((v) => v && v !== 0) ? (
                             <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-sm text-fg-secondary">
                                 {(Object.keys(ATTR_LABELS) as (keyof PlayerMatchStats)[]).map((key) => (
@@ -273,9 +376,50 @@ export default function PlayerAttributesPage() {
 
                     {/* Comparação com média ou outro jogador */}
                     <Card>
-                        <h3 className="text-base font-semibold mb-3">
-                            Comparação — {compareMode === "media" ? "Média do clube" : rows.find((r) => String(r.playerId) === String(comparePlayerId))?.playerName ?? "—"}
+                        <h3 className="text-base font-semibold mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span>
+                                Comparação —{" "}
+                                {compareMode === "media"
+                                    ? effectiveScope === "mesmo"
+                                        ? "Média do mesmo arquétipo"
+                                        : "Média do clube"
+                                    : comparePlayer?.playerName ?? "—"}
+                            </span>
+                            {compareMode === "player" && comparePlayer && <ArchetypeBadge archetype={comparePlayer.archetype} emphasis />}
+                            {compareMode === "media" && effectiveScope === "mesmo" && base?.archetype && (
+                                <ArchetypeBadge archetype={base.archetype} emphasis />
+                            )}
                         </h3>
+                        {compareMode === "media" && effectiveScope === "mesmo" && (
+                            <p className={`${NOTE_CLS} mb-3`} role="note">
+                                Média de {averages.sameCount} {averages.sameCount === 1 ? "outro jogador" : "outros jogadores"} de linha com o
+                                mesmo arquétipo ({base?.archetype?.label}).
+                            </p>
+                        )}
+                        {compareMode === "media" && effectiveScope === "todos" && averages.mixed && (
+                            <p className={`${NOTE_CLS} mb-3`} role="note">
+                                Arquétipos diferentes: esta média mistura jogadores de linha com arquétipos distintos — compare com cuidado.
+                                {avgScope === "mesmo" && base && averages.sameCount === 0 && (
+                                    <> Não há outro jogador com o arquétipo do jogador base.</>
+                                )}
+                            </p>
+                        )}
+                        {compareMode === "player" &&
+                            base &&
+                            comparePlayer &&
+                            base.archetypeId > 0 &&
+                            comparePlayer.archetypeId > 0 &&
+                            base.archetypeId !== comparePlayer.archetypeId && (
+                                <p className={`${NOTE_CLS} mb-3`} role="note">
+                                    Arquétipos diferentes ({base.archetype?.label} × {comparePlayer.archetype?.label}): os atributos são
+                                    distribuídos de outro jeito — compare com cuidado.
+                                </p>
+                            )}
+                        {compareMode === "player" && base && comparePlayer && (base.archetypeId === 0 || comparePlayer.archetypeId === 0) && (
+                            <p className={`${NOTE_CLS} mb-3`} role="note">
+                                Um dos jogadores está sem arquétipo registrado; não dá para saber se os arquétipos são iguais.
+                            </p>
+                        )}
 
                         {compare && Object.values(compare).some((v) => v && v !== 0) ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -324,7 +468,7 @@ export default function PlayerAttributesPage() {
 
                                             <div className="mt-2">
                                                 <div className="text-[11px] text-fg-muted">
-                                                    {compareMode === "media" ? "Clube (média)" : "Comparação"}:{" "}
+                                                    {compareMode === "media" ? (effectiveScope === "mesmo" ? "Mesmo arquétipo (média)" : "Clube (média)") : "Comparação"}:{" "}
                                                     {Math.round(other)}
                                                 </div>
                                                 <div className="w-full bg-surface-sunken rounded h-2 overflow-hidden">
@@ -348,6 +492,8 @@ export default function PlayerAttributesPage() {
 
                     </Card>
                 </div>
+                </>
+                )}
             </Card>
         </PageShell>
     );

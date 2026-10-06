@@ -4,10 +4,12 @@ import { GitCompareArrows, Info, X } from "lucide-react";
 import type { PlayerCard } from "../../types/playerCards";
 import { fmtDateBR } from "../../utils/date.ts";
 import { fmtNum, fmtPct, plural } from "../../utils/analyticsFormat.ts";
-import { POSITION_GROUP_LABEL, SERIES_COLORS, cardAxes, fmtScore, tierStyle } from "../../utils/playerCards.ts";
+import { POSITION_GROUP_LABEL, SERIES_COLORS, cardAxes, fmtScore, overallByPositionDiff, scoringHint, tierStyle } from "../../utils/playerCards.ts";
 import { CardFace } from "./PlayerCard.tsx";
 import { FormDots, FormSparkline } from "./FormDots.tsx";
 import { RadarWithTable, type RadarSeries } from "./RadarChart.tsx";
+import { ArchetypeBadge } from "../archetypes/ArchetypeBadge.tsx";
+import type { ArchetypeUsage } from "../../types/archetypes.ts";
 
 /** Posições genéricas da EA já cobertas pelo rótulo do grupo (evita "GOLEIRO · GOALKEEPER"). */
 const GENERIC_POSITIONS = new Set(["goalkeeper", "defender", "midfielder", "forward"]);
@@ -24,6 +26,90 @@ function StatItem({ label, value, hint }: { label: string; value: React.ReactNod
   );
 }
 
+/** Bloco "Arquétipos usados": uma linha por arquétipo (jogos, %, nota, overall médio, gols/assist.) + aviso quando há mais de um. */
+function ArchetypesUsed({
+  usages,
+  filterId,
+  onFilter,
+  segmentId = null,
+}: {
+  usages: ArchetypeUsage[];
+  filterId: number | null;
+  onFilter?: (id: number) => void;
+  /** Visão por arquétipo: a carta é só deste arquétipo (id), sem aviso de mistura. */
+  segmentId?: number | null;
+}) {
+  const many = usages.length > 1 && segmentId === null;
+  return (
+    <section aria-label="Arquétipos usados">
+      <h3 className="mb-2 font-display text-sm font-bold uppercase tracking-widest text-fg-subtle">Arquétipos usados</h3>
+      {many && (
+        <div role="note" className="mb-2 flex items-start gap-2 rounded-xl border border-gold/40 bg-gold-soft px-3 py-2 text-sm text-gold-fg">
+          <Info size={16} aria-hidden="true" className="mt-0.5 flex-shrink-0" />
+          <p>
+            <strong>{usages.length} arquétipos no recorte:</strong> as notas e os números desta carta misturam todos eles. Para ver a carta só
+            com os jogos de um arquétipo, use o filtro <strong>Arquétipo</strong>.
+          </p>
+        </div>
+      )}
+      {!many && filterId !== null && (
+        <p className="mb-2 text-xs text-fg-muted">Filtro ativo: a carta usa só os jogos neste arquétipo.</p>
+      )}
+      {segmentId !== null && (
+        <p className="mb-2 text-xs text-fg-muted">
+          Visão por arquétipo:{" "}
+          {segmentId === 0 ? (
+            "esta carta usa só os jogos sem arquétipo registrado."
+          ) : (
+            <>
+              esta carta usa só os jogos como{" "}
+              <strong className="text-fg-secondary">{usages.find((u) => u.archetype.id === segmentId)?.archetype.label ?? `Arquétipo #${segmentId}`}</strong>.
+            </>
+          )}{" "}
+          Abaixo, o uso de cada arquétipo pelo jogador no recorte.
+        </p>
+      )}
+      <ul className="space-y-2">
+        {usages.map((u) => (
+          <li key={u.archetype.id} className={`rounded-xl border bg-surface-sunken p-2.5 ${segmentId === u.archetype.id ? "border-accent/50" : "border-border"}`}>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <ArchetypeBadge archetype={u.archetype} emphasis={u.archetype.id === usages[0].archetype.id} />
+                <span className="text-sm tabular-nums text-fg-secondary">
+                  {u.matches} {plural(u.matches, "jogo", "jogos")} · {fmtNum(u.pct, 0)}%
+                </span>
+              </div>
+              {usages.length > 1 && segmentId === null && onFilter && u.archetype.id !== filterId && (
+                <button type="button" className="btn btn-secondary min-h-[44px] text-xs" onClick={() => onFilter(u.archetype.id)}>
+                  Ver carta só como {u.archetype.label}
+                </button>
+              )}
+            </div>
+            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
+              <div className="flex items-baseline justify-between gap-2 sm:block">
+                <dt className="text-xs text-fg-muted">Nota média</dt>
+                <dd className="font-semibold tabular-nums text-fg">{u.avgRating == null ? "—" : fmtNum(u.avgRating, 2)}</dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2 sm:block">
+                <dt className="text-xs text-fg-muted">Overall médio</dt>
+                <dd className="font-semibold tabular-nums text-fg">{u.avgProOverall == null ? "—" : fmtNum(u.avgProOverall, 1)}</dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2 sm:block">
+                <dt className="text-xs text-fg-muted">Gols</dt>
+                <dd className="font-semibold tabular-nums text-fg">{u.goals}</dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2 sm:block">
+                <dt className="text-xs text-fg-muted">Assistências</dt>
+                <dd className="font-semibold tabular-nums text-fg">{u.assists}</dd>
+              </div>
+            </dl>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /**
  * Detalhe da carta em diálogo modal acessível:
  * foco vai para o diálogo e volta ao elemento de origem, Tab fica preso dentro, Esc / clique no fundo fecham,
@@ -35,12 +121,18 @@ export default function CardDetail({
   clubName,
   onClose,
   onCompare,
+  archetypeFilterId = null,
+  onFilterArchetype,
 }: {
   card: PlayerCard;
   crestAssetId?: string | null;
   clubName?: string | null;
   onClose: () => void;
   onCompare: (card: PlayerCard) => void;
+  /** Filtro de arquétipo ativo na página (a carta já foi recalculada só com esse arquétipo). */
+  archetypeFilterId?: number | null;
+  /** Aplica o filtro de arquétipo da página (fecha o detalhe). */
+  onFilterArchetype?: (archetypeId: number) => void;
 }) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -153,6 +245,21 @@ export default function CardDetail({
               </div>
             )}
 
+            {scoringHint(card) && (
+              <p role="note" className="flex items-start gap-2 rounded-xl border border-border bg-surface-sunken px-3 py-2 text-sm text-fg-secondary">
+                <Info size={16} aria-hidden="true" className="mt-0.5 flex-shrink-0 text-fg-muted" />
+                <span>
+                  {scoringHint(card)}.
+                  {overallByPositionDiff(card) !== null && (
+                    <>
+                      {" "}
+                      <strong className="text-fg">Pela posição: {overallByPositionDiff(card)}</strong> (overall {card.overall} com os pesos do arquétipo).
+                    </>
+                  )}
+                </span>
+              </p>
+            )}
+
             <section aria-label="Perfil por eixo">
               <h3 className="mb-2 font-display text-sm font-bold uppercase tracking-widest text-fg-subtle">Perfil</h3>
               <RadarWithTable axes={axes} series={series} ariaLabel={radarLabel} showValues />
@@ -166,6 +273,15 @@ export default function CardDetail({
               </div>
               <p className="mt-1.5 text-xs text-fg-muted">Da mais recente (esquerda) para a mais antiga.</p>
             </section>
+
+            {card.archetypes && card.archetypes.length > 0 && (
+              <ArchetypesUsed
+                usages={card.archetypes}
+                filterId={archetypeFilterId}
+                onFilter={onFilterArchetype}
+                segmentId={card.segmentKey ? card.archetype?.id ?? 0 : null}
+              />
+            )}
 
             <section aria-label="Números">
               <h3 className="mb-1 font-display text-sm font-bold uppercase tracking-widest text-fg-subtle">Números</h3>

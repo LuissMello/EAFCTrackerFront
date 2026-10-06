@@ -8,6 +8,10 @@ import { PlugZap, Star } from "lucide-react";
 import { GiGoalKeeper } from "react-icons/gi";
 import { useNumberFormats } from "../hooks/useNumberFormats.ts";
 import { pct } from "../utils/number.ts";
+import { PlayerArchetype } from "./archetypes/PlayerArchetype.tsx";
+import { ArchetypeBadge } from "./archetypes/ArchetypeBadge.tsx";
+import { SegmentToggle, SegmentToggleSpacer, useSegmentExpansion } from "./archetypes/SegmentToggle.tsx";
+import { positionShortLabel } from "../utils/archetypeFilters.ts";
 
 interface PlayerStatsTableProps {
     players: PlayerStats[];
@@ -26,6 +30,10 @@ interface PlayerStatsTableProps {
     onSortChange?: (key: keyof PlayerStats, order: "asc" | "desc") => void;
     /** Quando true, oculta o cabeçalho e o rodapé/paginação */
     compactMode?: boolean;
+    /** Linhas de UMA partida: mostra "—" quando o jogador não tem arquétipo registrado (id 0). Nos agregados o selo simplesmente não aparece. */
+    showEmptyArchetype?: boolean;
+    /** Ao separar um jogador por arquétipo (segments), mostra só os segmentos que passam neste filtro (o mesmo Posição/Arquétipo da página). */
+    segmentFilter?: (segment: PlayerStats) => boolean;
 }
 
 const clamp = (v: number, min = 0, max = 100) => Math.max(min, Math.min(max, v));
@@ -190,7 +198,10 @@ export function PlayerStatsTable({
     hiddenColumns = [],
     onSortChange,
     compactMode = false,
+    showEmptyArchetype = false,
+    segmentFilter,
 }: PlayerStatsTableProps) {
+    const { isOpen: isSegOpen, setOpen: setSegOpen } = useSegmentExpansion();
     const [sortKey, setSortKey] = useState<keyof PlayerStats>(initialSortKey);
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialSortOrder);
     const [page, setPage] = useState(1);
@@ -355,83 +366,11 @@ export function PlayerStatsTable({
     const columns = allColumns.filter((col) => !effectiveHiddenColumns.includes(col.key));
     const totalWeight = columns.reduce((a, c) => a + (COLUMN_WEIGHT[c.key] ?? 8), 0) || 1;
 
-    return (
-        <section>
-            {effectiveShowTitle && <h2 className="text-xl font-bold mb-2 text-center">Estatísticas dos Jogadores</h2>}
+    const segmentsOf = (p: PlayerStats): PlayerStats[] | null => (p.segments && p.segments.length > 1 ? p.segments : null);
+    const anySegments = pageItems.some((p) => segmentsOf(p) !== null);
 
-            <div className="rounded-lg border bg-surface shadow overflow-hidden">
-                <div className="scroll-touch-x overflow-x-auto">
-                <table className="table-fixed w-full text-xs xl:text-sm text-center" style={{ minWidth: columns.length * 68 }}>
-                    <colgroup>
-                        {columns.map((c) => (
-                            <col key={c.key} style={{ width: `${(((COLUMN_WEIGHT[c.key] ?? 8) / totalWeight) * 100).toFixed(2)}%` }} />
-                        ))}
-                    </colgroup>
-                    <thead className="bg-surface-raised">
-                        <tr>
-                            {columns.map((c) => {
-                                const headerContent = (
-                                    <div className="flex items-center justify-center gap-0.5 leading-tight">
-                                        <span title={c.full ?? c.label}>{c.label}</span>
-                                        <SortIcon active={sortKey === (c.key as keyof PlayerStats)} order={sortOrder} />
-                                    </div>
-                                );
-
-                                const isProNameCol = c.key === "proName";
-                                const isActiveSort = sortKey === (c.key as keyof PlayerStats);
-
-                                return (
-                                    <th
-                                        key={c.key}
-                                        onClick={() => handleSort(c.key as keyof PlayerStats)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter" || e.key === " ") {
-                                                e.preventDefault();
-                                                handleSort(c.key as keyof PlayerStats);
-                                            }
-                                        }}
-                                        tabIndex={0}
-                                        className={`px-1 py-2 xl:px-2 cursor-pointer select-none font-semibold hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent group${
-                                            isActiveSort ? " bg-accent/10 text-accent" : isProNameCol ? " bg-surface-raised" : ""
-                                        }${isProNameCol ? ` ${STICKY_PLAYER_HEADER}` : ""}`}
-                                        aria-sort={
-                                            sortKey === (c.key as keyof PlayerStats)
-                                                ? sortOrder === "asc"
-                                                    ? "ascending"
-                                                    : "descending"
-                                                : "none"
-                                        }
-                                        scope="col"
-                                    >
-                                        {c.tooltip ? <Tooltip content={c.tooltip}>{headerContent}</Tooltip> : headerContent}
-                                    </th>
-                                );
-                            })}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading && (
-                            <tr>
-                                <td colSpan={columns.length} className="p-4">
-                                    <div className="space-y-2">
-                                        <Skeleton className="h-6" />
-                                        <Skeleton className="h-6" />
-                                        <Skeleton className="h-6" />
-                                    </div>
-                                </td>
-                            </tr>
-                        )}
-
-                        {!loading && pageItems.length === 0 && (
-                            <tr>
-                                <td colSpan={columns.length} className="p-4 text-fg-muted">
-                                    Nenhum jogador encontrado.
-                                </td>
-                            </tr>
-                        )}
-
-                        {!loading &&
-                            pageItems.map((p, rowIdx) => {
+    /** Uma linha de jogador (ou de segmento, quando `seg` vem preenchido) com as mesmas colunas/formatos. */
+    const renderRow = (p: PlayerStats, rowIdx: number, seg?: { index: number; parent: PlayerStats; count: number }) => {
                                 const saves = Number(p.totalSaves || 0);
                                 const conceded = Number(p.totalGoalsConceded || 0);
                                 const savePct = saves + conceded > 0 ? pct(saves, saves + conceded) : null;
@@ -476,8 +415,23 @@ export function PlayerStatsTable({
                                     </span>
                                 ) : null;
 
-                                const stripeClass = rowClass ? "" : rowIdx % 2 === 1 ? "bg-surface-raised" : "";
-                                const rowBgClass = rowClass || stripeClass || "bg-surface";
+                                const stripeClass = seg ? "bg-surface-sunken" : rowClass ? "" : rowIdx % 2 === 1 ? "bg-surface-raised" : "";
+                                const rowBgClass = seg ? "bg-surface-sunken" : rowClass || stripeClass || "bg-surface";
+
+                                // controle único (esquerda) para separar/juntar arquétipos; segmentos reaproveitam as mesmas colunas
+                                const own = seg ? null : segmentsOf(p);
+                                const segKey = String(seg ? seg.parent.playerId : p.playerId);
+                                const lead = seg ? (
+                                    seg.index === 0 ? (
+                                        <SegmentToggle idKey={segKey} open onToggle={(o) => setSegOpen(segKey, o)} name={p.proName} count={seg.count} />
+                                    ) : (
+                                        <SegmentToggleSpacer />
+                                    )
+                                ) : own ? (
+                                    <SegmentToggle idKey={segKey} open={false} onToggle={(o) => setSegOpen(segKey, o)} name={p.proName} count={own.length} />
+                                ) : anySegments ? (
+                                    <SegmentToggleSpacer />
+                                ) : null;
 
                                 const renderCell = (col: { key: string }) => {
                                     switch (col.key) {
@@ -487,22 +441,51 @@ export function PlayerStatsTable({
                                                     key={col.key}
                                                     className={`px-1 py-1.5 xl:px-2 font-medium text-left [overflow-wrap:anywhere] ${STICKY_PLAYER_CELL} ${rowBgClass}`}
                                                 >
-                                                    {Icons}
-                                                    {p.playerEntityId ? (
-                                                        <Link
-                                                            to={`/player/${p.playerEntityId}`}
-                                                            className="hover:underline hover:text-accent transition-colors"
-                                                        >
-                                                            {p.proName}
-                                                        </Link>
-                                                    ) : (
-                                                        p.proName
-                                                    )}
-                                                    {hasRedCard && (
-                                                        <span className="ml-1.5 inline-flex align-middle">
-                                                            <RedCardBadge count={Number(p.totalRedCards || 0)} />
-                                                        </span>
-                                                    )}
+                                                    <div className="flex items-start gap-1.5">
+                                                        {lead}
+                                                        <div className="min-w-0">
+                                                            {seg && seg.index > 0 ? (
+                                                                <span className="sr-only">{p.proName}</span>
+                                                            ) : (
+                                                                <>
+                                                                    {Icons}
+                                                                    {p.playerEntityId ? (
+                                                                        <Link
+                                                                            to={`/player/${p.playerEntityId}`}
+                                                                            className="hover:underline hover:text-accent transition-colors"
+                                                                        >
+                                                                            {p.proName}
+                                                                        </Link>
+                                                                    ) : (
+                                                                        p.proName
+                                                                    )}
+                                                                    {hasRedCard && (
+                                                                        <span className="ml-1.5 inline-flex align-middle">
+                                                                            <RedCardBadge count={Number(p.totalRedCards || 0)} />
+                                                                        </span>
+                                                                    )}
+                                                                </>
+                                                            )}
+                                                            {seg ? (
+                                                                <div className="mt-0.5 flex flex-wrap items-center gap-1 font-normal leading-none">
+                                                                    <ArchetypeBadge archetype={p.archetype} compact className="!px-1.5 !py-0 !text-[11px] leading-[1.15rem]" />
+                                                                    {(p.position ?? p.pos) && (
+                                                                        <span className="text-[11px] text-fg-subtle">{positionShortLabel(p.position ?? p.pos)}</span>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                (p.archetype || (p.archetypes && p.archetypes.length > 0) || showEmptyArchetype) && (
+                                                                    <div className="mt-0.5 leading-none">
+                                                                        <PlayerArchetype
+                                                                            archetype={p.archetype}
+                                                                            archetypes={p.archetypes}
+                                                                            hideEmpty={!showEmptyArchetype}
+                                                                        />
+                                                                    </div>
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                 </td>
                                             );
                                         case "matchesPlayed":
@@ -647,10 +630,99 @@ export function PlayerStatsTable({
                                 };
 
                                 return (
-                                    <tr key={p.playerId} className={`hover:bg-surface-raised ${rowClass || stripeClass}`}>
+                                    <tr
+                                        key={seg ? `${p.playerId}-seg-${seg.index}` : p.playerId}
+                                        className={`hover:bg-surface-raised ${seg ? stripeClass : rowClass || stripeClass}`}
+                                    >
                                         {columns.map((col) => renderCell(col))}
                                     </tr>
                                 );
+    };
+
+    return (
+        <section>
+            {effectiveShowTitle && <h2 className="text-xl font-bold mb-2 text-center">Estatísticas dos Jogadores</h2>}
+
+            <div className="rounded-lg border bg-surface shadow overflow-hidden">
+                <div className="scroll-touch-x overflow-x-auto">
+                <table className="table-fixed w-full text-xs xl:text-sm text-center" style={{ minWidth: columns.length * 68 }}>
+                    <colgroup>
+                        {columns.map((c) => (
+                            <col key={c.key} style={{ width: `${(((COLUMN_WEIGHT[c.key] ?? 8) / totalWeight) * 100).toFixed(2)}%` }} />
+                        ))}
+                    </colgroup>
+                    <thead className="bg-surface-raised">
+                        <tr>
+                            {columns.map((c) => {
+                                const headerContent = (
+                                    <div className="flex items-center justify-center gap-0.5 leading-tight">
+                                        <span title={c.full ?? c.label}>{c.label}</span>
+                                        <SortIcon active={sortKey === (c.key as keyof PlayerStats)} order={sortOrder} />
+                                    </div>
+                                );
+
+                                const isProNameCol = c.key === "proName";
+                                const isActiveSort = sortKey === (c.key as keyof PlayerStats);
+
+                                return (
+                                    <th
+                                        key={c.key}
+                                        onClick={() => handleSort(c.key as keyof PlayerStats)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter" || e.key === " ") {
+                                                e.preventDefault();
+                                                handleSort(c.key as keyof PlayerStats);
+                                            }
+                                        }}
+                                        tabIndex={0}
+                                        className={`px-1 py-2 xl:px-2 cursor-pointer select-none font-semibold hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent group${
+                                            isActiveSort ? " bg-accent/10 text-accent" : isProNameCol ? " bg-surface-raised" : ""
+                                        }${isProNameCol ? ` ${STICKY_PLAYER_HEADER}` : ""}`}
+                                        aria-sort={
+                                            sortKey === (c.key as keyof PlayerStats)
+                                                ? sortOrder === "asc"
+                                                    ? "ascending"
+                                                    : "descending"
+                                                : "none"
+                                        }
+                                        scope="col"
+                                    >
+                                        {c.tooltip ? <Tooltip content={c.tooltip}>{headerContent}</Tooltip> : headerContent}
+                                    </th>
+                                );
+                            })}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading && (
+                            <tr>
+                                <td colSpan={columns.length} className="p-4">
+                                    <div className="space-y-2">
+                                        <Skeleton className="h-6" />
+                                        <Skeleton className="h-6" />
+                                        <Skeleton className="h-6" />
+                                    </div>
+                                </td>
+                            </tr>
+                        )}
+
+                        {!loading && pageItems.length === 0 && (
+                            <tr>
+                                <td colSpan={columns.length} className="p-4 text-fg-muted">
+                                    Nenhum jogador encontrado.
+                                </td>
+                            </tr>
+                        )}
+
+                        {!loading &&
+                            pageItems.flatMap((p, rowIdx) => {
+                                const segs = segmentsOf(p);
+                                if (segs && isSegOpen(String(p.playerId))) {
+                                    const shown = segmentFilter ? segs.filter(segmentFilter) : segs;
+                                    const list = shown.length > 0 ? shown : segs;
+                                    return list.map((sg, i) => renderRow(sg, rowIdx, { index: i, parent: p, count: list.length }));
+                                }
+                                return [renderRow(p, rowIdx)];
                             })}
                     </tbody>
                 </table>

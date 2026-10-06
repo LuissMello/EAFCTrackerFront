@@ -14,6 +14,17 @@ export interface LabQuery {
   to?: string | null;
   gameVersion?: number | null;
   minMatches?: number | null;
+  /** Cartas/comparador: considerar só as partidas deste arquétipo. */
+  archetypeId?: number | null;
+  /** Filtro de posição (GOLEIRO | DEFESA | MEIO | ATAQUE). */
+  positionGroup?: string | null;
+  /** Cartas: "archetype" = uma carta por (jogador, arquétipo). Omitido = por jogador. */
+  view?: string | null;
+  /** Cartas: só este jogador (as opções de posição/arquétipo da resposta passam a ser as dele). */
+  playerEntityId?: number | null;
+  /** Comparador: comparar o lado A/B COMO esse arquétipo. */
+  archetypeA?: number | null;
+  archetypeB?: number | null;
 }
 
 function labQueryString(q: LabQuery): string {
@@ -22,6 +33,12 @@ function labQueryString(q: LabQuery): string {
   if (q.to) p.set('to', q.to);
   if (q.gameVersion != null) p.set('gameVersion', String(q.gameVersion));
   if (q.minMatches != null) p.set('minMatches', String(q.minMatches));
+  if (q.archetypeId != null) p.set('archetypeId', String(q.archetypeId));
+  if (q.positionGroup) p.set('positionGroup', q.positionGroup);
+  if (q.view === 'archetype') p.set('view', 'archetype');
+  if (q.playerEntityId != null) p.set('playerEntityId', String(q.playerEntityId));
+  if (q.archetypeA != null) p.set('archetypeA', String(q.archetypeA));
+  if (q.archetypeB != null) p.set('archetypeB', String(q.archetypeB));
   const s = p.toString();
   return s ? `?${s}` : '';
 }
@@ -60,7 +77,8 @@ export const API_ENDPOINTS = {
   // Records / Opponents / Player Profile
   CLUB_RECORDS: (clubIds: string) => `/api/Clubs/records?clubIds=${clubIds}`,
   CLUB_OPPONENTS: (clubIds: string) => `/api/Clubs/opponents?clubIds=${clubIds}`,
-  PLAYER_PROFILE: (playerEntityId: number) => `/api/Players/${playerEntityId}/profile`,
+  PLAYER_PROFILE: (playerEntityId: number, f?: { positionGroup?: string | null; archetypeId?: number | null }) =>
+    `/api/Players/${playerEntityId}/profile${labQueryString({ positionGroup: f?.positionGroup, archetypeId: f?.archetypeId })}`,
 
   // Noite de jogo / Laboratório / Retrospectiva (públicos, somente leitura)
   GAME_NIGHTS: (clubId: number, gameVersion?: number | null) =>
@@ -75,9 +93,16 @@ export const API_ENDPOINTS = {
   // Cartas de jogador + comparador (públicos, somente leitura)
   PLAYER_CARDS: (clubId: number, q: LabQuery) => `/api/clubs/${clubId}/player-cards${labQueryString(q)}`,
   PLAYER_COMPARE: (clubId: number, a: number, b: number, q: LabQuery) => {
-    const base = labQueryString({ from: q.from, to: q.to, gameVersion: q.gameVersion });
+    const base = labQueryString({ from: q.from, to: q.to, gameVersion: q.gameVersion, archetypeId: q.archetypeId, positionGroup: q.positionGroup, archetypeA: q.archetypeA, archetypeB: q.archetypeB });
     return `/api/clubs/${clubId}/player-compare?a=${a}&b=${b}${base ? `&${base.slice(1)}` : ''}`;
   },
+
+  // Arquétipos (catálogo público + resumo do clube; admin edita o catálogo)
+  ARCHETYPES: '/api/archetypes',
+  CLUB_ARCHETYPES_SUMMARY: (clubId: number, q: LabQuery) =>
+    `/api/clubs/${clubId}/archetypes/summary${labQueryString({ from: q.from, to: q.to, gameVersion: q.gameVersion, archetypeId: q.archetypeId, positionGroup: q.positionGroup })}`,
+  ADMIN_ARCHETYPES: '/api/admin/archetypes',
+  ADMIN_ARCHETYPE: (id: number) => `/api/admin/archetypes/${id}`,
 
   // System
   FETCH_LAST_RUN: '/api/fetch/last-run',

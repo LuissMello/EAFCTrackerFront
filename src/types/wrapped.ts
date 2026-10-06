@@ -1,4 +1,5 @@
 // Contrato: GET /api/clubs/{clubId}/wrapped?gameVersion=
+import type { ArchetypeRef, ArchetypeUsage } from "./archetypes.ts";
 
 export interface WrappedStreak {
   length: number;
@@ -26,6 +27,9 @@ export interface WrappedPlayerStat {
   playerEntityId: number;
   name: string;
   value: number;
+  /** Arquétipo principal do jogador no recorte (opcional: só quando o backend envia). */
+  archetype?: ArchetypeRef | null;
+  archetypes?: ArchetypeUsage[];
   [extra: string]: unknown;
 }
 
@@ -114,4 +118,13 @@ export interface WrappedData {
     srSeries: Array<{ date: string; value: number }>;
   };
   funFacts: string[];
+  /** Arquétipos usados pelo clube no recorte (opcional: backends antigos não enviam). */
+  archetypes?: WrappedArchetypes;
+}
+
+export interface WrappedArchetypes {
+  mostUsed: ArchetypeUsage | null;
+  /** Total de trocas de arquétipo (somando os jogadores). */
+  switches: number;
+  list: ArchetypeUsage[];
 }

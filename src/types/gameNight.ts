@@ -1,4 +1,5 @@
 // Contrato: GET /api/clubs/{clubId}/game-nights e /game-nights/{sessionId}
+import type { ArchetypeRef, ArchetypeUsage } from "./archetypes.ts";
 
 export type MatchResultCode = "W" | "D" | "L";
 
@@ -62,6 +63,29 @@ export interface NightPlayerRow {
   playerEntityId: number;
   name: string;
   position: string | null;
+  matches: number;
+  goals: number;
+  assists: number;
+  preAssists: number;
+  avgRating: number | null;
+  motm: number;
+  redCards: number;
+  /** Arquétipo principal da noite (mais jogos); null sem dado. */
+  archetype?: ArchetypeRef | null;
+  /** Presente quando o jogador usou mais de um arquétipo na noite. */
+  archetypes?: ArchetypeUsage[];
+  /**
+   * Presente quando há mais de uma combinação (arquétipo, grupo da posição) do jogador na noite; ordenado por jogos desc.
+   * Os segmentos somam os totais da linha.
+   */
+  segments?: NightPlayerSegment[];
+}
+
+/** Uma fatia da noite do jogador: mesmos números da linha + o arquétipo e a posição daquela fatia. */
+export interface NightPlayerSegment {
+  archetype: ArchetypeRef | null;
+  position: string | null;
+  positionGroup?: string | null;
   matches: number;
   goals: number;
   assists: number;

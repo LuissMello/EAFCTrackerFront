@@ -1,3 +1,5 @@
+import type { ArchetypeRef, ArchetypeUsage } from "./archetypes.ts";
+
 export interface PlayerStats {
   playerId: number;
   playerEntityId: number;
@@ -31,6 +33,20 @@ export interface PlayerStats {
   proOverallStr: string;
   totalSecondsPlayed: number;
   totalGameTime: number;
+  /** Arquétipo principal no recorte (ou o da partida, em linhas de uma partida); null/ausente = sem dado. */
+  archetype?: ArchetypeRef | null;
+  archetypeId?: number;
+  /** Uso de cada arquétipo no recorte, quando mais de um. */
+  archetypes?: ArchetypeUsage[];
+  /** Posição (texto da EA) e grupo da linha; nos segmentos, os da combinação. */
+  position?: string | null;
+  pos?: string | null;
+  positionGroup?: string | null;
+  /**
+   * Só quando há mais de uma combinação (arquétipo, grupo de posição) no recorte: uma linha por combinação, com os mesmos
+   * campos da linha do jogador recalculados só com os jogos dela (somas aditivas = total da linha principal).
+   */
+  segments?: PlayerStats[];
 }
 
 export interface ClubStats {

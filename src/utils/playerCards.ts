@@ -159,9 +159,39 @@ export function initialsOf(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+/** Identificador estável da carta na grade: `segmentKey` (view por arquétipo) ou o id do jogador. */
+export function cardKey(card: Pick<PlayerCard, "playerEntityId" | "segmentKey">): string {
+  return card.segmentKey ?? String(card.playerEntityId);
+}
+
+/** Texto curto sobre como o overall foi calculado (pesos do arquétipo x da posição); null se o backend não informou. */
+export function scoringHint(card: Pick<PlayerCard, "scoring" | "archetype">): string | null {
+  if (card.scoring === "archetype") return `Nota calculada com os pesos do arquétipo ${card.archetype?.label ?? ""}`.trim();
+  if (card.scoring === "position") return "Nota calculada com os pesos da posição";
+  return null;
+}
+
+/** Overall pelos pesos da posição quando a carta usa os pesos do arquétipo e o valor difere; senão null. */
+export function overallByPositionDiff(card: Pick<PlayerCard, "scoring" | "overall" | "overallByPosition">): number | null {
+  return card.scoring === "archetype" && typeof card.overallByPosition === "number" && card.overallByPosition !== card.overall
+    ? card.overallByPosition
+    : null;
+}
+
+/** Tooltip do overall: como foi calculado + "pela posição: N". */
+export function overallTitle(card: PlayerCard): string | undefined {
+  const hint = scoringHint(card);
+  if (!hint) return undefined;
+  const alt = overallByPositionDiff(card);
+  return alt === null ? hint : `${hint}
+Pela posição: ${alt}`;
+}
+
 export function cardAriaLabel(card: PlayerCard): string {
   const prov = card.provisional ? ", provisória" : "";
-  return `Carta de ${card.name}, ${tierStyle(card.tier).label.toLowerCase()}, overall ${card.overall}${prov}`;
+  const arq = card.archetype ? `, arquétipo ${card.archetype.label}${!card.segmentKey && card.scoring !== "archetype" && (card.archetypes?.length ?? 0) > 1 ? ` e mais ${(card.archetypes?.length ?? 1) - 1}` : ""}` : "";
+  const scoring = card.scoring === "archetype" ? ", nota pelos pesos do arquétipo" : "";
+  return `Carta de ${card.name}, ${tierStyle(card.tier).label.toLowerCase()}, overall ${card.overall}${scoring}${arq}${prov}`;
 }
 
 /* ---------------------------------------------------------------------------
@@ -234,7 +264,7 @@ export function sortCards(cards: PlayerCard[], key: CardSortKey): PlayerCard[] {
     if (a !== null && b !== null && a !== b) return b - a;
     if (y.overall !== x.overall) return y.overall - x.overall;
     if (y.matches !== x.matches) return y.matches - x.matches;
-    return x.name.localeCompare(y.name, "pt-BR");
+    return x.name.localeCompare(y.name, "pt-BR") || cardKey(x).localeCompare(cardKey(y), undefined, { numeric: true });
   });
 }
 

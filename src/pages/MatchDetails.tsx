@@ -12,6 +12,7 @@ import type { MatchResultDto } from "../types/match.ts";
 import { recallMatch } from "../utils/matchHandoff.ts";
 import { MatchEaPostGameStats } from "../components/MatchEaPostGameStats.tsx";
 import { ClubStats, PlayerStats } from "../types/stats.ts";
+import type { ArchetypeRef } from "../types/archetypes.ts";
 import { MatchEventAggregatesResponseDto } from "../types/matchEventAggregates.ts";
 import { crestUrl, API_ENDPOINTS } from "../config/urls.ts";
 import { Crest, EmptyState, PageHeader, PageShell, ResultPill } from "../components/ui.tsx";
@@ -47,6 +48,10 @@ interface PlayerRow {
   tackleSuccessPercent: number;
   goalAccuracyPercent: number;
   winPercent: number;
+
+  /** Arquétipo usado NESTA partida (null/ausente = sem dado, id 0). */
+  archetypeId?: number;
+  archetype?: ArchetypeRef | null;
 }
 
 interface ClubRow extends ClubStats {
@@ -751,6 +756,7 @@ export default function MatchDetails() {
               showSearch={false}
               showTitle={false}
               hiddenColumns={["matchesPlayed", "totalSecondsPlayed", "totalWins", "totalLosses", "totalDraws", "winPercent", "totalMom"]}
+              showEmptyArchetype
               onSortChange={(key, order) => {
                 setSortKey(key);
                 setSortOrder(order);

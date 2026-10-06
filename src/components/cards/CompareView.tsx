@@ -10,12 +10,20 @@ import { CardFace } from "./PlayerCard.tsx";
 import { MetricRows } from "./MetricRows.tsx";
 import { RadarWithTable, type RadarSeries } from "./RadarChart.tsx";
 import { RatingSeriesChart, dayTime } from "./RatingSeriesChart.tsx";
+import { ArchetypeBadge } from "../archetypes/ArchetypeBadge.tsx";
+import { PlayerArchetype } from "../archetypes/PlayerArchetype.tsx";
+import { fallbackArchetypeLabel } from "../../utils/archetypeFilters.ts";
 
 const SELECT_CLASS =
   "h-11 w-full min-w-0 rounded-lg border border-border bg-surface-sunken px-3 text-sm font-medium text-fg outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40";
 
 export interface PlayerOption {
+  /** Chave única da opção: `<jogador>-<arquétipo|0>` (o mesmo jogador pode aparecer com arquétipos diferentes). */
+  key: string;
   id: number;
+  /** Arquétipo do lado (só na visão por arquétipo); null = jogador inteiro. */
+  arq: number | null;
+  /** Texto exibido: "Jogador" ou "Jogador · Arquétipo". */
   name: string;
 }
 
@@ -30,14 +38,14 @@ export function ComparePickers({
   onClear,
 }: {
   options: PlayerOption[];
-  a: number | null;
-  b: number | null;
-  onChangeA: (id: number | null) => void;
-  onChangeB: (id: number | null) => void;
+  a: string | null;
+  b: string | null;
+  onChangeA: (opt: PlayerOption | null) => void;
+  onChangeB: (opt: PlayerOption | null) => void;
   onSwap: () => void;
   onClear: () => void;
 }) {
-  const sel = (label: string, slot: "A" | "B", value: number | null, other: number | null, onChange: (id: number | null) => void) => (
+  const sel = (label: string, slot: "A" | "B", value: string | null, other: string | null, onChange: (opt: PlayerOption | null) => void) => (
     <div className="flex min-w-0 flex-col gap-1">
       <label htmlFor={`cmp-${slot}`} className="text-xs font-medium uppercase tracking-wide text-fg-muted">
         {label}
@@ -46,13 +54,13 @@ export function ComparePickers({
         id={`cmp-${slot}`}
         className={SELECT_CLASS}
         value={value ?? ""}
-        onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+        onChange={(e) => onChange(options.find((o) => o.key === e.target.value) ?? null)}
       >
         <option value="">Escolher jogador…</option>
         {options.map((o) => (
-          <option key={o.id} value={o.id} disabled={o.id === other}>
+          <option key={o.key} value={o.key} disabled={o.key === other}>
             {o.name}
-            {o.id === other ? " (já é o outro)" : ""}
+            {o.key === other ? " (já é o outro)" : ""}
           </option>
         ))}
       </select>
@@ -198,6 +206,82 @@ function SeriesSection({ series, nameA, nameB }: { series: RatingSeriesPoint[]; 
   );
 }
 
+/**
+ * Arquétipo (principal) dos dois lados + aviso quando diferem. Sem filtro, a nota/atributos de cada carta misturam os
+ * arquétipos que a pessoa usou; com arquétipos diferentes a comparação não é "na mesma base".
+ */
+function ArchetypeCompare({
+  a,
+  b,
+  filterId,
+  positionLabel,
+  asArchetype = false,
+}: {
+  a: PlayerCard;
+  b: PlayerCard;
+  filterId: number | null;
+  positionLabel: string | null;
+  asArchetype?: boolean;
+}) {
+  const aa = a.archetype ?? null;
+  const bb = b.archetype ?? null;
+  // contrato antigo/sem campo: não mostra nada
+  if (a.archetype === undefined && b.archetype === undefined) return null;
+  const aMany = (a.archetypes?.length ?? 0) > 1;
+  const bMany = (b.archetypes?.length ?? 0) > 1;
+  const ids = (c: PlayerCard) => (c.archetypes && c.archetypes.length > 0 ? c.archetypes.map((u) => u.archetype.id) : c.archetype ? [c.archetype.id] : []);
+  const idsA = ids(a).sort((x, y) => x - y).join(",");
+  const idsB = ids(b).sort((x, y) => x - y).join(",");
+  const differ = idsA !== idsB || (aa?.id ?? 0) !== (bb?.id ?? 0);
+  const side = (label: "A" | "B", c: PlayerCard) => (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <span className="text-xs font-bold text-fg-muted">{label}</span>
+      <PlayerArchetype archetype={c.archetype} archetypes={asArchetype ? undefined : c.archetypes} compact={false} hideEmpty={false} layout="responsive" />
+    </div>
+  );
+  return (
+    <section aria-label="Arquétipos dos jogadores" className="space-y-2">
+      <div className="mx-auto grid max-w-lg grid-cols-2 gap-3 sm:gap-4">
+        {side("A", a)}
+        {side("B", b)}
+      </div>
+      {asArchetype ? (
+        <p className="text-center text-xs text-fg-muted">
+          Cada lado usa só os jogos no arquétipo escolhido, com as notas pelos pesos desse arquétipo
+          {a.overallByPosition !== undefined && b.overallByPosition !== undefined
+            ? ` (pela posição: A ${a.overallByPosition}, B ${b.overallByPosition})`
+            : ""}
+          .
+        </p>
+      ) : filterId !== null || positionLabel ? (
+        <p className="text-center text-xs text-fg-muted">
+          Filtro ativo: os dois lados usam só os jogos
+          {positionLabel ? <> na posição <strong className="text-fg-secondary">{positionLabel}</strong></> : null}
+          {filterId !== null ? (
+            <>
+              {" "}como{" "}
+              <ArchetypeBadge archetype={aa ?? bb ?? { id: filterId, name: null, label: fallbackArchetypeLabel(filterId), shortName: null, positionGroup: null }} />
+            </>
+          ) : null}
+          .
+        </p>
+      ) : differ ? (
+        <div role="note" className="flex items-start gap-2 rounded-xl border border-gold/40 bg-gold-soft px-3 py-2 text-sm text-gold-fg">
+          <Info size={16} aria-hidden="true" className="mt-0.5 flex-shrink-0" />
+          <p>
+            <strong>Arquétipos diferentes:</strong>{" "}
+            {a.name} {aa ? `joga como ${aa.label}${aMany ? " (e outros)" : ""}` : "não tem arquétipo registrado"};{" "}
+            {b.name} {bb ? `joga como ${bb.label}${bMany ? " (e outros)" : ""}` : "não tem arquétipo registrado"}. Notas e overall mudam
+            com o arquétipo, então a comparação direta pode enganar. Use o filtro <strong>Arquétipo</strong> para comparar na mesma base.
+          </p>
+        </div>
+      ) : aa ? (
+        <p className="text-center text-xs text-fg-muted">Os dois jogam com o mesmo arquétipo principal: comparação na mesma base.</p>
+      ) : null}
+    </section>
+  );
+}
+
 export function CompareSkeleton() {
   return (
     <div className="space-y-4" role="status" aria-busy="true">
@@ -214,14 +298,25 @@ export function CompareSkeleton() {
 
 /** Resultado da comparação (radar sobreposto, métricas, com/sem os dois, notas por partida). */
 export function CompareResult({
-  data,
+  data: data0,
   crestAssetId,
   clubName,
+  archetypeFilterId = null,
+  positionFilterLabel = null,
 }: {
   data: PlayerCompareResponse;
   crestAssetId?: string | null;
   clubName?: string | null;
+  archetypeFilterId?: number | null;
+  positionFilterLabel?: string | null;
 }) {
+  // Comparando COMO um arquétipo específico em cada lado: o mesmo jogador pode ser A e B, então os nomes levam o arquétipo
+  const explicit = data0.archetypeIdA != null || data0.archetypeIdB != null;
+  const data = useMemo<PlayerCompareResponse>(() => {
+    if (!explicit) return data0;
+    const tag = (c: PlayerCard) => `${c.name} · ${c.archetype?.label ?? "sem arquétipo"}`;
+    return { ...data0, a: { ...data0.a, name: tag(data0.a) }, b: { ...data0.b, name: tag(data0.b) } };
+  }, [data0, explicit]);
   const { a, b } = data;
   const keys = useMemo(() => compareAxisKeys(a, b), [a, b]);
   const axes = useMemo(() => axisEntries(a, keys), [a, keys]);
@@ -255,7 +350,7 @@ export function CompareResult({
         <div className="space-y-5">
           <div className="mx-auto grid max-w-lg grid-cols-2 gap-3 pt-2 sm:gap-4">
             {([a, b] as PlayerCard[]).map((c, i) => (
-              <div key={c.playerEntityId} className="relative min-w-0">
+              <div key={`${i}-${c.playerEntityId}`} className="relative min-w-0">
                 <CardFace card={c} crestAssetId={crestAssetId} clubName={clubName} />
                 <span
                   aria-hidden="true"
@@ -267,6 +362,8 @@ export function CompareResult({
               </div>
             ))}
           </div>
+
+          <ArchetypeCompare a={a} b={b} filterId={archetypeFilterId} positionLabel={positionFilterLabel} asArchetype={explicit} />
 
           {a.matches === 0 || b.matches === 0 ? (
             <p role="status" className="text-center text-sm text-fg-secondary">
@@ -320,6 +417,8 @@ export function CompareView({
   onClear,
   crestAssetId,
   clubName,
+  archetypeFilterId = null,
+  positionFilterLabel = null,
 }: {
   ready: boolean;
   needHint: string;
@@ -330,6 +429,8 @@ export function CompareView({
   onClear: () => void;
   crestAssetId?: string | null;
   clubName?: string | null;
+  archetypeFilterId?: number | null;
+  positionFilterLabel?: string | null;
 }) {
   if (!ready) {
     return (
@@ -354,5 +455,5 @@ export function CompareView({
     return <ErrorPanel message={error.message} onRetry={onRetry} />;
   }
   if (loading || !data) return <CompareSkeleton />;
-  return <CompareResult data={data} crestAssetId={crestAssetId} clubName={clubName} />;
+  return <CompareResult data={data} crestAssetId={crestAssetId} clubName={clubName} archetypeFilterId={archetypeFilterId} positionFilterLabel={positionFilterLabel} />;
 }

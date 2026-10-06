@@ -1,10 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api, { isCanceled } from "../services/api.ts";
 import { useRefresh } from "../hooks/useRefresh.tsx";
 import { API_ENDPOINTS } from "../config/urls.ts";
 import { PageHeader, PageShell, RatingPill, ResultPill, Outcome } from "../components/ui.tsx";
 import { fmtDateBR } from "../utils/date.ts";
+import ArchetypeBadge from "../components/archetypes/ArchetypeBadge.tsx";
+import { ArchetypeTimeline, ArchetypeUsageList } from "../components/archetypes/ArchetypeUsageSection.tsx";
+import PositionArchetypeFilter from "../components/archetypes/PositionArchetypeFilter.tsx";
+import { useArchetypeFilter } from "../hooks/useArchetypeFilter.ts";
+import { optionsFromAvailable, type ArchetypeOption } from "../utils/archetypeFilters.ts";
+import { fmtNum } from "../utils/analyticsFormat.ts";
+import type { ArchetypeChange, ArchetypeRef, ArchetypeUsage, AvailableArchetypeItem, AvailablePositionGroup, FilteredSummary } from "../types/archetypes.ts";
 
 interface PlayerMatchHistoryDto {
     matchId: number;
@@ -20,6 +27,8 @@ interface PlayerMatchHistoryDto {
     goalsFor: number;
     goalsAgainst: number;
     opponentName: string | null;
+    /** Arquétipo usado NESTA partida (null = sem dado). */
+    archetype?: ArchetypeRef | null;
 }
 
 interface PlayerProfileDto {
@@ -50,6 +59,14 @@ interface PlayerProfileDto {
     proOverall: number | null;
     positions: Record<string, number>;
     history: PlayerMatchHistoryDto[];
+    archetypes?: ArchetypeUsage[];
+    archetypeChanges?: ArchetypeChange[];
+    /** Com o filtro Posição → Arquétipo: resumo só dessas partidas (os totais acima não mudam). */
+    filteredSummary?: FilteredSummary | null;
+    positionGroup?: string | null;
+    archetypeId?: number | null;
+    availableArchetypes?: AvailableArchetypeItem[];
+    availablePositionGroups?: AvailablePositionGroup[];
 }
 
 
@@ -107,37 +124,54 @@ export default function PlayerProfile() {
     const { playerEntityId } = useParams<{ playerEntityId: string }>();
     const navigate = useNavigate();
     const [data, setData] = useState<PlayerProfileDto | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [fetching, setFetching] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [distOpen, setDistOpen] = useState(false);
+    const [filter, setFilter] = useArchetypeFilter();
+    const [options, setOptions] = useState<ArchetypeOption[]>([]);
+    const lastPlayer = useRef<string | undefined>(undefined);
+    const { positionGroup, archetypeId } = filter;
+    // carregamento inicial (sem dados) mostra o esqueleto; trocar o filtro mantém a tela e só atualiza
+    const loading = fetching && data === null;
 
     useEffect(() => {
         if (!playerEntityId) return;
+        if (lastPlayer.current !== playerEntityId) {
+            lastPlayer.current = playerEntityId;
+            setData(null);
+            setOptions([]);
+        }
         const controller = new AbortController();
         const { signal } = controller;
         (async () => {
-            setLoading(true);
+            setFetching(true);
             setError(null);
             try {
                 const { data: resp } = await api.get<PlayerProfileDto>(
-                    API_ENDPOINTS.PLAYER_PROFILE(Number(playerEntityId)),
+                    API_ENDPOINTS.PLAYER_PROFILE(Number(playerEntityId), { positionGroup, archetypeId }),
                     { signal }
                 );
                 if (signal.aborted) return;
                 setData(resp);
+                if (resp.availableArchetypes) setOptions(optionsFromAvailable(resp.availableArchetypes));
             } catch (e: any) {
                 if (signal.aborted || isCanceled(e)) return;
                 if (e?.response?.status === 404) {
                     setError("Jogador não encontrado.");
+                } else if (e?.response?.status === 400) {
+                    setError("Filtro inválido. Limpe o filtro de posição/arquétipo e tente de novo.");
                 } else {
                     setError(e?.message ?? "Erro ao carregar perfil");
                 }
             } finally {
-                if (!signal.aborted) setLoading(false);
+                if (!signal.aborted) setFetching(false);
             }
         })();
         return () => controller.abort();
-    }, [playerEntityId, refreshKey]);
+    }, [playerEntityId, refreshKey, positionGroup, archetypeId]);
+
+    const filterActive = positionGroup !== null || archetypeId !== null;
+    const clearFilter = () => setFilter({ positionGroup: null, archetypeId: null });
 
     const positionEntries = data
         ? Object.entries(data.positions).sort((a, b) => b[1] - a[1])
@@ -315,12 +349,96 @@ export default function PlayerProfile() {
                         </div>
                     )}
 
+                    <section aria-labelledby="profile-filter-title" className="bg-surface rounded-xl border shadow-sm p-4 space-y-3" aria-busy={fetching}>
+                        <h2 id="profile-filter-title" className="font-semibold text-fg text-sm">Filtrar por posição e arquétipo</h2>
+                        <PositionArchetypeFilter value={filter} onChange={setFilter} archetypeOptions={options} showCount countUnit={["jogo", "jogos"]} />
+                        <p className="text-xs text-fg-muted">
+                            Vale para o histórico de partidas e a distribuição. A posição também filtra a seção Arquétipos, que continua listando todos os arquétipos dela. Os totais e recordes de cima não mudam.
+                        </p>
+                        {filterActive && (
+                            <div role="status" className="rounded-lg border border-border bg-surface-raised p-3 text-sm space-y-2">
+                                {data.filteredSummary && data.filteredSummary.matches > 0 ? (
+                                    <>
+                                        <p className="font-semibold text-fg">
+                                            {data.filteredSummary.matches} {data.filteredSummary.matches === 1 ? "jogo" : "jogos"} com este filtro
+                                        </p>
+                                        <dl className="grid grid-cols-2 sm:grid-cols-5 gap-x-4 gap-y-2 text-xs">
+                                            <div>
+                                                <dt className="text-fg-subtle">V / E / D</dt>
+                                                <dd className="font-semibold tabular-nums text-fg-secondary">
+                                                    {data.filteredSummary.wins} / {data.filteredSummary.draws} / {data.filteredSummary.losses}
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt className="text-fg-subtle">Gols</dt>
+                                                <dd className="font-semibold tabular-nums text-fg-secondary">{data.filteredSummary.goals}</dd>
+                                            </div>
+                                            <div>
+                                                <dt className="text-fg-subtle">Assistências</dt>
+                                                <dd className="font-semibold tabular-nums text-fg-secondary">{data.filteredSummary.assists}</dd>
+                                            </div>
+                                            <div>
+                                                <dt className="text-fg-subtle">Nota média</dt>
+                                                <dd className="font-semibold tabular-nums text-fg-secondary">{fmtNum(data.filteredSummary.avgRating, 2)}</dd>
+                                            </div>
+                                            <div>
+                                                <dt className="text-fg-subtle">Overall médio</dt>
+                                                <dd className="font-semibold tabular-nums text-fg-secondary">{fmtNum(data.filteredSummary.avgProOverall, 1)}</dd>
+                                            </div>
+                                        </dl>
+                                    </>
+                                ) : (
+                                    <p className="text-fg-muted">
+                                        {fetching ? "Atualizando…" : "Nenhum jogo deste jogador com este filtro."}
+                                    </p>
+                                )}
+                                <button type="button" className="btn btn-secondary min-h-[44px]" onClick={clearFilter}>
+                                    Limpar filtro
+                                </button>
+                            </div>
+                        )}
+                    </section>
+
+                    {data.archetypes && data.archetypes.length > 0 && (
+                        <section aria-labelledby="profile-arch-title" className="bg-surface rounded-xl border shadow-sm overflow-hidden">
+                            <div className="px-4 py-3 border-b bg-surface-raised flex items-center justify-between gap-2">
+                                <h2 id="profile-arch-title" className="font-semibold text-fg text-sm">Arquétipos</h2>
+                                <span className="text-xs bg-surface-sunken text-fg-muted px-2 py-0.5 rounded-full">
+                                    {data.archetypes.length} {data.archetypes.length === 1 ? "usado" : "usados"}
+                                </span>
+                            </div>
+                            <ArchetypeUsageList usage={data.archetypes} />
+                            {(() => {
+                                const withData = data.archetypes.reduce((a, u) => a + u.matches, 0);
+                                const without = data.totalMatches - withData;
+                                return !filterActive && without > 0 ? (
+                                    <p className="px-4 py-2 border-t text-[11px] text-fg-subtle">
+                                        {without} {without === 1 ? "partida" : "partidas"} sem arquétipo registrado (partidas antigas) não entram na conta.
+                                    </p>
+                                ) : null;
+                            })()}
+                            <div className="px-4 py-3 border-t">
+                                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-3">Trocas de arquétipo</h3>
+                                {data.archetypeChanges && data.archetypeChanges.length > 0 ? (
+                                    <ArchetypeTimeline changes={data.archetypeChanges} />
+                                ) : (
+                                    <p className="text-sm text-fg-muted">Nenhuma troca registrada: sempre o mesmo arquétipo.</p>
+                                )}
+                            </div>
+                        </section>
+                    )}
+
                     <div className="bg-surface rounded-xl border shadow-sm overflow-hidden">
                         <div className="px-4 py-3 border-b bg-surface-raised flex items-center justify-between">
                             <span className="font-semibold text-fg text-sm">Histórico de Partidas</span>
                             <span className="text-xs bg-surface-sunken text-fg-muted px-2 py-0.5 rounded-full">{data.history.length} partidas</span>
                         </div>
-                        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                        {data.history.length === 0 && (
+                            <p role="status" className="px-4 py-6 text-sm text-fg-muted text-center">
+                                {filterActive ? "Nenhuma partida com este filtro." : "Nenhuma partida."}
+                            </p>
+                        )}
+                        <div className={`overflow-x-auto max-h-[600px] overflow-y-auto ${data.history.length === 0 ? "hidden" : ""}`}>
                             <table className="w-full text-sm">
                                 <thead className="sticky top-0 bg-surface-raised/90 backdrop-blur-sm z-10">
                                     <tr className="border-b text-fg-muted text-xs uppercase tracking-wide">
@@ -329,7 +447,7 @@ export default function PlayerProfile() {
                                         <th scope="col" className="text-center px-3 py-2.5 font-medium">Res.</th>
                                         <th scope="col" className="text-center px-3 py-2.5 font-medium">G/A/P</th>
                                         <th scope="col" className="text-center px-3 py-2.5 font-medium">Nota</th>
-                                        <th scope="col" className="text-center px-3 py-2.5 font-medium">Pos</th>
+                                        <th scope="col" className="text-center px-3 py-2.5 font-medium whitespace-nowrap">Pos / Arq.</th>
                                         <th scope="col" className="text-center px-3 py-2.5 font-medium whitespace-nowrap">Tempo</th>
                                         <th scope="col" className="px-4 py-2.5 font-medium" />
                                     </tr>
@@ -355,7 +473,10 @@ export default function PlayerProfile() {
                                             <td className="px-3 py-3 text-center">
                                                 <RatingPill value={h.rating} size="sm" />
                                             </td>
-                                            <td className="px-3 py-3 text-center text-xs font-semibold text-fg-muted">{h.pos || "—"}</td>
+                                            <td className="px-3 py-3 text-center text-xs font-semibold text-fg-muted">
+                                                <div>{h.pos || "—"}</div>
+                                                <ArchetypeBadge archetype={h.archetype} compact hideEmpty={!data.archetypes?.length} className="mt-1 max-w-[7rem] truncate align-middle" />
+                                            </td>
                                             <td className="px-3 py-3 text-center text-xs text-fg-muted whitespace-nowrap">{fmtTime(h.secondsPlayed)}</td>
                                             <td className="px-4 py-3 text-right">
                                                 <Link
