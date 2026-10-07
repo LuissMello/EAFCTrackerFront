@@ -12,7 +12,12 @@ export interface LiveState {
 }
 
 const LIVE_OFF: LiveState = { enabled: false, untilUtc: null, intervalMinutes: 5 };
-const LIVE_POLL_MS = 60_000;
+/** Relógio local (não faz requisição por si só): decide a cada 60 s se há algo a buscar. */
+const LIVE_TICK_MS = 60_000;
+/** Reconferir o estado do modo ao vivo no servidor (outro visitante pode ter ligado/desligado). */
+const STATUS_POLL_MS = 5 * 60_000;
+/** Sem interação por este tempo (e modo ao vivo desligado) a aba para de consultar: não mantém o servidor/banco acordados. */
+const IDLE_PAUSE_MS = 10 * 60_000;
 
 function normalizeLive(d: any): LiveState {
   return {
@@ -34,7 +39,8 @@ type LiveModeContextType = {
 const LiveModeContext = createContext<LiveModeContextType | undefined>(undefined);
 
 /**
- * Estado do modo "Ao vivo" compartilhado por toda a app. Lê o estado ao montar e a cada 60s (aba visível).
+ * Estado do modo "Ao vivo" compartilhado por toda a app. Lê o estado ao montar e a cada 5 min (aba visível e com interação
+ * nos últimos 10 min; uma aba abandonada não consulta, para o servidor e o banco poderem dormir).
  * Enquanto ligado e com a aba visível, dispara `triggerRefresh()` a cada 60s — único lugar dessa rotina.
  */
 export function LiveModeProvider({ children }: { children: React.ReactNode }) {
@@ -76,24 +82,60 @@ export function LiveModeProvider({ children }: { children: React.ReactNode }) {
     return () => controller.abort();
   }, [loadLive]);
 
-  // A cada 60s (só com a aba visível): reconfere o estado no servidor (outro visitante pode ter ligado/desligado)
-  // e, se estiver ligado, pede a atualização dos dados. Ao voltar à aba, faz o mesmo na hora.
+  // Relógio local de 60 s (só com a aba visível). Requisições só quando necessário:
+  //  - modo ao vivo LIGADO: pede a atualização dos dados a cada 60 s (comportamento de antes) e reconfere o estado a cada 5 min;
+  //  - modo ao vivo DESLIGADO: reconfere o estado a cada 5 min, e só se houve interação nos últimos 10 min.
+  // Ao voltar à aba (ou a interagir depois de uma pausa) reconfere na hora se a última checagem tem mais de 60 s.
+  const lastStatusAtRef = useRef(Date.now());
+  const lastActivityRef = useRef(Date.now());
+  const pausedRef = useRef(false);
+
+  const checkStatus = useCallback(() => {
+    if (busyRef.current) return;
+    lastStatusAtRef.current = Date.now();
+    void loadLive();
+  }, [loadLive]);
+
   useEffect(() => {
+    const noteActivity = () => {
+      const now = Date.now();
+      const wasPaused = pausedRef.current;
+      lastActivityRef.current = now;
+      if (wasPaused) {
+        pausedRef.current = false;
+        if (document.visibilityState === "visible" && now - lastStatusAtRef.current >= 60_000) checkStatus();
+      }
+    };
+    const events = ["pointerdown", "keydown", "touchstart", "wheel"] as const;
+    events.forEach((ev) => window.addEventListener(ev, noteActivity, { passive: true }));
+
     const tick = () => {
       if (document.visibilityState !== "visible") return;
-      if (!busyRef.current) loadLive();
-      if (enabledRef.current) triggerRef.current();
+      const now = Date.now();
+      if (enabledRef.current) {
+        triggerRef.current();
+        if (now - lastStatusAtRef.current >= STATUS_POLL_MS) checkStatus();
+        return;
+      }
+      if (now - lastActivityRef.current >= IDLE_PAUSE_MS) {
+        pausedRef.current = true; // aba parada: sem requisições até haver interação
+        return;
+      }
+      if (now - lastStatusAtRef.current >= STATUS_POLL_MS) checkStatus();
     };
-    const id = setInterval(tick, LIVE_POLL_MS);
+    const id = setInterval(tick, LIVE_TICK_MS);
     const onVisibility = () => {
-      if (document.visibilityState === "visible") tick();
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastStatusAtRef.current >= 60_000) checkStatus();
+      if (enabledRef.current) triggerRef.current();
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisibility);
+      events.forEach((ev) => window.removeEventListener(ev, noteActivity));
     };
-  }, [loadLive]);
+  }, [checkStatus]);
 
   const toggleLive = useCallback(async () => {
     if (busyRef.current) return;
