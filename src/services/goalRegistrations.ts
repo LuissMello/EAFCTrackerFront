@@ -52,3 +52,39 @@ export async function deleteGoal(id: number, goalId: number): Promise<GoalRegist
 export async function deleteGoalRegistration(id: number): Promise<void> {
   await api.delete(API_ENDPOINTS.GOAL_REGISTRATION(id));
 }
+
+/** Aceita corpo com o registro; sem corpo (204) relê o registro. */
+async function registrationFrom(id: number, data: unknown): Promise<GoalRegistration> {
+  if (data && typeof data === "object" && "id" in (data as object)) return data as GoalRegistration;
+  return getGoalRegistration(id);
+}
+
+/** POST …/{id}/finish: marca a partida como finalizada (continua aguardando o vínculo). */
+export async function finishGoalRegistration(id: number): Promise<GoalRegistration> {
+  const { data } = await api.post(API_ENDPOINTS.GOAL_REG_FINISH(id));
+  return registrationFrom(id, data);
+}
+
+/** POST …/{id}/reopen: reabre enquanto a partida não foi vinculada. */
+export async function reopenGoalRegistration(id: number): Promise<GoalRegistration> {
+  const { data } = await api.post(API_ENDPOINTS.GOAL_REG_REOPEN(id));
+  return registrationFrom(id, data);
+}
+
+/** POST …/{id}/confirm-suggestion: vincula à partida sugerida. */
+export async function confirmGoalRegistrationSuggestion(id: number): Promise<GoalRegistration> {
+  const { data } = await api.post(API_ENDPOINTS.GOAL_REG_CONFIRM_SUGGESTION(id));
+  return registrationFrom(id, data);
+}
+
+/** POST …/{id}/dismiss-suggestion: descarta a sugestão ("não é essa"). */
+export async function dismissGoalRegistrationSuggestion(id: number): Promise<GoalRegistration> {
+  const { data } = await api.post(API_ENDPOINTS.GOAL_REG_DISMISS_SUGGESTION(id));
+  return registrationFrom(id, data);
+}
+
+/** PUT /api/goal-registrations/{id}: troca o adversário de um registro ainda não vinculado. */
+export async function changeGoalRegistrationOpponent(id: number, opponent: { opponentClubId: number; opponentName: string }): Promise<GoalRegistration> {
+  const { data } = await api.put(API_ENDPOINTS.GOAL_REGISTRATION(id), opponent);
+  return registrationFrom(id, data);
+}

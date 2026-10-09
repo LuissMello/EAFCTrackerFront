@@ -17,9 +17,9 @@ const Row = React.memo(function Row({ r, onOpen }: { r: GoalRegistration; onOpen
         className="flex min-h-[56px] min-w-0 flex-1 basis-56 flex-col items-start justify-center rounded-lg px-1.5 text-left transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         aria-label={`Abrir registro contra ${r.opponentName}`}
       >
-        <span className="flex w-full items-center gap-2">
-          <span className="truncate text-base font-semibold text-fg">{r.opponentName}</span>
-          <StatusChip status={r.status} className="flex-shrink-0" />
+        <span className="flex w-full flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="min-w-0 max-w-full truncate text-base font-semibold text-fg">{r.opponentName}</span>
+          <StatusChip registration={r} className="flex-shrink-0" />
         </span>
         <span className="mt-0.5 text-xs text-fg-muted">
           {fmtDateTimeBR(r.startedAt ?? r.createdAt)} · {goalsLabel(count)}

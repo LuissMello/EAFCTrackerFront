@@ -18,6 +18,8 @@ const ResultCard = React.memo(function ResultCard({
 }) {
   const faced = timesFacedLabel(r.timesFaced) ?? (r.source !== "ea" ? "Já enfrentamos" : null);
   const rec = r.record;
+  const crest = r.crestAssetId ?? (r.teamId != null ? String(r.teamId) : null) ?? r.customCrestAssetId ?? null;
+  const division = r.currentDivision ?? r.division ?? null;
   return (
     <li>
       <button
@@ -28,14 +30,13 @@ const ResultCard = React.memo(function ResultCard({
           selected ? "border-accent bg-accent/10 ring-2 ring-accent/40" : "border-border bg-surface hover:border-accent/60 hover:bg-surface-raised"
         }`}
       >
-        {r.crestAssetId || r.customCrestAssetId ? (
-          <Crest
-            src={crestUrl(r.crestAssetId ?? r.customCrestAssetId)}
-            fallbackSrc={r.crestAssetId && r.customCrestAssetId ? crestUrl(r.customCrestAssetId) : null}
-            size={40}
-            rounded="rounded-lg"
-          />
-        ) : null}
+        {/* escudo sempre presente (logo genérico quando a busca não traz id): ajuda a diferenciar nomes parecidos */}
+        <Crest
+          src={crestUrl(crest)}
+          fallbackSrc={crest && r.customCrestAssetId && String(crest) !== String(r.customCrestAssetId) ? crestUrl(r.customCrestAssetId) : null}
+          size={40}
+          rounded="rounded-lg"
+        />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
             <span className="truncate text-base font-semibold text-fg">{r.name}</span>
@@ -43,8 +44,10 @@ const ResultCard = React.memo(function ResultCard({
               <span className="flex-shrink-0 rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-bold text-accent-fg">Selecionado</span>
             )}
           </span>
+          <span className="mt-0.5 block text-[11px] tabular-nums leading-none text-fg-subtle">Clube #{r.clubId}</span>
           <span className="mt-1 flex flex-wrap items-center gap-1.5">
-            <DivisionChip value={r.currentDivision} />
+            <DivisionChip value={division} />
+            {r.skillRating != null && <span className={TAG_CLS}>SR {r.skillRating}</span>}
             {faced && <span className={TAG_CLS}>{faced}</span>}
             {r.source === "ea" && <span className={TAG_CLS}>da EA</span>}
             {rec && (

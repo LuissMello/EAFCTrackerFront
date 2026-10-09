@@ -47,13 +47,15 @@ interface Props {
   onCancelEdit: () => void;
   /** Registro expirado: sem edição. */
   readOnly?: boolean;
+  /** Texto do estado somente-leitura (padrão: registro expirado). */
+  readOnlyMessage?: string;
 }
 
 /**
  * Montagem de UM gol por vez: artilheiro → assistência → pré-assistência (só se houve assistência), com botões grandes
  * do NOSSO elenco. Ao concluir, `onSubmit` recebe o gol (o pai o salva na hora). Dá para voltar uma etapa e cancelar.
  */
-export function GoalBuilder({ players, loading, error, onRetryRoster, goalCount, editing, editingNumber, onSubmit, onCancelEdit, readOnly = false }: Props) {
+export function GoalBuilder({ players, loading, error, onRetryRoster, goalCount, editing, editingNumber, onSubmit, onCancelEdit, readOnly = false, readOnlyMessage }: Props) {
   const [phase, setPhase] = useState<Phase>("scorer");
   const [scorer, setScorer] = useState<Pick | null>(null);
   const [assist, setAssist] = useState<Pick | null>(null);
@@ -177,7 +179,7 @@ export function GoalBuilder({ players, loading, error, onRetryRoster, goalCount,
     return (
       <Card className="p-4">
         <p role="status" className="text-sm text-fg-muted">
-          Este registro expirou e não pode mais ser alterado.
+          {readOnlyMessage ?? "Este registro expirou e não pode mais ser alterado."}
         </p>
       </Card>
     );

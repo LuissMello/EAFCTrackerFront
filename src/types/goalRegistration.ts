@@ -31,6 +31,11 @@ export interface OpponentResult {
   /** Escudo alternativo (crest do kit) para quando o teamId não tem imagem no CDN. */
   customCrestAssetId?: string | null;
   record?: { games: number; wins: number; draws: number; losses: number } | null;
+  /** Id do time (escudo) quando difere do crestAssetId. */
+  teamId?: string | number | null;
+  /** Divisão atual (texto/número) e skill rating, quando a busca os traz. */
+  division?: string | number | null;
+  skillRating?: number | null;
 }
 
 export interface OpponentSearchResponse {
@@ -109,6 +114,21 @@ export interface GoalRegistration {
   goals: RegistrationGoal[];
   goalsCount?: number;
   startedAt?: string | null;
+  /** Quando o usuário finalizou a partida (Pending + finishedAt = aguardando a partida aparecer). */
+  finishedAt?: string | null;
+  /** Partida real que parece ser esta (NeedsReview). */
+  suggestedMatch?: SuggestedMatch | null;
+}
+
+export interface SuggestedMatch {
+  matchId: number;
+  playedAt: string;
+  opponentClubId: number;
+  opponentName: string;
+  ourGoals: number;
+  theirGoals: number;
+  /** Os gols registrados batem com o placar da partida. */
+  goalsMatch: boolean;
 }
 
 /** Gol em montagem / a enviar: ids + nomes (para exibir sem depender do elenco já carregado). */

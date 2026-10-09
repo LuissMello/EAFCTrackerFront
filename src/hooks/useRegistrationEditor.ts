@@ -203,6 +203,16 @@ export function useRegistrationEditor(initial: GoalRegistration) {
     }
   }, [registrationId, commit]);
 
+  /** Troca o estado confirmado por um registro devolvido pelo servidor (finalizar, reabrir, trocar adversário, sugestão). */
+  const applyServer = useCallback(
+    (res: GoalRegistration) => {
+      baseRef.current = res;
+      version.current++;
+      commit();
+    },
+    [commit]
+  );
+
   const dismissRejection = useCallback(() => setRejection(null), []);
 
   const goals = useMemo(() => applyOps(view.base.goals ?? [], view.ops), [view]);
@@ -221,6 +231,7 @@ export function useRegistrationEditor(initial: GoalRegistration) {
     retry,
     discardFailed,
     refresh,
+    applyServer,
     resolveKey,
     dismissRejection,
   };

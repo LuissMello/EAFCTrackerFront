@@ -12,11 +12,9 @@ import { useClub } from "../hooks/useClub.tsx";
 import { useCurrentRegistration } from "../hooks/useCurrentRegistration.ts";
 import { useGoalRegistrations } from "../hooks/useGoalRegistrations.ts";
 import { useOpponentPreview } from "../hooks/useOpponentPreview.ts";
-import api from "../services/api.ts";
-import { API_ENDPOINTS } from "../config/urls.ts";
 import { createGoalRegistration, deleteGoalRegistration } from "../services/goalRegistrations.ts";
 import { describeApiError } from "../utils/apiError.ts";
-import type { GoalRegistration, OpponentRef, OpponentResult, OpponentSearchResponse } from "../types/goalRegistration.ts";
+import type { GoalRegistration, OpponentRef, OpponentResult } from "../types/goalRegistration.ts";
 
 interface ActiveView {
   registration: GoalRegistration;
@@ -37,36 +35,10 @@ export default function RegistrarGols() {
 
   const [active, setActive] = useState<ActiveView | null>(null);
 
-  // Registro reaberto (retomar/lista) não traz o escudo do adversário: busca pelo nome e usa o clube de mesmo id.
-  const activeId = active?.registration.id ?? null;
-  const needsCrest = active !== null && !active.crestAssetId && !active.customCrestAssetId;
-  const activeOpponent = active?.registration.opponentName ?? "";
-  const activeOpponentId = active?.registration.opponentClubId ?? null;
-  const activeClubId = active?.registration.clubId ?? null;
-  useEffect(() => {
-    if (activeId === null || !needsCrest || activeOpponentId === null || activeClubId === null || activeOpponent.length < 2) return;
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const { data } = await api.get<OpponentSearchResponse>(
-          API_ENDPOINTS.GOAL_REG_OPPONENT_SEARCH(activeOpponent, activeClubId, 20),
-          { signal: controller.signal }
-        );
-        if (controller.signal.aborted) return;
-        const match = data.results?.find((r) => r.clubId === activeOpponentId);
-        if (!match || (!match.crestAssetId && !match.customCrestAssetId)) return;
-        setActive((a) =>
-          a && a.registration.id === activeId
-            ? { ...a, crestAssetId: match.crestAssetId ?? null, customCrestAssetId: match.customCrestAssetId ?? null }
-            : a
-        );
-      } catch {
-        /* sem escudo: o cabeçalho continua funcionando */
-      }
-    })();
-    return () => controller.abort();
-  }, [activeId, needsCrest, activeOpponent, activeOpponentId, activeClubId]);
+  // Registro reaberto (retomar/lista) não traz o escudo do adversário: a própria tela de pontuação o resolve pela busca.
   const [candidate, setCandidate] = useState<OpponentRef | null>(null);
+  // "Nova partida": ao voltar ao início, a busca de adversário recebe o foco
+  const [focusSearch, setFocusSearch] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const startingRef = useRef(false);
@@ -111,7 +83,7 @@ export default function RegistrarGols() {
 
   const handleSelect = useCallback((r: OpponentResult) => {
     setStartError(null);
-    setCandidate({ clubId: r.clubId, name: r.name, currentDivision: r.currentDivision ?? null, timesFaced: r.timesFaced ?? null, crestAssetId: r.crestAssetId ?? null, customCrestAssetId: r.customCrestAssetId ?? null });
+    setCandidate({ clubId: r.clubId, name: r.name, currentDivision: r.currentDivision ?? r.division ?? null, timesFaced: r.timesFaced ?? null, crestAssetId: r.crestAssetId ?? (r.teamId != null ? String(r.teamId) : null), customCrestAssetId: r.customCrestAssetId ?? null });
   }, []);
 
   const handleStart = useCallback(async () => {
@@ -140,6 +112,11 @@ export default function RegistrarGols() {
     reloadCurrent();
     reloadRecents();
   }, [reloadCurrent, reloadRecents]);
+
+  const handleNewMatch = useCallback(() => {
+    setFocusSearch(true);
+    leaveScoring();
+  }, [leaveScoring]);
 
   const handleContinue = useCallback(() => {
     if (current.current) setActive({ registration: current.current, crestAssetId: null });
@@ -181,6 +158,7 @@ export default function RegistrarGols() {
           opponentCustomCrestAssetId={active.customCrestAssetId}
           onExit={leaveScoring}
           onCancelled={leaveScoring}
+          onNewMatch={handleNewMatch}
         />
       </PageShell>
     );
@@ -293,7 +271,7 @@ export default function RegistrarGols() {
 
         {clubId !== null && (
           <div className="mt-4">
-            <OpponentSearch key={clubId} clubId={clubId} selectedId={candidate?.clubId ?? null} onSelect={handleSelect} selectionSlot={selectionPanel} />
+            <OpponentSearch key={clubId} clubId={clubId} selectedId={candidate?.clubId ?? null} onSelect={handleSelect} selectionSlot={selectionPanel} autoFocus={focusSearch} />
           </div>
         )}
       </Card>

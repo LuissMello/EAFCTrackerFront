@@ -17,7 +17,7 @@ export const ActiveRegistrationBanner = React.memo(function ActiveRegistrationBa
   return (
     <section aria-label="Registro em andamento" className="rounded-2xl border-2 border-accent bg-accent/10 p-4 shadow-card">
       <div className="flex flex-wrap items-center gap-2">
-        <StatusChip status={r.status} />
+        <StatusChip registration={r} />
         <span className="text-xs text-fg-muted">{fmtElapsed(startedAt)}</span>
       </div>
       <p className="mt-2 text-lg font-bold text-fg">

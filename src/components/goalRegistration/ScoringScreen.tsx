@@ -8,14 +8,24 @@ import { useOpponentPreview } from "../../hooks/useOpponentPreview.ts";
 import { useRefresh } from "../../hooks/useRefresh.tsx";
 import { useRegistrationEditor } from "../../hooks/useRegistrationEditor.ts";
 import { useRoster } from "../../hooks/useRoster.ts";
-import { deleteGoalRegistration } from "../../services/goalRegistrations.ts";
+import api from "../../services/api.ts";
+import { API_ENDPOINTS } from "../../config/urls.ts";
+import {
+  changeGoalRegistrationOpponent,
+  confirmGoalRegistrationSuggestion,
+  deleteGoalRegistration,
+  dismissGoalRegistrationSuggestion,
+  finishGoalRegistration,
+  reopenGoalRegistration,
+} from "../../services/goalRegistrations.ts";
 import { describeApiError } from "../../utils/apiError.ts";
 import { fmtElapsed, fmtTimeBR, goalChain, goalsLabel } from "../../utils/goalRegistration.ts";
-import type { DisplayGoal, GoalLine, GoalRegistration } from "../../types/goalRegistration.ts";
+import type { DisplayGoal, GoalLine, GoalRegistration, OpponentRef, OpponentResult, OpponentSearchResponse } from "../../types/goalRegistration.ts";
 import { GoalBuilder } from "./GoalBuilder.tsx";
 import { GoalList } from "./GoalList.tsx";
 import { OpponentPreviewCard } from "./OpponentPreviewCard.tsx";
 import { StatusChip } from "./StatusChip.tsx";
+import { ChangeOpponentPanel, FinishControl, FinishedPanel, SuggestionCard, canChangeOpponent } from "./RegistrationActions.tsx";
 
 const SNACK_MS = 6000;
 
@@ -52,13 +62,15 @@ interface Props {
   onExit: () => void;
   /** O registro foi cancelado (DELETE) e a tela inicial deve ser mostrada. */
   onCancelled: () => void;
+  /** "Nova partida": volta ao início já com a busca de adversário em foco. */
+  onNewMatch: () => void;
 }
 
 /**
  * Tela de pontuação, pensada para uso com uma mão durante o jogo: cabeçalho fixo com adversário, tempo decorrido
  * e estado de salvamento; botões grandes do elenco; cada gol é salvo no instante em que termina (fila serializada).
  */
-export function ScoringScreen({ initial, clubId, opponentCrestAssetId, opponentCustomCrestAssetId, onExit, onCancelled }: Props) {
+export function ScoringScreen({ initial, clubId, opponentCrestAssetId: propCrest, opponentCustomCrestAssetId: propCustomCrest, onExit, onCancelled, onNewMatch }: Props) {
   const editor = useRegistrationEditor(initial);
   const { registration: reg, goals, saveState, rejection } = editor;
   const roster = useRoster(clubId);
@@ -77,6 +89,58 @@ export function ScoringScreen({ initial, clubId, opponentCrestAssetId, opponentC
   const [previewOpen, setPreviewOpen] = useState(false);
   const [livePromptDismissed, setLivePromptDismissed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+
+  // ---- finalizar / reabrir / sugestão / trocar adversário ----
+  // O escudo recebido (props) pertence ao adversário com que a tela abriu; se o adversário mudar (troca manual ou sugestão
+  // confirmada), ele deixa de valer e o escudo do novo adversário é resolvido (escolha da busca ou busca pelo nome).
+  const initialOpponentId = useRef(initial.opponentClubId).current;
+  type CrestInfo = { opponentId: number; crest: string | null; custom: string | null };
+  const [crestOverride, setCrestOverride] = useState<CrestInfo | null>(null);
+  const [crestLookup, setCrestLookup] = useState<CrestInfo | null>(null);
+  const known: CrestInfo | null =
+    crestOverride && crestOverride.opponentId === reg.opponentClubId
+      ? crestOverride
+      : reg.opponentClubId === initialOpponentId && (propCrest || propCustomCrest)
+      ? { opponentId: initialOpponentId, crest: propCrest ?? null, custom: propCustomCrest ?? null }
+      : crestLookup && crestLookup.opponentId === reg.opponentClubId
+      ? crestLookup
+      : null;
+  const opponentCrestAssetId = known?.crest ?? null;
+  const opponentCustomCrestAssetId = known?.custom ?? null;
+  const crestKnown = known !== null;
+  const lookupOpponentId = reg.opponentClubId;
+  const lookupName = reg.opponentName;
+  useEffect(() => {
+    if (crestKnown || lookupName.length < 2) return;
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const { data } = await api.get<OpponentSearchResponse>(API_ENDPOINTS.GOAL_REG_OPPONENT_SEARCH(lookupName, clubId, 20), { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        const match = data.results?.find((r) => r.clubId === lookupOpponentId);
+        const crest = match?.crestAssetId ?? (match?.teamId != null ? String(match.teamId) : null);
+        if (!match || (!crest && !match.customCrestAssetId)) return;
+        setCrestLookup({ opponentId: lookupOpponentId, crest, custom: match.customCrestAssetId ?? null });
+      } catch {
+        /* sem escudo: o cabeçalho continua funcionando */
+      }
+    })();
+    return () => controller.abort();
+  }, [crestKnown, lookupOpponentId, lookupName, clubId]);
+  const [confirmingFinish, setConfirmingFinish] = useState(false);
+  const [lifecycleBusy, setLifecycleBusy] = useState<null | "finish" | "reopen" | "confirm" | "dismiss">(null);
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [candidate, setCandidate] = useState<OpponentRef | null>(null);
+  const [changing, setChanging] = useState(false);
+  const [changeError, setChangeError] = useState<string | null>(null);
+  const finishBtnRef = useRef<HTMLButtonElement>(null);
+  const finishedRef = useRef<HTMLHeadingElement>(null);
+  const suggestionRef = useRef<HTMLHeadingElement>(null);
+  const changeBtnRef = useRef<HTMLButtonElement>(null);
+  const linkedRef = useRef<HTMLParagraphElement>(null);
+  const reviewRef = useRef<HTMLParagraphElement>(null);
+  const pendingFocus = useRef<"finished" | "finish" | "change" | "status" | null>(null);
   const previewId = useId();
   const mountedRef = useRef(true);
 
@@ -204,9 +268,116 @@ export function ScoringScreen({ initial, clubId, opponentCrestAssetId, opponentC
 
   const preview = useOpponentPreview(reg.opponentClubId, reg.opponentName, clubId, previewOpen);
 
+  const runLifecycle = useCallback(
+    async (kind: "finish" | "reopen" | "confirm" | "dismiss", fn: () => Promise<GoalRegistration>, focus: typeof pendingFocus.current) => {
+      setLifecycleBusy(kind);
+      setLifecycleError(null);
+      try {
+        const res = await fn();
+        if (!mountedRef.current) return;
+        editor.applyServer(res);
+        setConfirmingFinish(false);
+        pendingFocus.current = focus;
+      } catch (e) {
+        if (!mountedRef.current) return;
+        const info = describeApiError(e, "Não foi possível concluir a ação.");
+        setLifecycleError(info.message);
+        // 409/404: o estado do registro mudou no servidor (outro aparelho, linker); relê para não deixar botões obsoletos na tela
+        if (info.status === 409 || info.status === 404) void editor.refresh();
+      } finally {
+        if (mountedRef.current) setLifecycleBusy(null);
+      }
+    },
+    [editor]
+  );
+
+  const handleFinish = useCallback(() => void runLifecycle("finish", () => finishGoalRegistration(reg.id), "finished"), [runLifecycle, reg.id]);
+  const handleReopen = useCallback(() => void runLifecycle("reopen", () => reopenGoalRegistration(reg.id), "finish"), [runLifecycle, reg.id]);
+  const handleConfirmSuggestion = useCallback(
+    () => void runLifecycle("confirm", () => confirmGoalRegistrationSuggestion(reg.id), "status"),
+    [runLifecycle, reg.id]
+  );
+  const handleDismissSuggestion = useCallback(
+    () => void runLifecycle("dismiss", () => dismissGoalRegistrationSuggestion(reg.id), "change"),
+    [runLifecycle, reg.id]
+  );
+
+  const closeChange = useCallback(() => {
+    setChangeOpen(false);
+    setCandidate(null);
+    setChangeError(null);
+    pendingFocus.current = "change";
+  }, []);
+  const openChange = useCallback(() => {
+    setChangeOpen(true);
+    setCandidate(null);
+    setChangeError(null);
+    setLifecycleError(null);
+  }, []);
+  const handlePickOpponent = useCallback((r: OpponentResult) => {
+    setChangeError(null);
+    setCandidate({
+      clubId: r.clubId,
+      name: r.name,
+      currentDivision: r.currentDivision ?? r.division ?? null,
+      timesFaced: r.timesFaced ?? null,
+      crestAssetId: r.crestAssetId ?? r.teamId?.toString() ?? null,
+      customCrestAssetId: r.customCrestAssetId ?? null,
+    });
+  }, []);
+  const confirmChange = useCallback(async () => {
+    if (!candidate) return;
+    setChanging(true);
+    setChangeError(null);
+    try {
+      const res = await changeGoalRegistrationOpponent(reg.id, { opponentClubId: candidate.clubId, opponentName: candidate.name });
+      if (!mountedRef.current) return;
+      editor.applyServer(res);
+      setCrestOverride({ opponentId: candidate.clubId, crest: candidate.crestAssetId ?? null, custom: candidate.customCrestAssetId ?? null });
+      setChangeOpen(false);
+      setCandidate(null);
+      pendingFocus.current = "change";
+      showSnack(`Adversário trocado para ${candidate.name} ✓`);
+      void editor.refresh();
+    } catch (e) {
+      if (!mountedRef.current) return;
+      const info = describeApiError(e, "Não foi possível trocar o adversário.");
+      setChangeError(info.message);
+      if (info.status === 409 || info.status === 404) void editor.refresh(); // ex.: já foi vinculada em outro aparelho
+    } finally {
+      if (mountedRef.current) setChanging(false);
+    }
+  }, [candidate, reg.id, editor, showSnack]);
+  const changePreview = useOpponentPreview(candidate?.clubId ?? null, candidate?.name ?? null, clubId);
+
+  const finished = reg.status === "Pending" && !!reg.finishedAt;
+  const inProgress = reg.status === "Pending" && !reg.finishedAt;
+  const suggestion = reg.status === "NeedsReview" ? reg.suggestedMatch ?? null : null;
+
+  // Foco depois de uma ação: vai para o elemento que passou a existir. O servidor pode devolver um estado diferente do
+  // esperado (ex.: ao finalizar, o linker já sugere/vincula uma partida), então cada alvo tem uma lista de reserva.
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (!target) return;
+    const order: Array<React.RefObject<HTMLElement>> =
+      target === "finished"
+        ? [finishedRef, suggestionRef, linkedRef, reviewRef]
+        : target === "finish"
+        ? [finishBtnRef, suggestionRef, linkedRef, reviewRef]
+        : target === "status"
+        ? [linkedRef, suggestionRef, reviewRef, finishedRef, finishBtnRef]
+        : [changeBtnRef, linkedRef, suggestionRef, reviewRef, finishedRef];
+    const el = order.map((r) => r.current).find((x): x is HTMLElement => !!x);
+    if (el) {
+      el.focus();
+      pendingFocus.current = null;
+    }
+  });
+
   const editingGoal = editingKey !== null ? goals.find((g) => g.key === resolveKey(editingKey)) ?? null : null;
   const editingNumber = editingGoal ? goals.indexOf(editingGoal) + 1 : undefined;
   const expired = reg.status === "Expired";
+  const locked = expired || finished;
   const startedAt = reg.startedAt ?? reg.createdAt;
   const elapsed = fmtElapsed(startedAt, now);
 
@@ -252,7 +423,7 @@ export function ScoringScreen({ initial, clubId, opponentCrestAssetId, opponentC
           </div>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
-          <StatusChip status={reg.status} />
+          <StatusChip registration={reg} />
           <span className="min-w-0 flex-1 truncate" title={`Iniciado às ${fmtTimeBR(startedAt)}`}>
             {fmtTimeBR(startedAt)}
             {elapsed ? ` · ${elapsed}` : ""}
@@ -272,7 +443,7 @@ export function ScoringScreen({ initial, clubId, opponentCrestAssetId, opponentC
       <div role="status" aria-live="polite">
         {reg.status === "Linked" && (
           <div className="rounded-2xl border border-positive/40 bg-positive-soft p-4 text-sm text-positive-fg">
-            <p className="font-semibold">
+            <p ref={linkedRef} tabIndex={-1} className="font-semibold outline-none">
               Vinculado à partida #{reg.matchId}.{" "}
               {reg.matchId !== null && (
                 <Link to={`/match/${reg.matchId}`} className="underline underline-offset-2">
@@ -284,9 +455,19 @@ export function ScoringScreen({ initial, clubId, opponentCrestAssetId, opponentC
             {reg.reviewNote && <p className="mt-1">{reg.reviewNote}</p>}
           </div>
         )}
-        {reg.status === "NeedsReview" && (
+        {suggestion && (
+          <SuggestionCard
+            ref={suggestionRef}
+            suggestion={suggestion}
+            goalCount={goals.length}
+            busy={lifecycleBusy === "confirm" || lifecycleBusy === "dismiss" ? lifecycleBusy : null}
+            onConfirm={handleConfirmSuggestion}
+            onDismiss={handleDismissSuggestion}
+          />
+        )}
+        {reg.status === "NeedsReview" && !suggestion && (
           <div className="rounded-2xl border border-warning/50 bg-warning-soft p-4 text-sm text-warning-fg">
-            <p className="font-semibold">Precisa revisar</p>
+            <p ref={reviewRef} tabIndex={-1} className="font-semibold outline-none">Para revisão</p>
             <p className="mt-1">{reg.reviewNote || "O vínculo com a partida precisa de conferência."}</p>
             <p className="mt-1">Ajustes nos gols continuam possíveis; edições inválidas são recusadas com o motivo.</p>
           </div>
@@ -298,7 +479,7 @@ export function ScoringScreen({ initial, clubId, opponentCrestAssetId, opponentC
         )}
       </div>
 
-      {reg.status === "Pending" && !live.enabled && !livePromptDismissed && (
+      {inProgress && !live.enabled && !livePromptDismissed && (
         <div className="flex items-center gap-2 rounded-2xl border border-accent/30 bg-accent/10 py-2 pl-3 pr-2 text-xs text-fg-secondary sm:text-sm">
           <span className="min-w-0 flex-1 leading-snug">
             Buscar a partida assim que acabar? <span className="text-fg-muted">Liga o modo Ao vivo para todos.</span>
@@ -337,18 +518,67 @@ export function ScoringScreen({ initial, clubId, opponentCrestAssetId, opponentC
         editingNumber={editingNumber}
         onSubmit={handleSubmit}
         onCancelEdit={handleCancelEdit}
-        readOnly={expired}
+        readOnly={locked}
+        readOnlyMessage={finished ? "Registro finalizado: reabra para editar os gols." : undefined}
       />
 
       <GoalList
         goals={goals}
         editingKey={editingGoal?.key ?? null}
-        readOnly={expired}
+        readOnly={locked}
         onEdit={handleEditStart}
         onRemove={handleRemoveAsk}
         onRetry={editor.retry}
         onDiscard={editor.discardFailed}
       />
+
+      {lifecycleError && (
+        <div role="alert" className="rounded-2xl border border-negative/40 bg-negative-soft p-3 text-sm text-negative-fg">
+          {lifecycleError}
+        </div>
+      )}
+
+      {finished && reg.finishedAt && (
+        <FinishedPanel ref={finishedRef} finishedAt={reg.finishedAt} busy={lifecycleBusy === "reopen"} onReopen={handleReopen} onNew={onNewMatch} />
+      )}
+
+      {inProgress && (
+        <FinishControl
+          ref={finishBtnRef}
+          confirming={confirmingFinish}
+          busy={lifecycleBusy === "finish"}
+          disabled={saveState !== "saved" || lifecycleBusy !== null}
+          disabledReason="Aguarde terminar de salvar os gols para finalizar."
+          onAsk={() => {
+            setLifecycleError(null);
+            setConfirmingFinish(true);
+          }}
+          onConfirm={handleFinish}
+          onCancel={() => {
+            setConfirmingFinish(false);
+            pendingFocus.current = "finish";
+          }}
+        />
+      )}
+
+      {canChangeOpponent(reg) &&
+        (changeOpen ? (
+          <ChangeOpponentPanel
+            clubId={clubId}
+            currentName={reg.opponentName}
+            candidate={candidate}
+            preview={changePreview}
+            busy={changing}
+            error={changeError}
+            onSelect={handlePickOpponent}
+            onConfirm={() => void confirmChange()}
+            onClose={closeChange}
+          />
+        ) : (
+          <button ref={changeBtnRef} type="button" className="btn btn-secondary min-h-[48px] w-full" onClick={openChange}>
+            Trocar adversário
+          </button>
+        ))}
 
       {/* Prévia do adversário (recolhida por padrão para não ocupar a tela durante o jogo) */}
       <div>
@@ -369,7 +599,7 @@ export function ScoringScreen({ initial, clubId, opponentCrestAssetId, opponentC
         </div>
       </div>
 
-      {reg.status === "Pending" && (
+      {inProgress && (
         <p className="text-center text-xs text-fg-muted">Quando a partida for buscada, o vínculo é feito automaticamente.</p>
       )}
 
